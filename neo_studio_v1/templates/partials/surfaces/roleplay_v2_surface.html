@@ -1,0 +1,1183 @@
+<section class="section" id="tab-roleplay_v2">
+  <style>
+    #tab-roleplay_v2 [data-roleplay-v2-panel="forge"] {
+      border:1px solid rgba(245, 158, 11, 0.22);
+      box-shadow: inset 0 0 0 1px rgba(245, 158, 11, 0.04);
+      background: linear-gradient(180deg, rgba(245, 158, 11, 0.06), rgba(255,255,255,0.02) 18%);
+    }
+    #tab-roleplay_v2 [data-roleplay-v2-panel="studio"] {
+      border:1px solid rgba(96, 165, 250, 0.22);
+      box-shadow: inset 0 0 0 1px rgba(96, 165, 250, 0.04);
+      background: linear-gradient(180deg, rgba(96, 165, 250, 0.06), rgba(255,255,255,0.02) 18%);
+    }
+    #tab-roleplay_v2 [data-roleplay-v2-panel="scene"] {
+      border:1px solid rgba(52, 211, 153, 0.22);
+      box-shadow: inset 0 0 0 1px rgba(52, 211, 153, 0.04);
+      background: linear-gradient(180deg, rgba(52, 211, 153, 0.06), rgba(255,255,255,0.02) 18%);
+    }
+    #tab-roleplay_v2 [data-roleplay-v2-panel="stories"] {
+      border:1px solid rgba(244, 114, 182, 0.22);
+      box-shadow: inset 0 0 0 1px rgba(244, 114, 182, 0.04);
+      background: linear-gradient(180deg, rgba(244, 114, 182, 0.06), rgba(255,255,255,0.02) 18%);
+    }
+    #tab-roleplay_v2 #roleplay-v2-subtabbar button.active[data-roleplay-v2-tab="forge"] { background: rgba(245, 158, 11, 0.18); border-color: rgba(245, 158, 11, 0.32); color: #fde68a; }
+    #tab-roleplay_v2 #roleplay-v2-subtabbar button.active[data-roleplay-v2-tab="studio"] { background: rgba(96, 165, 250, 0.18); border-color: rgba(96, 165, 250, 0.32); color: #bfdbfe; }
+    #tab-roleplay_v2 #roleplay-v2-subtabbar button.active[data-roleplay-v2-tab="scene"] { background: rgba(52, 211, 153, 0.18); border-color: rgba(52, 211, 153, 0.32); color: #bbf7d0; }
+    #tab-roleplay_v2 #roleplay-v2-subtabbar button.active[data-roleplay-v2-tab="stories"] { background: rgba(244, 114, 182, 0.18); border-color: rgba(244, 114, 182, 0.32); color: #fbcfe8; }
+    #tab-roleplay_v2 #roleplay-v2-studio-subtabbar button.active[data-roleplay-v2-studio-tab="guide"] { background: rgba(96, 165, 250, 0.16); border-color: rgba(96, 165, 250, 0.28); color: #bfdbfe; }
+    #tab-roleplay_v2 #roleplay-v2-studio-subtabbar button.active[data-roleplay-v2-studio-tab="workspace"] { background: rgba(59, 130, 246, 0.16); border-color: rgba(59, 130, 246, 0.28); color: #bfdbfe; }
+    #tab-roleplay_v2 #roleplay-v2-studio-subtabbar button.active[data-roleplay-v2-studio-tab="source"] { background: rgba(34, 211, 238, 0.16); border-color: rgba(34, 211, 238, 0.28); color: #a5f3fc; }
+    #tab-roleplay_v2 #roleplay-v2-studio-subtabbar button.active[data-roleplay-v2-studio-tab="assist"] { background: rgba(168, 85, 247, 0.18); border-color: rgba(168, 85, 247, 0.32); color: #e9d5ff; }
+    #tab-roleplay_v2 #roleplay-v2-studio-subtabbar button.active[data-roleplay-v2-studio-tab="advanced"] { background: rgba(236, 72, 153, 0.16); border-color: rgba(236, 72, 153, 0.28); color: #fbcfe8; }
+    #tab-roleplay_v2 #roleplay-v2-studio-subtabbar button.active[data-roleplay-v2-studio-tab="libraries"] { background: rgba(129, 140, 248, 0.18); border-color: rgba(129, 140, 248, 0.32); color: #c7d2fe; }
+    #tab-roleplay_v2 #roleplay-v2-studio-subtabbar button.active[data-roleplay-v2-studio-tab="compile"] { background: rgba(245, 158, 11, 0.16); border-color: rgba(245, 158, 11, 0.28); color: #fde68a; }
+    #tab-roleplay_v2 #roleplay-v2-studio-subtabbar button.active[data-roleplay-v2-studio-tab="runtime"] { background: rgba(74, 222, 128, 0.16); border-color: rgba(74, 222, 128, 0.28); color: #bbf7d0; }
+    #tab-roleplay_v2 #roleplay-v2-studio-subtabbar button.active[data-roleplay-v2-studio-tab="engine"] { background: rgba(45, 212, 191, 0.16); border-color: rgba(45, 212, 191, 0.28); color: #99f6e4; }
+    #tab-roleplay_v2 #roleplay-v2-studio-subtabbar button.active[data-roleplay-v2-studio-tab="inspector"] { background: rgba(148, 163, 184, 0.16); border-color: rgba(148, 163, 184, 0.28); color: #cbd5e1; }
+    #tab-roleplay_v2 [data-roleplay-v2-studio-panel="guide"],
+    #tab-roleplay_v2 [data-roleplay-v2-studio-panel="workspace"] { border-color: rgba(96, 165, 250, 0.16) !important; background: rgba(96, 165, 250, 0.035) !important; }
+    #tab-roleplay_v2 [data-roleplay-v2-studio-panel="source"] { border-color: rgba(34, 211, 238, 0.16) !important; background: rgba(34, 211, 238, 0.035) !important; }
+    #tab-roleplay_v2 [data-roleplay-v2-studio-panel="assist"] { border-color: rgba(168, 85, 247, 0.18) !important; background: rgba(168, 85, 247, 0.04) !important; }
+    #tab-roleplay_v2 [data-roleplay-v2-studio-panel="libraries"] { border-color: rgba(129, 140, 248, 0.16) !important; background: rgba(129, 140, 248, 0.035) !important; }
+    #tab-roleplay_v2 [data-roleplay-v2-studio-panel="compile"] { border-color: rgba(245, 158, 11, 0.16) !important; background: rgba(245, 158, 11, 0.035) !important; }
+    #tab-roleplay_v2 [data-roleplay-v2-studio-panel="runtime"] { border-color: rgba(74, 222, 128, 0.16) !important; background: rgba(74, 222, 128, 0.035) !important; }
+    #tab-roleplay_v2 [data-roleplay-v2-studio-panel="engine"] { border-color: rgba(45, 212, 191, 0.16) !important; background: rgba(45, 212, 191, 0.035) !important; }
+    #tab-roleplay_v2 [data-roleplay-v2-studio-panel="inspector"] { border-color: rgba(148, 163, 184, 0.16) !important; background: rgba(148, 163, 184, 0.035) !important; }
+    #tab-roleplay_v2 .roleplay-v2-archive-grid { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:14px; align-content:start; }
+    #tab-roleplay_v2 .roleplay-v2-archive-card { border:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.03); border-radius:16px; padding:12px; display:flex; flex-direction:column; gap:10px; min-height:0; text-align:left; cursor:pointer; transition:border-color .15s ease, transform .15s ease, background .15s ease; }
+    #tab-roleplay_v2 .roleplay-v2-archive-card:hover { border-color: rgba(244, 114, 182, 0.3); background:rgba(255,255,255,0.045); transform:translateY(-1px); }
+    #tab-roleplay_v2 .roleplay-v2-archive-cover { position:relative; width:100%; aspect-ratio: 16 / 9; border-radius:14px; overflow:hidden; border:1px solid rgba(255,255,255,0.08); background:linear-gradient(135deg, rgba(244,114,182,0.22), rgba(96,165,250,0.18)); display:flex; align-items:center; justify-content:center; color:#fff; font-size:34px; font-weight:700; letter-spacing:.04em; }
+    #tab-roleplay_v2 .roleplay-v2-archive-cover img { width:100%; height:100%; object-fit:cover; display:block; }
+    #tab-roleplay_v2 .roleplay-v2-archive-card-title { font-size:15px; font-weight:600; color:#f8fafc; }
+    #tab-roleplay_v2 .roleplay-v2-archive-card-summary { color:#cbd5e1; font-size:12px; line-height:1.45; min-height:52px; }
+    #tab-roleplay_v2 .roleplay-v2-archive-card-meta { display:flex; flex-wrap:wrap; gap:6px; }
+    #tab-roleplay_v2 .roleplay-v2-archive-chip { border:1px solid rgba(255,255,255,0.08); background:rgba(15,23,42,0.45); color:#cbd5e1; border-radius:999px; padding:4px 8px; font-size:11px; }
+    #tab-roleplay_v2 .roleplay-v2-archive-empty { border:1px dashed rgba(255,255,255,0.12); border-radius:14px; padding:18px; color:#94a3b8; background:rgba(15,23,42,0.16); }
+    #tab-roleplay_v2 .roleplay-v2-archive-modal.hidden { display:none !important; }
+    #tab-roleplay_v2 .roleplay-v2-archive-modal { position:fixed; inset:0; z-index:1200; background:rgba(2,6,23,0.74); display:flex; align-items:center; justify-content:center; padding:28px; }
+    #tab-roleplay_v2 .roleplay-v2-archive-modal-shell { width:min(1080px, 100%); max-height:calc(100vh - 56px); border:1px solid rgba(255,255,255,0.08); border-radius:18px; background:linear-gradient(180deg, rgba(30,41,59,0.98), rgba(15,23,42,0.98)); box-shadow:0 24px 100px rgba(0,0,0,0.45); display:flex; flex-direction:column; overflow:hidden; }
+    #tab-roleplay_v2 .roleplay-v2-archive-modal-head { display:grid; grid-template-columns:minmax(220px, 320px) minmax(0, 1fr); gap:18px; padding:18px; border-bottom:1px solid rgba(255,255,255,0.08); }
+    #tab-roleplay_v2 .roleplay-v2-archive-modal-cover { width:100%; aspect-ratio: 4 / 3; border-radius:16px; overflow:hidden; border:1px solid rgba(255,255,255,0.08); background:linear-gradient(135deg, rgba(244,114,182,0.22), rgba(96,165,250,0.18)); display:flex; align-items:center; justify-content:center; color:#fff; font-size:54px; font-weight:700; }
+    #tab-roleplay_v2 .roleplay-v2-archive-modal-cover img { width:100%; height:100%; object-fit:cover; display:block; }
+    #tab-roleplay_v2 .roleplay-v2-archive-modal-meta { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+    #tab-roleplay_v2 .roleplay-v2-archive-modal-parts { display:flex; flex-wrap:wrap; gap:8px; padding:0 18px 16px; border-bottom:1px solid rgba(255,255,255,0.08); }
+    #tab-roleplay_v2 .roleplay-v2-archive-modal-parts button { border:1px solid rgba(255,255,255,0.08); background:rgba(15,23,42,0.4); color:#cbd5e1; border-radius:999px; padding:6px 10px; font-size:12px; }
+    #tab-roleplay_v2 .roleplay-v2-archive-modal-parts button.active { background:rgba(244,114,182,0.18); border-color:rgba(244,114,182,0.3); color:#fbcfe8; }
+    #tab-roleplay_v2 .roleplay-v2-archive-modal-body { padding:18px; overflow:auto; display:flex; flex-direction:column; gap:12px; }
+    #tab-roleplay_v2 .roleplay-v2-archive-modal-body-copy { white-space:pre-wrap; color:#e2e8f0; line-height:1.55; font-size:13px; }
+    #tab-roleplay_v2 .roleplay-v2-archive-modal-submeta { color:#94a3b8; font-size:12px; }
+    @media (max-width: 1180px) { #tab-roleplay_v2 .roleplay-v2-archive-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
+    @media (max-width: 760px) {
+      #tab-roleplay_v2 .roleplay-v2-archive-grid { grid-template-columns:1fr; }
+      #tab-roleplay_v2 .roleplay-v2-archive-modal { padding:12px; }
+      #tab-roleplay_v2 .roleplay-v2-archive-modal-head { grid-template-columns:1fr; }
+    }
+  </style>
+  <div class="panel roleplay-hero-panel">
+    <div class="row-between roleplay-hero-head">
+      <div>
+        <h2>Roleplay V2</h2>
+        <div class="muted small">Forge is where you create records. Studio is where you prep memory and scene builds. Scene is where you play or draft. Stories is where you save, restore, and continue the run.</div>
+      </div>
+      <div class="row hidden roleplay-v2-dev-strip" data-roleplay-v2-dev style="gap:8px; align-items:center; flex-wrap:wrap; justify-content:flex-end;">
+        <span class="badge" id="roleplay-v2-internal-tools-badge">Internal tools hidden</span>
+        <button class="btn btn-small" id="btn-roleplay-v2-internal-tools-toggle" type="button">Show internal tools</button>
+        <div class="badge">V2 roleplay surface</div>
+      </div>
+    </div>
+
+    <div class="surface-setup-shell-panel" id="roleplay-v2-setup-shell-panel" style="margin-top:16px;">
+      <button aria-controls="roleplay-v2-setup-shell-content" aria-expanded="true" class="surface-setup-shell-header" id="roleplay-v2-setup-shell-header" type="button">
+        <div>
+          <div class="row" style="gap:8px; align-items:center; flex-wrap:wrap;">
+            <span class="stat-title">Roleplay V2 setup</span>
+            <span class="badge">Setup shell</span>
+          </div>
+          <div class="mini-note">This shell only sets up live use: backend, active model, and scene mode. Record focus, memory builds, and scene builds stay in Studio.</div>
+        </div>
+        <div class="surface-setup-shell-header-actions">
+          <span class="surface-setup-shell-toggle-copy" id="roleplay-v2-setup-shell-toggle-copy">Collapse setup</span>
+          <span aria-hidden="true" class="surface-setup-shell-chevron" id="roleplay-v2-setup-shell-chevron">⌄</span>
+        </div>
+      </button>
+
+      <div class="surface-setup-shell-summary-strip hidden" id="roleplay-v2-setup-shell-summary-strip"></div>
+
+      <div id="roleplay-v2-setup-shell-content">
+        <div class="surface-setup-shell-grid">
+          <section class="surface-setup-shell-slot" data-ui-state="idle" data-ui-tone="neutral" id="roleplay-v2-setup-shell-backend-card">
+            <div class="surface-setup-shell-slot-head">
+              <div>
+                <div class="stat-title">Text backend</div>
+                <div class="generation-summary-title">Runtime readiness</div>
+              </div>
+              <span class="badge">1 · Backend</span>
+            </div>
+            <div class="backend-required-hint offline" id="roleplay-v2-text-backend-note" style="margin-top:14px; display:flex; flex-direction:column; gap:12px; align-items:stretch;">
+              <div class="backend-required-copy" style="width:100%;">
+                <div class="backend-required-row">
+                  <div class="backend-required-title">LLM backend needed for V2 live scene and runtime use</div>
+                  <span class="backend-chip state-offline" id="surface-backend-roleplay-v2-state">Offline</span>
+                </div>
+                <div class="mini-note" id="surface-backend-roleplay-v2-name" style="margin-top:6px;">No active text backend</div>
+                <div class="backend-required-body" id="roleplay-v2-text-backend-note-body">Connect a text backend before you run Scene. You can still prep records, source text, memory, and scene builds in Studio first.</div>
+              </div>
+              <div class="row" style="gap:8px; flex-wrap:wrap; align-items:center; justify-content:flex-start; width:100%;">
+                <button class="btn btn-small btn-primary" id="btn-surface-backend-roleplay-v2-connect" type="button">Connect Text Backend</button>
+                <button class="btn btn-small" id="btn-surface-backend-roleplay-v2-disconnect" type="button">Disconnect</button>
+                <button class="btn btn-small" id="btn-roleplay-v2-manage-backend" type="button">Manage in Admin</button>
+              </div>
+            </div>
+          </section>
+
+          <section class="surface-setup-shell-slot" data-ui-state="ready" data-ui-tone="primary" id="roleplay-v2-setup-shell-model-card">
+            <div class="surface-setup-shell-slot-head">
+              <div>
+                <div class="stat-title">Model capability</div>
+                <div class="generation-summary-title">Active text lane</div>
+              </div>
+              <span class="badge" id="roleplay-v2-model-capability-badge">Text-only</span>
+            </div>
+            <div class="mini-note" id="roleplay-v2-model-current-label" style="margin-top:14px;">Current model · default</div>
+            <div class="help" id="roleplay-v2-model-capability-note" style="margin-top:10px;">Capability is inherited from the current global text model until V2 gets its own dedicated runtime handoff.</div>
+          </section>
+
+          
+          <section class="surface-setup-shell-slot" data-ui-state="ready" data-ui-tone="primary" id="roleplay-v2-setup-shell-mode-card">
+            <div class="surface-setup-shell-slot-head">
+              <div>
+                <div class="stat-title">Scene mode</div>
+                <div class="generation-summary-title">Choose your session goal</div>
+              </div>
+              <span class="badge" id="roleplay-v2-mode-active-badge">Roleplay</span>
+            </div>
+            <div class="grid grid-2" style="margin-top:14px; gap:14px; align-items:start;">
+              <div>
+                <label for="roleplay-v2-output-preset">Story output preset</label>
+                <select id="roleplay-v2-output-preset">
+                  <option selected value="roleplay">Roleplay</option>
+                  <option value="short_story">Short Story</option>
+                  <option value="novel">Novel</option>
+                  <option value="cinematic">Cinematic</option>
+                </select>
+              </div>
+              <div>
+                <label for="roleplay-v2-interaction-mode">Interaction mode</label>
+                <select id="roleplay-v2-interaction-mode">
+                  <option selected value="roleplay">Roleplay</option>
+                  <option value="authoring">Authoring</option>
+                </select>
+              </div>
+            </div>
+            <div class="mini-note" id="roleplay-v2-mode-meta" style="margin-top:12px;">Output preset and interaction mode move together here. Story presets switch Scene into authoring automatically.</div>
+          </section>
+        </div>
+
+        <div class="surface-setup-shell-grid">
+          <section class="surface-setup-shell-slot surface-setup-shell-slot--span-full" data-ui-state="neutral" data-ui-tone="neutral" id="roleplay-v2-setup-shell-preset-card">
+            <div class="surface-setup-shell-slot-head">
+              <div><div class="stat-title">Workspace preset</div><div class="generation-summary-title">Built-in starters + saved mode pairs</div></div>
+              <span class="badge">4 · Preset</span>
+            </div>
+            <div class="row u-gap-8 u-wrap surface-setup-shell-preset-row" style="margin-top:12px; align-items:center;">
+              <select class="u-shell-select-width" id="roleplay-v2-shell-preset-select">
+                <option value="">Workspace presets…</option>
+              </select>
+              <button class="btn btn-small" id="btn-roleplay-v2-load-preset" type="button">Load</button>
+              <button class="btn btn-small" id="btn-roleplay-v2-save-preset" type="button">Save preset</button>
+              <button class="btn btn-small" id="btn-roleplay-v2-update-preset" type="button">Update preset</button>
+              <button class="btn btn-small btn-danger" id="btn-roleplay-v2-delete-preset" type="button">Delete</button>
+              <button class="btn btn-small" id="btn-roleplay-v2-set-default-preset" type="button">Set default</button>
+              <button class="btn btn-small" id="btn-roleplay-v2-clear-default-preset" type="button">Clear default</button>
+              <div class="badge" id="roleplay-v2-preset-active-badge">Manual setup</div>
+              <span class="status" id="roleplay-v2-preset-status"></span>
+            </div>
+            <div class="mini-note" id="roleplay-v2-preset-meta" style="margin-top:12px;">Workspace presets here are browser-local UI presets for the shell mode pair. Save the current output preset + interaction mode when you want to reopen the same setup later. They do not change your Studio focus, saved memory build, active Scene packet, or any saved V2 record.</div>
+            <pre id="roleplay-v2-shell-summary" style="margin-top:12px; white-space:pre-wrap; max-height:180px; overflow:auto;">No V2 shell state yet.</pre>
+          </section>
+        </div>
+      </div>
+    </div>
+
+    <div class="surface-workspace-shell" style="margin-top:18px;">
+      <div class="surface-workspace-shell-header">
+        <div class="surface-workspace-shell-copy">
+          <div class="stat-title">Workspace lane</div>
+          <div class="generation-summary-title">Roleplay V2 work shell</div>
+          <div class="muted small">Each lane has one job: Forge writes records, Studio preps memory and scene builds, Scene runs the live or drafting session, and Stories handles restore history.</div>
+        </div>
+        <div class="badge">Work shell</div>
+      </div>
+
+
+      <div class="tabbar" id="roleplay-v2-subtabbar" style="margin-top:14px;">
+        <button data-roleplay-v2-tab="forge" type="button">Forge</button>
+        <button data-roleplay-v2-tab="scene" type="button">Scene</button>
+        <button data-roleplay-v2-tab="stories" type="button">Stories</button>
+        <button class="active" data-roleplay-v2-tab="studio" type="button">Studio</button>
+      </div>
+
+      <section class="panel" data-roleplay-v2-panel="scene" style="margin-top:16px;">
+        <div class="grid grid-2" style="gap:16px; align-items:start;">
+          <div class="panel" style="padding:14px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.08); min-height:320px;">
+            <div class="row-between"><div><div class="stat-title">Scene setup</div><div class="mini-note" id="roleplay-v2-scene-setup-note">Live use lane. Scene loads a Studio-built Scene packet, tracks the active state, and hands saves off to Stories.</div></div><span class="badge">Live use</span></div>
+            <div class="panel hidden" id="roleplay-v2-scene-authoring-brief" style="margin-top:12px; padding:12px; background:rgba(110,170,255,0.08); border:1px solid rgba(110,170,255,0.18);">Novel authoring uses Scene as a drafting lane. Use the brief + notes fields for chapter context, then write the next prose beat or revision instruction in the main input.</div>
+            <label id="roleplay-v2-scene-premise-label" for="roleplay-v2-scene-premise" style="margin-top:14px;">Scene premise</label>
+            <textarea id="roleplay-v2-scene-premise" rows="5" placeholder="Late-night reunion in the harbor after the ban on magic."></textarea>
+            <div class="grid grid-2" style="margin-top:12px; gap:12px; align-items:end;">
+              <div>
+                <label for="roleplay-v2-scene-tone">Tone</label>
+                <select id="roleplay-v2-scene-tone"><option>Warm tension</option><option>Slow-burn romance</option><option>Dark and dramatic</option><option>Soft comfort</option></select>
+              </div>
+              <div>
+                <label for="roleplay-v2-scene-style">Reply style</label>
+                <select id="roleplay-v2-scene-style"><option>Immersive dialogue</option><option>Dialogue with light narration</option><option>Novel-like prose</option></select>
+              </div>
+            </div>
+            <label id="roleplay-v2-scene-notes-label" for="roleplay-v2-scene-notes" style="margin-top:12px;">Scene notes</label>
+            <textarea id="roleplay-v2-scene-notes" rows="4" placeholder="Stage direction, continuity notes, or what the Scene packet should lean on."></textarea>
+            <div class="grid grid-2" style="margin-top:12px; gap:12px; align-items:end;">
+              <div>
+                <label for="roleplay-v2-scene-posture">Narrator posture</label>
+                <select id="roleplay-v2-scene-posture">
+                  <option value="partner_focus" selected>Partner focus</option>
+                  <option value="duet_first_person">Duet first person</option>
+                  <option value="gm_facilitated">GM facilitated</option>
+                  <option value="omniscient_narration">Omniscient narration</option>
+                </select>
+              </div>
+              <div>
+                <label for="roleplay-v2-scene-continuity-mode">Continuity mode</label>
+                <select id="roleplay-v2-scene-continuity-mode">
+                  <option value="runtime_anchored" selected>Runtime anchored</option>
+                  <option value="session_persistent">Session persistent</option>
+                  <option value="fresh_scene">Fresh scene</option>
+                </select>
+              </div>
+            </div>
+            <label for="roleplay-v2-scene-runtime-select" style="margin-top:12px;">Scene packet</label>
+            <div class="row" style="gap:8px; flex-wrap:wrap; align-items:center;">
+              <select id="roleplay-v2-scene-runtime-select"><option value="">Select Scene packet</option></select>
+              <button class="btn btn-small" id="btn-roleplay-v2-scene-runtime-refresh" type="button">Refresh packets</button>
+              <button class="btn btn-small btn-primary" id="btn-roleplay-v2-scene-runtime-load" type="button">Load into Scene</button>
+            </div>
+            <div class="status" id="roleplay-v2-scene-runtime-status" style="margin-top:10px;"></div>
+            <div class="panel" id="roleplay-v2-scene-runtime-summary" style="margin-top:12px; padding:12px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06);">No Scene packet is active yet.</div>
+            <div class="panel" id="roleplay-v2-scene-state-summary" style="margin-top:12px; padding:12px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06);">Scene state will appear here once a Scene packet is loaded.</div>
+            <div class="panel" id="roleplay-v2-scene-continuity-summary" style="margin-top:12px; padding:12px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06);">Continuity state will appear here once Scene is anchored to a loaded packet.</div>
+            <div class="panel" id="roleplay-v2-scene-memory-preview" style="margin-top:12px; padding:12px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); min-height:120px; white-space:pre-wrap;">Recent continuity memory will appear here after live turns save back into V2 memory.</div>
+            <div class="panel hidden" data-roleplay-v2-dev="scene-writeback" style="margin-top:12px; padding:12px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06);">
+              <div class="row-between" style="gap:12px; align-items:flex-start;">
+                <div><div class="stat-title">Writeback debug</div><div class="mini-note">Inspect recent turn summaries and saved continuity rows for the active Scene bundle.</div></div>
+                <div class="row" style="gap:8px; flex-wrap:wrap;">
+                  <button class="btn btn-small" id="btn-roleplay-v2-scene-writeback-refresh" type="button">Refresh writeback debug</button>
+                  <button class="btn btn-small" id="btn-roleplay-v2-scene-writeback-eval" type="button">Run writeback eval</button>
+                </div>
+              </div>
+              <pre id="roleplay-v2-scene-writeback-debug" style="margin-top:12px; white-space:pre-wrap; min-height:140px; max-height:240px; overflow:auto; padding:12px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06);">Turn-save debug rows will appear here after live turns write summaries and continuity memory.</pre>
+              <pre id="roleplay-v2-scene-writeback-eval" style="margin-top:12px; white-space:pre-wrap; min-height:140px; max-height:220px; overflow:auto; padding:12px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06);">Writeback mode eval will appear here after you run the inspector.</pre>
+            </div>
+            <div class="grid grid-2" style="margin-top:12px; gap:12px; align-items:start;">
+              <div class="panel" style="padding:12px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); min-height:260px; display:flex; flex-direction:column;">
+                <div class="row-between"><div><div class="stat-title">Scene continuity rows</div><div class="mini-note">Browse saved continuity rows from the active Scene handoff.</div></div><div class="row" style="gap:8px; align-items:center;"><span class="badge" id="roleplay-v2-continuity-scene-count">0</span><button class="btn btn-small" id="btn-roleplay-v2-continuity-scene-refresh" type="button">Refresh</button></div></div>
+                <div id="roleplay-v2-continuity-scene-list" style="margin-top:10px; display:grid; gap:8px; flex:1; min-height:0; overflow:auto;">No continuity rows available in this context yet.</div>
+                <div class="status" id="roleplay-v2-continuity-scene-status" style="margin-top:10px;"></div>
+              </div>
+              <div class="panel" style="padding:12px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); min-height:260px; display:flex; flex-direction:column;">
+                <div class="row-between"><div><div class="stat-title">Scene continuity inspector</div><div class="mini-note">Apply continuity controls directly from the selected Scene row.</div></div><span class="badge">Inspector</span></div>
+                <div id="roleplay-v2-continuity-scene-inspector" style="margin-top:10px; flex:1; min-height:0; overflow:auto;">Select a continuity row to inspect its control state, recurrence, cooldown, and source traces.</div>
+              </div>
+            </div>
+            <div class="mini-note" style="margin-top:12px;">Scene uses the packet built in Studio, keeps the active state visible, and tracks continuity across memory, canon guardrails, and the transcript.</div>
+          </div>
+          <div class="panel" style="padding:14px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.08); min-height:320px;">
+            <div class="row-between"><div><div class="stat-title">Scene chat</div><div class="mini-note" id="roleplay-v2-scene-chat-note">Live roleplay or drafting lane using the active Scene packet plus explicit scene state.</div></div><span class="badge" id="roleplay-v2-scene-turn-meta-badge">Ready</span></div>
+            <div class="panel" id="roleplay-v2-scene-runtime-preview" style="margin-top:14px; min-height:140px; padding:12px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); white-space:pre-wrap;">Scene packet preview will appear here once you load one from Studio.</div>
+            <div class="row-between" style="margin-top:12px; align-items:center;"><label for="roleplay-v2-scene-transcript" style="margin:0;">Transcript</label><div class="row" style="gap:8px; flex-wrap:wrap;"><span class="badge" id="roleplay-v2-scene-transcript-count">0 turns</span><span class="badge" id="roleplay-v2-scene-transcript-state">Idle</span></div></div>
+            <div class="panel" id="roleplay-v2-scene-transcript" style="min-height:220px; max-height:320px; overflow:auto; padding:12px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06);">Scene transcript will render here once you start sending turns.</div>
+            <div class="row-between" style="margin-top:12px; gap:12px; align-items:end; flex-wrap:wrap;">
+              <div style="flex:1 1 260px; min-width:220px;">
+                <label for="roleplay-v2-scene-user-input" style="margin:0;">User input</label>
+              </div>
+              <div style="flex:0 1 260px; min-width:220px;">
+                <label for="roleplay-v2-scene-turn-input-style" style="margin:0;">Turn input style</label>
+                <select id="roleplay-v2-scene-turn-input-style">
+                  <option value="free_typing" selected>Free typing</option>
+                  <option value="choice_assist">Choice assist</option>
+                  <option value="hybrid">Hybrid</option>
+                </select>
+              </div>
+            </div>
+            <textarea id="roleplay-v2-scene-user-input" rows="4" placeholder="Type the next scene turn here."></textarea>
+            <div class="panel hidden" id="roleplay-v2-scene-choice-assist" style="margin-top:12px; padding:12px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06);">
+              <div class="row-between" style="gap:12px; align-items:flex-start;">
+                <div>
+                  <div class="stat-title">Roleplay choice assist</div>
+                  <div class="mini-note" id="roleplay-v2-scene-choice-assist-note">Suggested next actions will appear here after the latest assistant reply.</div>
+                </div>
+                <span class="badge" id="roleplay-v2-scene-choice-assist-badge">Hidden</span>
+              </div>
+              <div id="roleplay-v2-scene-choice-list" style="margin-top:10px; display:grid; gap:8px;">Choice assist is inactive for this mode.</div>
+            </div>
+            <div class="row" style="margin-top:12px; gap:8px; flex-wrap:wrap; align-items:center;">
+              <button class="btn btn-small btn-primary" id="btn-roleplay-v2-scene-send-bridge" type="button">Send scene turn</button>
+              <button class="btn btn-small" id="btn-roleplay-v2-scene-continue" type="button">Continue scene</button>
+              <button class="btn btn-small" id="btn-roleplay-v2-scene-clear-transcript" type="button">Reset continuity</button>
+              <button class="btn btn-small" id="btn-roleplay-v2-scene-create-storyline" type="button">Create storyline from Scene</button>
+              <button class="btn btn-small" id="btn-roleplay-v2-scene-save-checkpoint" type="button">Save checkpoint</button>
+              <button class="btn btn-small" id="btn-roleplay-v2-scene-refresh-session-continuity" type="button">Refresh continuity now</button>
+              <span class="badge" id="roleplay-v2-scene-storyline-badge">No storyline bound</span>
+              <span class="badge" id="roleplay-v2-scene-session-badge">No session bound</span>
+              <span class="badge" id="roleplay-v2-scene-autosave-badge">Autosave off</span>
+              <span class="mini-note">Ctrl/⌘ + Enter sends</span>
+            </div>
+            <div class="row" style="margin-top:10px; gap:12px; flex-wrap:wrap; align-items:center;">
+              <label style="display:flex; align-items:center; gap:8px; margin:0;">
+                <input id="roleplay-v2-scene-autosave-toggle" type="checkbox" />
+                <span>Autosave checkpoint after live turns</span>
+              </label>
+              <span class="mini-note" id="roleplay-v2-scene-autosave-note">When enabled, Scene will silently save fresh checkpoints for the bound session and refresh continuity restore state.</span>
+            </div>
+            <div class="status" id="roleplay-v2-scene-send-status" style="margin-top:10px;"></div>
+            <div class="mini-note" style="margin-top:12px;">This lane keeps the active packet visible, sends a real scene-state payload, and gives clearer continuity feedback while you work.</div>
+          </div>
+        </div>
+      </section>
+
+            <section class="panel hidden" data-roleplay-v2-panel="stories" style="margin-top:16px;">
+        <div class="row-between" style="margin-bottom:12px; gap:12px; align-items:flex-start;">
+          <div>
+            <div class="stat-title">Stories</div>
+            <div class="mini-note">Save and restore lane for storyline browsing, session/checkpoint history, archive reading, and sending a saved run back into Scene.</div>
+          </div>
+          <span class="badge">Save + resume</span>
+        </div>
+
+        <div class="row" style="margin-bottom:14px; gap:8px; flex-wrap:wrap; align-items:center;">
+          <button class="btn btn-small btn-primary" id="btn-roleplay-v2-stories-new" type="button">Create storyline</button>
+          <button class="btn btn-small" id="btn-roleplay-v2-stories-refresh" type="button">Refresh</button>
+          <button class="btn btn-small" id="btn-roleplay-v2-stories-create-from-scene" type="button">Create from current Scene</button>
+          <span class="badge" id="roleplay-v2-stories-active-badge">No storyline selected</span>
+        </div>
+
+        <div class="tabbar" id="roleplay-v2-stories-subtabbar" style="margin-bottom:14px;">
+          <button class="active" data-roleplay-v2-stories-subtab="workspace" type="button">Workspace</button>
+          <button data-roleplay-v2-stories-subtab="storylines" type="button">Storylines</button>
+          <button data-roleplay-v2-stories-subtab="archive" type="button">Archive</button>
+          <button data-roleplay-v2-stories-subtab="inspector" type="button">Inspector</button>
+        </div>
+
+        <div class="panel" data-roleplay-v2-stories-subtab-panel="workspace" style="display:flex; flex-direction:column; gap:16px;">
+          <div class="grid" style="grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.15fr); gap:16px; align-items:stretch;">
+            <div style="display:grid; gap:12px; align-content:start;">
+              <div class="panel" style="padding:14px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.08); display:flex; flex-direction:column; gap:10px;">
+                <div class="row-between" style="gap:12px; align-items:flex-start;"><div><div class="stat-title">Save model</div><div class="mini-note">Make the save / resume hierarchy readable before you start branching.</div></div><span class="badge">Structure</span></div>
+                <div class="mini-note" id="roleplay-v2-stories-structure-note">Storyline = umbrella. Session = one active run inside that storyline. Checkpoint = a restorable save inside the selected session.</div>
+                <div class="mini-note" id="roleplay-v2-stories-mode-lock-note">New sessions inherit the current canonical mode lock from the main mode selector.</div>
+                <div class="mini-note" id="roleplay-v2-stories-restore-note">Restore preview will show exactly which session/checkpoint and mode pair Scene will reopen.</div>
+              </div>
+
+              <div class="panel" style="padding:14px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.08); display:flex; flex-direction:column; gap:10px;">
+                <div class="row-between" style="gap:12px; align-items:flex-start;"><div><div class="stat-title">New storyline</div><div class="mini-note">Use a real form instead of a one-line prompt.</div></div><span class="badge">Create</span></div>
+                <div>
+                  <label for="roleplay-v2-stories-form-title">Title</label>
+                  <input id="roleplay-v2-stories-form-title" type="text" placeholder="Storyline title" maxlength="200"/>
+                </div>
+                <div>
+                  <label for="roleplay-v2-stories-form-summary">Summary</label>
+                  <textarea id="roleplay-v2-stories-form-summary" rows="3" placeholder="What this storyline covers, what is being continued, or what this branch is about."></textarea>
+                </div>
+                <div class="grid grid-2" style="gap:10px; align-items:end;">
+                  <div>
+                    <label for="roleplay-v2-stories-form-project-id">Project id</label>
+                    <input id="roleplay-v2-stories-form-project-id" type="text" placeholder="Optional project id"/>
+                  </div>
+                  <div>
+                    <label for="roleplay-v2-stories-form-continuity-policy">Continuity policy</label>
+                    <select id="roleplay-v2-stories-form-continuity-policy"><option value="runtime_anchored">runtime_anchored</option><option value="story_anchored">story_anchored</option></select>
+                  </div>
+                </div>
+                <div class="row" style="gap:8px; flex-wrap:wrap; align-items:center;">
+                  <button class="btn btn-small" id="btn-roleplay-v2-stories-fill-from-scene" type="button">Fill from current Scene</button>
+                  <button class="btn btn-small" id="btn-roleplay-v2-stories-clear-form" type="button">Clear</button>
+                  <button class="btn btn-small btn-primary" id="btn-roleplay-v2-stories-submit-storyline" type="button">Save storyline</button>
+                </div>
+              </div>
+
+              <div class="panel" style="padding:14px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.08); display:flex; flex-direction:column; gap:10px;">
+                <div class="row-between" style="gap:12px; align-items:flex-start;"><div><div class="stat-title">New session</div><div class="mini-note">Create a session with a clear summary and an explicit restore seed.</div></div><span class="badge">Session</span></div>
+                <div>
+                  <label for="roleplay-v2-stories-session-summary">Session summary</label>
+                  <textarea id="roleplay-v2-stories-session-summary" rows="3" placeholder="What makes this run different from the other sessions in this storyline?"></textarea>
+                </div>
+                <label class="checkbox" style="gap:8px; align-items:flex-start;">
+                  <input id="roleplay-v2-stories-session-seed-checkpoint" type="checkbox" checked/>
+                  <span>Seed from the selected checkpoint when one is selected</span>
+                </label>
+                <div class="mini-note" id="roleplay-v2-stories-session-mode-note">Mode lock preview will appear here.</div>
+                <div class="row" style="gap:8px; flex-wrap:wrap; align-items:center;">
+                  <button class="btn btn-small" id="btn-roleplay-v2-stories-clear-session-form" type="button">Clear</button>
+                  <button class="btn btn-small btn-primary" id="btn-roleplay-v2-stories-submit-session" type="button">Save session</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="panel" id="roleplay-v2-stories-workspace" style="padding:14px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.08); min-height:680px; display:flex; flex-direction:column;">
+              <div class="row-between" style="gap:12px; align-items:flex-start;">
+                <div>
+                  <div class="stat-title" id="roleplay-v2-stories-header-title">Session + checkpoint timeline</div>
+                  <div class="mini-note" id="roleplay-v2-stories-header-note">The main workspace will show storyline sessions, checkpoint saves, and branch lineage.</div>
+                </div>
+                <span class="badge" id="roleplay-v2-stories-workspace-badge">Timeline</span>
+              </div>
+              <div class="panel" style="margin-top:14px; padding:12px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06);">
+                <div class="row" style="gap:8px; flex-wrap:wrap; align-items:center;">
+                  <button class="btn btn-small" id="btn-roleplay-v2-stories-new-session" type="button">Create session</button>
+                  <button class="btn btn-small" id="btn-roleplay-v2-stories-open-reader" type="button">Open archive</button>
+                  <button class="btn btn-small" id="btn-roleplay-v2-stories-resume-scene" type="button">Resume in Scene</button>
+                </div>
+                <div class="grid grid-2" style="margin-top:10px; gap:10px; align-items:start;">
+                  <div class="mini-note" id="roleplay-v2-stories-resume-target">Restore target preview will appear here once a storyline, session, or checkpoint is selected.</div>
+                  <div class="mini-note" id="roleplay-v2-stories-resume-mode">Mode restore preview will appear here once a save target is selected.</div>
+                </div>
+              </div>
+              <div id="roleplay-v2-stories-session-list" style="margin-top:14px; display:grid; gap:12px; flex:1; min-height:0; overflow:auto;">
+                <div class="panel" style="padding:12px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06);">
+                  <div class="stat-title">Sessions</div>
+                  <div class="mini-note" style="margin-top:8px;">Session groups will render here.</div>
+                </div>
+                <div class="panel" style="padding:12px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06);">
+                  <div class="stat-title">Checkpoints</div>
+                  <div class="mini-note" style="margin-top:8px;">Checkpoint cards and branch lineage will render here.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel hidden" data-roleplay-v2-stories-subtab-panel="storylines" style="display:flex; flex-direction:column; gap:16px;">
+          <div class="panel" id="roleplay-v2-stories-rail" style="padding:14px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.08); min-height:680px; display:flex; flex-direction:column;">
+            <div class="row-between"><div><div class="stat-title">Storylines</div><div class="mini-note">Storyline browser rail.</div></div><span class="badge" id="roleplay-v2-stories-rail-count">0</span></div>
+            <div class="row" style="margin-top:12px; gap:8px; flex-wrap:wrap;">
+              <input id="roleplay-v2-stories-search" placeholder="Search storylines" type="text" style="flex:1 1 140px;"/>
+            </div>
+            <div class="row" style="margin-top:10px; gap:8px; flex-wrap:wrap; align-items:end;">
+              <div style="flex:1 1 120px;">
+                <label for="roleplay-v2-stories-filter-status">Status</label>
+                <select id="roleplay-v2-stories-filter-status"><option value="">All</option><option value="draft">Draft</option><option value="active">Active</option><option value="paused">Paused</option><option value="complete">Complete</option></select>
+              </div>
+            </div>
+            <div id="roleplay-v2-stories-list" style="margin-top:12px; display:grid; gap:8px; flex:1; min-height:0; overflow:auto;">
+              <div class="mini-note">Storylines render here. Search, filter, and pick the storyline you want to inspect or resume.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel hidden" data-roleplay-v2-stories-subtab-panel="archive" style="display:flex; flex-direction:column; gap:16px;">
+          <div class="panel" style="padding:14px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.08); min-height:680px; display:flex; flex-direction:column;">
+            <div class="row-between"><div><div class="stat-title">Archive</div><div class="mini-note">Saved reading and browse lane for stories, roleplay runs, and future canon records.</div></div><span class="badge">Archive</span></div>
+            <div class="tabbar" id="roleplay-v2-stories-archive-viewbar" style="margin-top:14px;">
+              <button class="active" data-roleplay-v2-stories-archive-view="stories" type="button">Stories</button>
+              <button data-roleplay-v2-stories-archive-view="roleplay" type="button">Roleplay</button>
+              <button data-roleplay-v2-stories-archive-view="canon" type="button">Canon</button>
+            </div>
+            <div class="panel" data-roleplay-v2-stories-archive-panel="stories" style="margin-top:14px; padding:12px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); flex:1; min-height:0; display:flex; flex-direction:column; gap:12px;">
+              <div class="row-between" style="gap:12px; align-items:flex-start; flex-wrap:wrap;">
+                <div class="mini-note">Saved stories now browse as cards. Open one to read it in a focused archive viewer.</div>
+                <div class="row" id="roleplay-v2-stories-archive-stories-meta" style="gap:8px; flex-wrap:wrap;"></div>
+              </div>
+              <div id="roleplay-v2-stories-archive-stories-grid" class="roleplay-v2-archive-grid" style="flex:1; min-height:0; overflow:auto;"></div>
+              <pre id="roleplay-v2-stories-reader" class="hidden" style="white-space:pre-wrap; height:0; min-height:0; overflow:hidden; margin:0; padding:0;"></pre>
+            </div>
+            <div class="panel hidden" data-roleplay-v2-stories-archive-panel="roleplay" style="margin-top:14px; padding:12px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); flex:1; min-height:0; display:flex; flex-direction:column; gap:12px;">
+              <div class="row-between" style="gap:12px; align-items:flex-start; flex-wrap:wrap;">
+                <div class="mini-note">Roleplay archive uses the selected storyline as context, then opens sessions with checkpoint chips for readable playback.</div>
+                <div class="row" id="roleplay-v2-stories-archive-roleplay-meta" style="gap:8px; flex-wrap:wrap;"></div>
+              </div>
+              <div id="roleplay-v2-stories-archive-roleplay-grid" class="roleplay-v2-archive-grid" style="flex:1; min-height:0; overflow:auto;"></div>
+            </div>
+            <div class="panel hidden" data-roleplay-v2-stories-archive-panel="canon" style="margin-top:14px; padding:12px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); flex:1; min-height:0; display:flex; flex-direction:column; gap:12px;">
+              <div class="row-between" style="gap:12px; align-items:flex-start; flex-wrap:wrap;">
+                <div class="mini-note">Runtime-ready Forge records surface here as browseable canon cards.</div>
+                <div class="row" id="roleplay-v2-stories-archive-canon-meta" style="gap:8px; flex-wrap:wrap;"></div>
+              </div>
+              <div id="roleplay-v2-stories-archive-canon-grid" class="roleplay-v2-archive-grid" style="flex:1; min-height:0; overflow:auto;"></div>
+            </div>
+            <div class="roleplay-v2-archive-modal hidden" id="roleplay-v2-stories-archive-modal" aria-hidden="true">
+              <div class="roleplay-v2-archive-modal-shell">
+                <div class="row-between" style="padding:14px 18px; border-bottom:1px solid rgba(255,255,255,0.08); gap:12px; flex-wrap:wrap;">
+                  <div>
+                    <div class="stat-title" id="roleplay-v2-stories-archive-modal-eyebrow">Archive viewer</div>
+                    <div class="mini-note">Readable archive view with part switching and cover preview.</div>
+                  </div>
+                  <div class="row" style="gap:8px; flex-wrap:wrap;">
+                    <button class="btn btn-small hidden" id="btn-roleplay-v2-stories-archive-upload-cover" type="button">Upload cover</button>
+                    <button class="btn btn-small" id="btn-roleplay-v2-stories-archive-close" type="button">Close</button>
+                  </div>
+                </div>
+                <div class="roleplay-v2-archive-modal-head">
+                  <div class="roleplay-v2-archive-modal-cover" id="roleplay-v2-stories-archive-modal-cover">?</div>
+                  <div>
+                    <div class="stat-title" id="roleplay-v2-stories-archive-modal-title">Archive item</div>
+                    <div class="mini-note" id="roleplay-v2-stories-archive-modal-summary" style="margin-top:8px;">Select an archive card to open its readable view.</div>
+                    <div class="roleplay-v2-archive-modal-meta" id="roleplay-v2-stories-archive-modal-meta"></div>
+                  </div>
+                </div>
+                <div class="roleplay-v2-archive-modal-parts" id="roleplay-v2-stories-archive-modal-parts"></div>
+                <div class="roleplay-v2-archive-modal-body">
+                  <div class="roleplay-v2-archive-modal-submeta" id="roleplay-v2-stories-archive-modal-part-meta"></div>
+                  <div class="roleplay-v2-archive-modal-body-copy" id="roleplay-v2-stories-archive-modal-body">Open a card to read the saved content here.</div>
+                </div>
+                <input id="roleplay-v2-stories-archive-upload-input" type="file" accept="image/*" class="hidden" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel hidden" data-roleplay-v2-stories-subtab-panel="inspector" style="display:flex; flex-direction:column; gap:16px;">
+          <div class="panel" id="roleplay-v2-stories-inspector" style="padding:14px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.08); min-height:680px; display:flex; flex-direction:column;">
+            <div class="row-between"><div><div class="stat-title">Inspector</div><div class="mini-note">Summary, continuity, and provenance views for the selected storyline/session/checkpoint.</div></div><span class="badge">Inspector</span></div>
+            <div class="tabbar" id="roleplay-v2-stories-inspector-viewbar" style="margin-top:14px;">
+              <button class="active" data-roleplay-v2-stories-view="summary" type="button">Summary</button>
+              <button data-roleplay-v2-stories-view="continuity" type="button">Continuity</button>
+              <button data-roleplay-v2-stories-view="provenance" type="button">Provenance</button>
+            </div>
+            <div class="panel" data-roleplay-v2-stories-panel="summary" style="margin-top:14px; padding:12px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); flex:1; min-height:0; display:flex;">
+              <pre id="roleplay-v2-stories-summary" style="white-space:pre-wrap; height:100%; min-height:0; overflow:auto;">Select a storyline, session, or checkpoint to inspect its current save / resume summary here.</pre>
+            </div>
+            <div class="panel hidden" data-roleplay-v2-stories-panel="continuity" style="margin-top:14px; padding:12px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); flex:1; min-height:0; display:flex; flex-direction:column; gap:12px;">
+              <pre id="roleplay-v2-stories-continuity" style="white-space:pre-wrap; min-height:160px; max-height:220px; overflow:auto;">Checkpoint continuity snapshot and resume-merge preview will render here.</pre>
+              <div class="panel" style="padding:12px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); min-height:220px; display:flex; flex-direction:column; gap:12px; flex:1; min-height:0;">
+                <div class="row-between"><div><div class="stat-title">Stories continuity</div><div class="mini-note">Browse rows or inspect the selected continuity state in the same shell.</div></div><div class="row" style="gap:8px; align-items:center;"><span class="badge" id="roleplay-v2-continuity-stories-count">0</span><button class="btn btn-small" id="btn-roleplay-v2-continuity-stories-refresh" type="button">Refresh</button></div></div>
+                <div class="tabbar" id="roleplay-v2-stories-continuity-viewbar">
+                  <button class="active" data-roleplay-v2-stories-continuity-view="rows" type="button">Rows</button>
+                  <button data-roleplay-v2-stories-continuity-view="inspector" type="button">Inspector</button>
+                </div>
+                <div class="panel" data-roleplay-v2-stories-continuity-panel="rows" style="padding:12px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); flex:1; min-height:0; display:flex; flex-direction:column;">
+                  <div><div class="stat-title">Stories continuity rows</div><div class="mini-note">Browse continuity rows from the selected storyline/session/checkpoint restore state.</div></div>
+                  <div id="roleplay-v2-continuity-stories-list" style="margin-top:10px; display:grid; gap:8px; flex:1; min-height:0; overflow:auto;">No continuity rows available in this context yet.</div>
+                  <div class="status" id="roleplay-v2-continuity-stories-status" style="margin-top:10px;"></div>
+                </div>
+                <div class="panel hidden" data-roleplay-v2-stories-continuity-panel="inspector" style="padding:12px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); flex:1; min-height:0; display:flex; flex-direction:column;">
+                  <div><div class="stat-title">Stories continuity inspector</div><div class="mini-note">Inspect the selected continuity row without leaving Stories.</div></div>
+                  <div id="roleplay-v2-continuity-stories-inspector" style="margin-top:10px; flex:1; min-height:0; overflow:auto;">Select a continuity row to inspect its control state, recurrence, cooldown, and source traces.</div>
+                </div>
+              </div>
+            </div>
+            <div class="panel hidden" data-roleplay-v2-stories-panel="provenance" style="margin-top:14px; padding:12px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); flex:1; min-height:0; display:flex;">
+              <pre id="roleplay-v2-stories-provenance" style="white-space:pre-wrap; height:100%; min-height:0; overflow:auto;">Runtime, memory, and continuity provenance will render here.</pre>
+            </div>
+            <div class="status" id="roleplay-v2-stories-status" style="margin-top:12px;"></div>
+          </div>
+        </div>
+      </section>
+
+<section class="panel hidden" data-roleplay-v2-panel="forge" style="margin-top:16px;">
+        <div class="row-between" style="margin-bottom:12px;">
+          <div>
+            <div class="stat-title">Forge</div>
+            <div class="mini-note">Create or edit structured records here. Forge is the authoring lane for collecting, organizing, and editing world records before they move into Libraries for compile/build actions.</div>
+          </div>
+          <span class="badge">Authoring</span>
+        </div>
+
+        <div class="grid" id="roleplay-v2-forge-workspace" style="grid-template-columns: 280px minmax(0, 1fr); gap:16px; align-items:stretch; min-height:min(98vh, 1360px);">
+          <div class="panel" id="roleplay-v2-forge-rail-shell" style="padding:14px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.08); min-height:1020px; height:min(98vh, 1360px); display:flex; flex-direction:column; min-width:0; overflow:hidden;">
+            <div class="row-between"><div><div class="stat-title">Builder rail</div><div class="mini-note">Pick a main category first, then choose a builder or sub-category chip to prefill the current form.</div></div><div class="row" style="gap:8px; align-items:center;"><button class="btn btn-small" id="btn-roleplay-v2-forge-auto-height-rail" type="button">Drag resize off</button><span class="badge">Authoring</span></div></div>
+            <div class="panel" style="margin-top:12px; padding:10px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); display:grid; gap:8px;">
+              <div class="stat-title">Hierarchy start</div>
+              <div class="mini-note">Start from a universe, world, character, location, or organization — or continue from an existing saved scope.</div>
+              <div id="roleplay-v2-forge-entry-list" style="display:grid; gap:8px; max-height:280px; overflow:auto; padding-right:4px;"></div>
+            </div>
+            <div id="roleplay-v2-forge-group-list" style="margin-top:12px; display:grid; gap:10px; flex:1; min-height:0; overflow:auto; padding-right:4px;"></div>
+            <div class="mini-note" id="roleplay-v2-forge-group-note" style="margin-top:10px;">Pick a main category, then use the builder and sub-category chips directly under it.</div>
+            <div id="roleplay-v2-forge-builder-list" class="hidden"></div>
+            <div id="roleplay-v2-forge-subcategory-list" class="hidden"></div>
+          </div>
+
+          <div class="panel" id="roleplay-v2-forge-editor-shell" style="padding:14px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.08); min-height:1020px; height:min(98vh, 1360px); display:flex; flex-direction:column; overflow:hidden;">
+            <div class="row-between"><div><div class="stat-title" id="roleplay-v2-forge-builder-title">Universe builder</div><div class="mini-note" id="roleplay-v2-forge-builder-status">Builder templates will load here.</div></div><div class="row" style="gap:8px; align-items:center;"><button class="btn btn-small" id="btn-roleplay-v2-forge-auto-height-editor" type="button">Drag resize off</button><span class="badge" id="roleplay-v2-forge-builder-kind-badge">Ready</span></div></div>
+            <div id="roleplay-v2-forge-scope-bar" class="row" style="margin-top:14px; gap:8px; flex-wrap:wrap; align-items:center;">No active build scope set yet.</div>
+            <div class="row" style="margin-top:10px; gap:8px; flex-wrap:wrap; align-items:center;">
+              <button class="btn btn-small" id="btn-roleplay-v2-forge-use-current-scope" type="button">Use current as scope</button>
+              <button class="btn btn-small" id="btn-roleplay-v2-forge-clear-scope" type="button">Clear scope</button>
+              <span class="mini-note">Active scope filters the saved list and auto-fills child records from the current universe/world/region/city chain.</span>
+            </div>
+            <div class="panel" style="margin-top:12px; padding:10px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); display:grid; gap:10px;">
+              <div class="row" style="gap:8px; flex-wrap:wrap; align-items:center;">
+                <select id="roleplay-v2-forge-scope-kind-select">
+                  <option value="universe">Universe scope</option>
+                  <option value="world">World scope</option>
+                  <option value="region">Region scope</option>
+                  <option value="city">City scope</option>
+                </select>
+                <input id="roleplay-v2-forge-scope-search" type="text" placeholder="Search scope records" style="max-width:240px;" />
+                <button class="btn btn-small" id="btn-roleplay-v2-forge-scope-refresh" type="button">Refresh scope list</button>
+              </div>
+              <div id="roleplay-v2-forge-scope-child-actions" class="row" style="gap:8px; flex-wrap:wrap; align-items:center;">Select or lock a scope to unlock smart child creation.</div>
+              <div id="roleplay-v2-forge-scope-picker-list" style="display:grid; gap:8px; max-height:180px; overflow:auto; padding-right:4px;"></div>
+            </div>
+            <div class="row" style="margin-top:14px; gap:8px; flex-wrap:wrap; align-items:center;">
+              <button class="btn btn-small btn-primary" id="btn-roleplay-v2-forge-save-record" type="button">Save record</button>
+              <button class="btn btn-small" id="btn-roleplay-v2-forge-save-create-drafts" type="button">Save + create linked drafts</button>
+              <button class="btn btn-small" id="btn-roleplay-v2-forge-delete-record" type="button">Delete record</button>
+              <button class="btn btn-small" id="btn-roleplay-v2-forge-sync-json" type="button">Refresh JSON</button>
+              <select id="roleplay-v2-forge-json-apply-mode" style="min-width:170px;">
+                <option value="fill_empty_only">Apply JSON · Fill empty only</option>
+                <option value="merge_overwrite">Apply JSON · Merge + overwrite</option>
+                <option value="replace_all">Apply JSON · Replace all</option>
+              </select>
+              <button class="btn btn-small" id="btn-roleplay-v2-forge-apply-json" type="button">Apply JSON</button>
+              <button class="btn btn-small" id="btn-roleplay-v2-forge-apply-md" type="button">Apply Markdown</button>
+              <span class="badge" id="roleplay-v2-forge-record-badge">No record loaded</span>
+            </div>
+            <div class="tabbar" id="roleplay-v2-forge-viewbar" style="margin-top:14px;">
+              <button class="active" data-roleplay-v2-forge-view="form" type="button">Form</button>
+              <button data-roleplay-v2-forge-view="json" type="button">JSON</button>
+              <button data-roleplay-v2-forge-view="md" type="button">Markdown</button>
+              <button data-roleplay-v2-forge-view="contract" type="button">Contract</button>
+            </div>
+            <div class="panel" data-roleplay-v2-forge-panel="form" style="margin-top:14px; padding:12px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); flex:1; min-height:0; display:flex; flex-direction:column; overflow:hidden;">
+              <div id="roleplay-v2-forge-form-root" style="display:grid; gap:14px; height:100%; min-height:0; overflow:auto; padding-right:4px;"></div>
+            </div>
+            <div class="panel hidden" data-roleplay-v2-forge-panel="json" style="margin-top:14px; padding:12px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); flex:1; min-height:0; display:flex; overflow:hidden;">
+              <textarea id="roleplay-v2-forge-json-editor" rows="22" spellcheck="false" style="width:100%; height:100%; min-height:0; font-family:ui-monospace, SFMono-Regular, Menlo, monospace;"></textarea>
+            </div>
+            <div class="panel hidden" data-roleplay-v2-forge-panel="md" style="margin-top:14px; padding:12px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); flex:1; min-height:0; display:flex; overflow:hidden;">
+              <textarea id="roleplay-v2-forge-md-editor" rows="22" spellcheck="false" style="width:100%; height:100%; min-height:0; font-family:ui-monospace, SFMono-Regular, Menlo, monospace;"></textarea>
+            </div>
+            <div class="panel hidden" data-roleplay-v2-forge-panel="contract" style="margin-top:14px; padding:12px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); flex:1; min-height:0; display:flex; overflow:hidden;">
+              <pre id="roleplay-v2-forge-contract-preview" style="white-space:pre-wrap; height:100%; min-height:0; overflow:auto;">Contract preview will load here.</pre>
+            </div>
+            <div class="status" id="roleplay-v2-forge-status" style="margin-top:12px;"></div>
+          </div>
+        </div>
+
+        <div class="grid" id="roleplay-v2-forge-bottom-workspace" style="margin-top:16px; grid-template-columns:minmax(0, 1.65fr) minmax(320px, 0.95fr); gap:16px; align-items:start;">
+          <div class="panel" id="roleplay-v2-forge-records-shell" style="padding:14px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.08); min-height:280px; display:flex; flex-direction:column; overflow:hidden;">
+            <div class="row-between"><div><div class="stat-title">Builder records</div><div class="mini-note">Saved Forge records appear here so you can reopen, inspect, and reuse them quickly.</div></div><span class="badge">Records</span></div>
+            <div class="row" style="margin-top:10px; gap:8px; flex-wrap:wrap;">
+              <button class="btn btn-small" id="btn-roleplay-v2-forge-records-refresh" type="button">Refresh list</button>
+              <button class="btn btn-small" id="btn-roleplay-v2-forge-new-record" type="button">New from template</button>
+              <select id="roleplay-v2-forge-record-view" style="min-width:160px;">
+                <option value="current_kind">Current builder</option>
+                <option value="active_group">Current rail group</option>
+                <option value="all">All Forge kinds</option>
+              </select>
+              <select id="roleplay-v2-forge-record-group-by" style="min-width:150px;">
+                <option value="scope">Group by scope</option>
+                <option value="subcategory">Group by sub-category</option>
+                <option value="kind">Group by kind</option>
+                <option value="status">Group by status</option>
+              </select>
+              <select id="roleplay-v2-forge-record-status-filter" style="min-width:130px;">
+                <option value="">All statuses</option>
+                <option value="draft">Draft</option>
+                <option value="active">Active</option>
+                <option value="archived">Archived</option>
+                <option value="published">Published</option>
+              </select>
+            </div>
+            <input id="roleplay-v2-forge-record-search" type="text" placeholder="Search label, id, scope, sub-category, or summary" style="margin-top:10px;" />
+            <div class="mini-note" id="roleplay-v2-forge-record-counts" style="margin-top:10px;">Showing current builder records.</div>
+            <div id="roleplay-v2-forge-record-list" style="margin-top:12px; display:grid; gap:10px; flex:1; min-height:0; overflow:auto; padding-right:4px;"></div>
+          </div>
+
+          <div class="panel" id="roleplay-v2-forge-utility-shell" style="padding:14px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.08); min-height:280px; display:flex; flex-direction:column; overflow:hidden;">
+            <div class="row-between"><div><div class="stat-title" id="roleplay-v2-forge-utility-title">Inspector</div><div class="mini-note" id="roleplay-v2-forge-utility-note">Shared contract summary, builder implementation state, and current payload validation.</div></div><span class="badge" id="roleplay-v2-forge-utility-badge">Inspector</span></div>
+            <div class="tabbar" id="roleplay-v2-forge-utility-viewbar" style="margin-top:12px;">
+              <button class="active" data-roleplay-v2-forge-utility-view="inspector" type="button">Inspector</button>
+              <button class="hidden" data-roleplay-v2-dev="forge-sqlite" data-roleplay-v2-forge-utility-view="sqlite" type="button">SQLite</button>
+            </div>
+            <div class="panel" data-roleplay-v2-forge-utility-panel="inspector" style="margin-top:12px; padding:12px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); flex:1; min-height:0; display:flex; overflow:hidden;">
+              <pre id="roleplay-v2-forge-inspector" style="white-space:pre-wrap; flex:1; min-height:0; overflow:auto;">Forge inspector will load here.</pre>
+            </div>
+            <div class="panel hidden" data-roleplay-v2-dev="forge-sqlite" data-roleplay-v2-forge-utility-panel="sqlite" style="margin-top:12px; padding:12px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); flex:1; min-height:0; display:flex; flex-direction:column; overflow:hidden;">
+              <div class="row" style="gap:8px; flex-wrap:wrap;">
+                <button class="btn btn-small" id="btn-roleplay-v2-forge-sqlite-sync" type="button">Sync all builders → SQLite</button>
+                <button class="btn btn-small" id="btn-roleplay-v2-forge-sqlite-refresh" type="button">Refresh debug view</button>
+              </div>
+              <input id="roleplay-v2-forge-sqlite-search" type="text" placeholder="Filter SQLite entity rows by label / id / summary" style="margin-top:10px;" />
+              <pre id="roleplay-v2-forge-sqlite-debug" style="margin-top:12px; white-space:pre-wrap; flex:1; min-height:0; overflow:auto;">SQLite debug output will load here.</pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-backdrop hidden" id="roleplay-v2-link-picker-modal">
+          <div class="modal-shell modal-lg" style="max-width:900px;">
+            <div class="modal-header">
+              <div>
+                <div class="stat-title" id="roleplay-v2-link-picker-title">Select linked record</div>
+                <div class="mini-note" id="roleplay-v2-link-picker-note">Search existing records or create a stub if the target doesn't exist yet.</div>
+              </div>
+              <button class="modal-close" id="btn-roleplay-v2-link-picker-close" type="button">×</button>
+            </div>
+            <div class="modal-body" style="display:grid; gap:14px;">
+              <div class="grid grid-2" style="gap:12px; align-items:end;">
+                <div>
+                  <label for="roleplay-v2-link-picker-search">Search</label>
+                  <input id="roleplay-v2-link-picker-search" type="text" placeholder="Search by label, id, summary, or status" />
+                </div>
+                <div class="row" style="gap:8px; flex-wrap:wrap; justify-content:flex-end;">
+                  <button class="btn btn-small" id="btn-roleplay-v2-link-picker-refresh" type="button">Refresh results</button>
+                  <button class="btn btn-small btn-primary hidden" id="btn-roleplay-v2-link-picker-create-stub" type="button">Create stub from search</button>
+                </div>
+              </div>
+              <div class="grid" style="gap:12px; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); align-items:end;">
+                <div>
+                  <label for="roleplay-v2-link-picker-kind-filter">Kind</label>
+                  <select id="roleplay-v2-link-picker-kind-filter">
+                    <option value="">All kinds</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="roleplay-v2-link-picker-scope-filter">Scope</label>
+                  <select id="roleplay-v2-link-picker-scope-filter">
+                    <option value="all">All scopes</option>
+                    <option value="active_scope">Current scope</option>
+                    <option value="outside_scope">Outside scope</option>
+                    <option value="unscoped">Unscoped</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="roleplay-v2-link-picker-category-filter">Category</label>
+                  <select id="roleplay-v2-link-picker-category-filter">
+                    <option value="">All categories</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="roleplay-v2-link-picker-subcategory-filter">Sub-category</label>
+                  <select id="roleplay-v2-link-picker-subcategory-filter">
+                    <option value="">All sub-categories</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="roleplay-v2-link-picker-status-filter">Status</label>
+                  <select id="roleplay-v2-link-picker-status-filter">
+                    <option value="">All statuses</option>
+                  </select>
+                </div>
+              </div>
+              <div class="panel" style="padding:12px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); min-height:360px; max-height:56vh; overflow:auto;">
+                <div id="roleplay-v2-link-picker-results" style="display:grid; gap:8px;"></div>
+              </div>
+              <div class="status" id="roleplay-v2-link-picker-status"></div>
+            </div>
+          </div>
+        </div>
+
+      </section>
+
+      <section class="panel hidden" data-roleplay-v2-panel="studio" style="margin-top:16px;">
+        <div class="row-between" style="margin-bottom:12px;">
+          <div>
+            <div class="stat-title">Studio</div>
+            <div class="mini-note">Guide / assist / browse / prep lane. Use Studio to orient the current path, draft structured JSON, inspect saved records, manage project/source work when needed, and build the Scene packet that Scene uses.</div>
+          </div>
+          <span class="badge">Studio lanes</span>
+        </div>
+
+        <div class="tabbar" id="roleplay-v2-studio-subtabbar" style="margin-bottom:16px;">
+          <button class="active" data-roleplay-v2-studio-tab="guide" type="button">Guide</button>
+          <button data-roleplay-v2-studio-tab="workspace" type="button">Project</button>
+          <button data-roleplay-v2-studio-tab="source" type="button">Source</button>
+          <button data-roleplay-v2-studio-tab="assist" type="button">Assist</button>
+          <button data-roleplay-v2-studio-tab="advanced" type="button">Advanced</button>
+          <button data-roleplay-v2-studio-tab="libraries" type="button">Libraries</button>
+          <button data-roleplay-v2-studio-tab="compile" type="button">Compile</button>
+          <button data-roleplay-v2-studio-tab="runtime" type="button">Runtime</button>
+          <button data-roleplay-v2-studio-tab="engine" type="button">Engine</button>
+          <button data-roleplay-v2-studio-tab="inspector" data-roleplay-v2-dev="studio-inspector" class="hidden" type="button">Inspector</button>
+        </div>
+
+        <div class="panel" data-roleplay-v2-studio-panel="guide" style="padding:14px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.08);">
+          <div class="row-between"><div><div class="stat-title">Guide</div><div class="mini-note">One short path map. No tutorial wall.</div></div><span class="badge" id="roleplay-v2-user-path-badge">Guide</span></div>
+          <pre id="roleplay-v2-user-path-summary" style="margin-top:12px; white-space:pre-wrap; overflow:auto;">Roleplay:
+Forge → Compile → Runtime → Scene → Stories
+
+Novel:
+Project → Source → Compile → Runtime → Scene → Stories</pre>
+        </div>
+
+                <div class="panel hidden" data-roleplay-v2-studio-panel="assist" style="padding:14px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.08);">
+          <div class="row-between"><div><div class="stat-title">Assist</div><div class="mini-note">Draft structured JSON with the LLM, then hand it off into the correct Forge JSON editor or Source ingest form. Assist does not save directly.</div></div><span class="badge" id="roleplay-v2-assist-target-badge">Forge JSON</span></div>
+          <div class="grid grid-2" style="margin-top:12px; gap:12px; align-items:end;">
+            <div>
+              <label for="roleplay-v2-assist-target">Assist target</label>
+              <select id="roleplay-v2-assist-target">
+                <option value="forge">Forge JSON</option>
+                <option value="source">Source ingest JSON</option>
+              </select>
+            </div>
+            <div>
+              <label for="roleplay-v2-assist-workflow">Workflow</label>
+              <select id="roleplay-v2-assist-workflow"></select>
+            </div>
+          </div>
+          <div class="grid grid-2" style="margin-top:12px; gap:12px; align-items:end;">
+            <div>
+              <label for="roleplay-v2-assist-mode">Draft mode</label>
+              <select id="roleplay-v2-assist-mode">
+                <option value="draft_scratch">Draft from scratch</option>
+                <option value="fill_missing">Fill missing</option>
+                <option value="rewrite_current">Rewrite current</option>
+              </select>
+            </div>
+            <div>
+              <label for="roleplay-v2-assist-style">Draft style</label>
+              <select id="roleplay-v2-assist-style">
+                <option value="strict">Strict</option>
+                <option value="balanced" selected>Balanced</option>
+                <option value="generative">Generative</option>
+              </select>
+            </div>
+          </div>
+          <label for="roleplay-v2-assist-brief" style="margin-top:12px;">Brief</label>
+          <textarea id="roleplay-v2-assist-brief" rows="5" placeholder="Describe the record or source doc you want the assistant to build."></textarea>
+          <div class="panel hidden" id="roleplay-v2-assist-source-card" style="margin-top:12px; padding:12px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06);">
+            <div class="stat-title">Optional source text / file</div>
+            <div class="mini-note" id="roleplay-v2-assist-source-note" style="margin-top:6px;">Use this for novel source ingest. Paste the text or drop a .txt / .md file, and Assist will build the matching source JSON payload.</div>
+            <label for="roleplay-v2-assist-source-text" style="margin-top:12px;">Source text</label>
+            <textarea id="roleplay-v2-assist-source-text" rows="9" placeholder="Paste the chapter / notes / reference excerpt here if you want Assist to build source ingest JSON."></textarea>
+            <label for="roleplay-v2-assist-source-file" style="margin-top:12px;">Source file</label>
+            <input id="roleplay-v2-assist-source-file" type="file" accept=".txt,.md,.json,text/plain,text/markdown,application/json"/>
+          </div>
+          <div class="panel" style="margin-top:12px; padding:12px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06);">
+            <div class="row-between"><div><div class="stat-title">Draft JSON</div><div class="mini-note" id="roleplay-v2-assist-route-note">Target route · Forge → Universe → JSON</div></div><span class="badge">Review first</span></div>
+            <textarea id="roleplay-v2-assist-json-output" rows="20" style="margin-top:12px; font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;" placeholder="Structured JSON draft will appear here."></textarea>
+          </div>
+          <div class="row" style="margin-top:12px; gap:8px; flex-wrap:wrap;">
+            <button class="btn btn-small btn-primary" id="btn-roleplay-v2-assist-build" type="button">Build JSON draft</button>
+            <button class="btn btn-small" id="btn-roleplay-v2-assist-send" type="button">Send to Forge JSON</button>
+            <button class="btn btn-small" id="btn-roleplay-v2-assist-clear" type="button">Clear</button>
+          </div>
+          <div class="mini-note" id="roleplay-v2-assist-output-note" style="margin-top:10px;">Assist generates JSON only. Saving still happens in Forge or Source ingest after review.</div>
+          <div class="status" id="roleplay-v2-assist-status" style="margin-top:10px;"></div>
+        </div>
+
+        <div class="panel hidden" data-roleplay-v2-studio-panel="advanced" style="padding:14px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.08);">
+          <div class="row-between"><div><div class="stat-title">Advanced</div><div class="mini-note">Shared generation defaults for Scene and Assist. Save them once here instead of hunting through multiple lanes.</div></div><span class="badge" id="roleplay-v2-advanced-model-badge">Scene + Assist</span></div>
+          <div class="panel" style="margin-top:12px; padding:12px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06);">
+            <div class="stat-title">Shared text generation settings</div>
+            <div class="mini-note" id="roleplay-v2-shared-generation-note" style="margin-top:6px;">These defaults feed Scene live turns and Studio Assist drafts. The active text backend model still comes from the main model selector.</div>
+            <div class="grid grid-2" style="margin-top:12px; gap:12px; align-items:end;">
+              <div><label for="roleplay-v2-shared-max-tokens">Max tokens</label><input id="roleplay-v2-shared-max-tokens" type="number" min="96" max="2600" step="1" value="320"/></div>
+              <div><label for="roleplay-v2-shared-temperature">Temperature</label><input id="roleplay-v2-shared-temperature" type="number" min="0" max="1.5" step="0.01" value="0.82"/></div>
+            </div>
+            <div class="grid grid-2" style="margin-top:12px; gap:12px; align-items:end;">
+              <div><label for="roleplay-v2-shared-top-p">Top P</label><input id="roleplay-v2-shared-top-p" type="number" min="0" max="1" step="0.01" value="0.92"/></div>
+              <div><label for="roleplay-v2-shared-top-k">Top K</label><input id="roleplay-v2-shared-top-k" type="number" min="0" max="200" step="1" value="60"/></div>
+            </div>
+          </div>
+          <div class="panel" style="margin-top:12px; padding:12px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06);">
+            <div class="stat-title">Shared author notes</div>
+            <div class="mini-note" style="margin-top:6px;">These notes are appended to Scene and Assist requests as extra steering context. Keep them short and intentional.</div>
+            <label for="roleplay-v2-shared-author-notes" style="margin-top:12px;">Author notes</label>
+            <textarea id="roleplay-v2-shared-author-notes" rows="8" placeholder="Voice guardrails, pacing notes, POV reminders, hard no-go rules, character handling notes, or output steering you want Scene and Assist to share."></textarea>
+          </div>
+          <div class="row" style="margin-top:12px; gap:8px; flex-wrap:wrap; align-items:center;">
+            <button class="btn btn-small btn-primary" id="btn-roleplay-v2-advanced-save" type="button">Save shared defaults</button>
+            <button class="btn btn-small" id="btn-roleplay-v2-advanced-reset" type="button">Reset defaults</button>
+            <span class="badge" id="roleplay-v2-shared-settings-badge">Defaults ready</span>
+          </div>
+          <div class="status" id="roleplay-v2-advanced-status" style="margin-top:12px;"></div>
+        </div>
+
+        <div class="panel hidden" data-roleplay-v2-studio-panel="libraries" style="padding:14px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.08);">
+          <div class="row-between"><div><div class="stat-title">Libraries</div><div class="mini-note">Browse and reuse saved V2 records. Use Libraries to inspect what already exists, reopen it in Forge, or send it into Studio for memory and scene builds.</div></div><span class="badge">V2 records</span></div>
+          <div class="row" style="margin-top:12px; gap:8px; flex-wrap:wrap; align-items:center;">
+            <select id="roleplay-v2-library-kind-select">
+              <option value="character">Characters</option>
+              <option value="world">Worlds</option>
+              <option value="universe">Universes</option>
+              <option value="region">Regions</option>
+              <option value="city">Cities</option>
+              <option value="location">Locations</option>
+              <option value="organization">Organizations</option>
+              <option value="artifact">Artifacts</option>
+              <option value="ritual">Rituals</option>
+              <option value="cycle">Cycles</option>
+              <option value="creature">Creatures</option>
+              <option value="legend">Legends</option>
+              <option value="packs">Packs</option>
+              <option value="scenario">Scenarios</option>
+            </select>
+            <input id="roleplay-v2-library-search" type="text" placeholder="Search library items" style="max-width:260px;"/>
+            <button class="btn btn-small" id="btn-roleplay-v2-library-refresh" type="button">Refresh library view</button>
+          </div>
+          <div class="row" id="roleplay-v2-library-counts" style="margin-top:12px; gap:8px; flex-wrap:wrap;"></div>
+          <div class="grid grid-2" style="margin-top:16px; gap:16px; align-items:start;">
+            <div class="panel" style="padding:14px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.08); min-height:320px;">
+              <div class="row-between"><div><div class="stat-title">Library browser</div><div class="mini-note">Browse V2 records by family, then open the one you want to reuse, compile, or build from.</div></div><span class="badge" id="roleplay-v2-library-kind-badge">Characters</span></div>
+              <div id="roleplay-v2-library-list" style="margin-top:12px; display:grid; gap:8px;"></div>
+            </div>
+            <div class="panel" style="padding:14px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.08); min-height:320px;">
+              <div class="row-between"><div><div class="stat-title">Selected item</div><div class="mini-note">Review the record, send its id into Studio, open it in Forge, or run memory / scene build actions from here.</div></div><span class="badge">Preview</span></div>
+              <div class="row" style="margin-top:12px; gap:8px; flex-wrap:wrap;">
+                <button class="btn btn-small" id="btn-roleplay-v2-library-use-id" type="button">Use selected id in Studio focus</button>
+                <button class="btn btn-small" id="btn-roleplay-v2-library-open-in-forge" type="button">Open selected in Forge</button>
+                <button class="btn btn-small" id="btn-roleplay-v2-library-compile-memory" type="button">Compile selected memory</button>
+                <button class="btn btn-small" id="btn-roleplay-v2-library-build-runtime" type="button">Build Scene packet</button>
+              </div>
+              <pre id="roleplay-v2-library-preview" style="margin-top:12px; white-space:pre-wrap; max-height:360px; overflow:auto;">Select a V2 record to review it here.</pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel" data-roleplay-v2-studio-panel="workspace" style="padding:14px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.08);">
+          <div class="row-between"><div><div class="stat-title">Workspace scope</div><div class="mini-note">Project selection, workspace loading, and new project creation live here now.</div></div><span class="badge" id="roleplay-v2-project-badge">No project</span></div>
+          <label for="roleplay-v2-project-select" style="margin-top:12px;">Active source project</label>
+          <div class="row" style="gap:8px; flex-wrap:wrap; align-items:center;">
+            <select id="roleplay-v2-project-select"><option value="">Select project</option></select>
+            <button class="btn btn-small" id="btn-roleplay-v2-workspace-load" type="button">Load workspace</button>
+          </div>
+          <div class="mini-note" id="roleplay-v2-workspace-meta" style="margin-top:10px;">No workspace loaded yet.</div>
+          <div class="grid grid-2" style="margin-top:14px; gap:12px; align-items:end;">
+            <div><label for="roleplay-v2-project-title">New project title</label><input id="roleplay-v2-project-title" type="text" placeholder="Novel test world"/></div>
+            <div><label for="roleplay-v2-project-author">Author</label><input id="roleplay-v2-project-author" type="text" placeholder="Optional author"/></div>
+          </div>
+          <div class="row" style="margin-top:10px; gap:8px; flex-wrap:wrap;"><button class="btn btn-small btn-primary" id="btn-roleplay-v2-project-create" type="button">Create project</button></div>
+          <div class="status" id="roleplay-v2-project-status" style="margin-top:10px;"></div>
+          <pre id="roleplay-v2-workspace-summary" style="margin-top:12px; white-space:pre-wrap; max-height:320px; overflow:auto;">No workspace loaded yet.</pre>
+        </div>
+
+        <div class="panel hidden" data-roleplay-v2-studio-panel="engine" style="padding:14px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.08);">
+          <div class="row-between"><div><div class="stat-title">Scene retrieval engine</div><div class="mini-note">Set the embedding and reranker folders here. Engine setup stays in Studio, not in the top shell.</div></div><span class="badge" id="roleplay-v2-backend-badge">hashing_local</span></div>
+          <div class="grid grid-2" style="margin-top:12px; gap:12px; align-items:end;">
+            <div>
+              <label for="roleplay-v2-retrieval-backend">Backend</label>
+              <select id="roleplay-v2-retrieval-backend">
+                <option value="hashing_local">hashing_local</option>
+                <option value="sentence_transformer_local">sentence_transformer_local</option>
+              </select>
+            </div>
+            <div>
+              <label for="roleplay-v2-reranker-backend">Reranker</label>
+              <select id="roleplay-v2-reranker-backend">
+                <option value="token_overlap">token_overlap</option>
+                <option value="cross_encoder_local">cross_encoder_local</option>
+              </select>
+            </div>
+          </div>
+          <label for="roleplay-v2-embedding-path" style="margin-top:12px;">Embedding model folder</label>
+          <input id="roleplay-v2-embedding-path" type="text" placeholder="E:\LLM_Models\bge-small-en-v1.5"/>
+          <label for="roleplay-v2-reranker-path" style="margin-top:12px;">Reranker model folder</label>
+          <input id="roleplay-v2-reranker-path" type="text" placeholder="Needed for cross_encoder_local; optional for token_overlap"/>
+          <div class="row" style="margin-top:12px; gap:8px; flex-wrap:wrap;">
+            <button class="btn btn-small" id="btn-roleplay-v2-settings-save" type="button">Save retrieval settings</button>
+            <button class="btn btn-small btn-primary" id="btn-roleplay-v2-reindex" type="button">Rebuild index</button>
+            <button class="btn btn-small" id="btn-roleplay-v2-refresh" type="button">Refresh status</button>
+          </div>
+          <div class="status" id="roleplay-v2-settings-status" style="margin-top:10px;"></div>
+        </div>
+
+        <div class="panel hidden" data-roleplay-v2-studio-panel="source" style="padding:14px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.08);">
+          <div class="row-between"><div><div class="stat-title">Source ingest</div><div class="mini-note" id="roleplay-v2-source-ingest-note">Save chapter or section text into the selected V2 project, then break down the exact source document you want to compile.</div></div><span class="badge" id="roleplay-v2-source-mode-badge">Source</span></div>
+          <div class="panel" style="margin-top:12px; padding:12px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06);">
+            <div class="stat-title">Author structure</div>
+            <div class="mini-note" id="roleplay-v2-source-authoring-note" style="margin-top:6px;">Novel authoring stays inside the current source → compile → runtime flow. Save part / chapter / section metadata here instead of inventing a second novel mode.</div>
+          </div>
+          <div class="grid grid-2" style="margin-top:12px; gap:12px; align-items:end;">
+            <div><label for="roleplay-v2-doc-title">Document title</label><input id="roleplay-v2-doc-title" type="text" placeholder="Chapter 1"/></div>
+            <div>
+              <label for="roleplay-v2-doc-type">Document type</label>
+              <select id="roleplay-v2-doc-type">
+                <option value="novel_chapter">Novel chapter</option>
+                <option value="novel_scene_section">Scene / section</option>
+                <option value="novel_outline">Outline / beat sheet</option>
+                <option value="author_notes">Author notes</option>
+                <option value="reference_excerpt">Reference excerpt</option>
+              </select>
+            </div>
+          </div>
+          <div class="grid" style="margin-top:12px; gap:12px; grid-template-columns:repeat(4, minmax(0, 1fr)); align-items:end;">
+            <div><label for="roleplay-v2-doc-order-index">Order</label><input id="roleplay-v2-doc-order-index" type="number" min="0" value="1"/></div>
+            <div><label for="roleplay-v2-doc-chapter-number">Chapter</label><input id="roleplay-v2-doc-chapter-number" type="number" min="0" value="1"/></div>
+            <div><label for="roleplay-v2-doc-scene-number">Scene / section</label><input id="roleplay-v2-doc-scene-number" type="number" min="0" value="0"/></div>
+            <div>
+              <label for="roleplay-v2-doc-draft-status">Draft status</label>
+              <select id="roleplay-v2-doc-draft-status">
+                <option value="draft">Draft</option>
+                <option value="outline">Outline</option>
+                <option value="revision">Revision</option>
+                <option value="polish">Polish</option>
+                <option value="final">Final</option>
+              </select>
+            </div>
+          </div>
+          <div class="grid grid-2" style="margin-top:12px; gap:12px; align-items:end;">
+            <div><label for="roleplay-v2-doc-part-arc">Part / arc</label><input id="roleplay-v2-doc-part-arc" type="text" placeholder="Part II · Fault Lines"/></div>
+            <div><label for="roleplay-v2-doc-pov">POV</label><input id="roleplay-v2-doc-pov" type="text" placeholder="Mara"/></div>
+          </div>
+          <div class="grid grid-2" style="margin-top:12px; gap:12px; align-items:end;">
+            <div>
+              <label for="roleplay-v2-doc-tense">Tense</label>
+              <select id="roleplay-v2-doc-tense">
+                <option value="past">Past</option>
+                <option value="present">Present</option>
+                <option value="mixed">Mixed</option>
+              </select>
+            </div>
+            <div><label for="roleplay-v2-doc-chapter-goal">Chapter / section goal</label><input id="roleplay-v2-doc-chapter-goal" type="text" placeholder="Escalate the confession without resolving it."/></div>
+          </div>
+          <label for="roleplay-v2-doc-author-notes" style="margin-top:12px;">Author notes</label>
+          <textarea id="roleplay-v2-doc-author-notes" rows="4" placeholder="POV guardrails, continuity reminders, sequence notes, or rewrite instructions."></textarea>
+          <label for="roleplay-v2-doc-text" style="margin-top:12px;">Source text</label>
+          <textarea id="roleplay-v2-doc-text" rows="10" placeholder="Paste chapter or source text here."></textarea>
+          <div class="row" style="margin-top:10px; gap:8px; flex-wrap:wrap;"><button class="btn btn-small btn-primary" id="btn-roleplay-v2-doc-save" type="button">Save source document</button><button class="btn btn-small" id="btn-roleplay-v2-doc-clear" type="button">Clear draft form</button></div>
+          <div class="status" id="roleplay-v2-doc-status" style="margin-top:10px;"></div>
+          <label for="roleplay-v2-document-select" style="margin-top:12px;">Project documents</label>
+          <select id="roleplay-v2-document-select"><option value="">Select document</option></select>
+          <div class="mini-note" id="roleplay-v2-document-select-note" style="margin-top:8px;">Select a saved document to load its structure back into the form or use it in Breakdown.</div>
+        </div>
+
+        <div class="panel hidden" data-roleplay-v2-studio-panel="compile" style="padding:14px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.08);">
+          <div class="grid grid-2" style="gap:16px; align-items:start;">
+            <div class="panel" id="roleplay-v2-compile-breakdown-card" style="padding:14px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.08);">
+              <div class="stat-title">Breakdown</div>
+              <div class="mini-note" id="roleplay-v2-compile-breakdown-note" style="margin-top:6px;">Generate helper output, then approve it for canon compile.</div>
+              <div class="row" style="margin-top:12px; gap:8px; flex-wrap:wrap;"><button class="btn btn-small btn-primary" id="btn-roleplay-v2-breakdown" type="button">Generate breakdown</button><button class="btn btn-small" id="btn-roleplay-v2-breakdown-approve" type="button">Approve breakdown</button></div>
+              <label for="roleplay-v2-helper-output-id" style="margin-top:12px;">Helper output id</label>
+              <input id="roleplay-v2-helper-output-id" type="text" placeholder="helper_xxx"/>
+              <div class="mini-note" style="margin-top:8px;">Use this only for the Source / novel path. Generate breakdown fills this automatically from the selected source document.</div>
+              <div class="status" id="roleplay-v2-breakdown-status" style="margin-top:10px;"></div>
+            </div>
+            <div class="panel" id="roleplay-v2-compile-actions-card" style="padding:14px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.08);">
+              <div class="stat-title">Compile lane</div>
+              <div class="mini-note" id="roleplay-v2-compile-lane-note" style="margin-top:6px;">Turn approved breakdowns into canon, then memory.</div>
+              <div class="row" style="margin-top:12px; gap:8px; flex-wrap:wrap;"><button class="btn btn-small btn-primary" id="btn-roleplay-v2-canon-compile" type="button">Compile canon</button><button class="btn btn-small" id="btn-roleplay-v2-memory-compile" type="button">Compile memory</button></div>
+              <div id="roleplay-v2-compile-source-fields">
+                <label for="roleplay-v2-canon-id" style="margin-top:12px;">Canon id</label>
+                <input id="roleplay-v2-canon-id" type="text" placeholder="canon_xxx"/>
+                <div class="mini-note" style="margin-top:8px;">Use Canon id for the Source → Breakdown → Canon path. Compile memory will use Canon first when this field is filled.</div>
+              </div>
+              <div id="roleplay-v2-compile-roleplay-fields">
+                <label for="roleplay-v2-entity-id" style="margin-top:12px;">Focus entity id</label>
+                <input id="roleplay-v2-entity-id" type="text" placeholder="character_xxx"/>
+                <div class="mini-note" style="margin-top:8px;">Use Focus entity id for Forge / builder compile. Leave Helper output id and Canon id blank for pure Forge testing, then compile memory from the selected builder record.</div>
+              </div>
+              <div class="status" id="roleplay-v2-compile-status" style="margin-top:10px;"></div>
+            </div>
+          </div>
+          <div class="panel" style="margin-top:14px; padding:14px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.08);">
+            <div class="row-between"><div><div class="stat-title">Pipeline guide</div><div class="mini-note" id="roleplay-v2-pipeline-note">This lane is now explicit: save a record, build memory, refresh linked memory, then build or rebuild the Scene packet that Scene will use.</div></div><span class="badge" id="roleplay-v2-pipeline-badge">idle</span></div>
+            <pre id="roleplay-v2-pipeline-status" style="margin-top:10px; white-space:pre-wrap; max-height:260px; overflow:auto;">Compile guide
+- Forge / builder test: fill Focus entity id, leave Helper output + Canon blank, then Compile memory.
+- Source / novel test: save source doc, Generate breakdown, Approve breakdown, Compile canon, then Compile memory.
+- Rebuild runtime after any compile pass before going back to Scene.</pre>
+          </div>
+        </div>
+
+        <div class="panel hidden" data-roleplay-v2-studio-panel="runtime" style="padding:14px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.08);">
+          <div class="stat-title">Runtime prep</div>
+          <div class="mini-note" style="margin-top:6px;">Query memory, inspect retrieval results, and build the Scene packet that Scene will use for the next live run.</div>
+          <div class="grid grid-2" style="margin-top:12px; gap:12px; align-items:end;">
+            <div>
+              <label for="roleplay-v2-query">Retrieval query</label>
+              <input id="roleplay-v2-query" type="text" placeholder="harbor promise magic"/>
+            </div>
+            <div>
+              <label for="roleplay-v2-retrieval-memory-type">Memory type filter</label>
+              <select id="roleplay-v2-retrieval-memory-type">
+                <option value="">All memory types</option>
+                <option value="semantic_fact">semantic_fact</option>
+                <option value="episodic_memory">episodic_memory</option>
+                <option value="canon_guard">canon_guard</option>
+                <option value="callback_anchor">callback_anchor</option>
+                <option value="relationship_belief">relationship_belief</option>
+              </select>
+            </div>
+          </div>
+          <div class="grid grid-2" style="margin-top:12px; gap:12px; align-items:end;">
+            <div>
+              <label for="roleplay-v2-runtime-top-k">Result top_k</label>
+              <input id="roleplay-v2-runtime-top-k" type="number" min="1" max="50" value="8"/>
+            </div>
+            <div>
+              <label for="roleplay-v2-runtime-preview-k">Candidate preview depth</label>
+              <input id="roleplay-v2-runtime-preview-k" type="number" min="4" max="100" value="16"/>
+            </div>
+          </div>
+          <div class="row" style="margin-top:12px; gap:8px; flex-wrap:wrap;"><button class="btn btn-small btn-primary" id="btn-roleplay-v2-query-run" type="button">Run retrieval</button><button class="btn btn-small" id="btn-roleplay-v2-runtime-build" type="button">Build Scene packet</button><span class="badge" id="roleplay-v2-runtime-freshness-badge">idle</span></div>
+          <div class="mini-note" id="roleplay-v2-runtime-freshness-note" style="margin-top:8px;">Scene packet = the active memory snapshot Scene uses. Rebuild it after changing records, canon, or memory build output.</div>
+          <div class="status" id="roleplay-v2-runtime-status" style="margin-top:10px;"></div>
+          <div class="grid grid-3" style="margin-top:14px; gap:12px; align-items:start;">
+            <div class="panel" style="padding:12px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); min-height:220px; display:flex; flex-direction:column;">
+              <div class="row-between"><div><div class="stat-title">Retrieval diagnostics</div><div class="mini-note">Backend, reranker, and query trace.</div></div><span class="badge">Trace</span></div>
+              <pre id="roleplay-v2-retrieval-diagnostics" style="margin-top:10px; white-space:pre-wrap; flex:1; min-height:0; max-height:260px; overflow:auto;">Run retrieval to inspect the trace.</pre>
+            </div>
+            <div class="panel" style="padding:12px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); min-height:220px; display:flex; flex-direction:column;">
+              <div class="row-between"><div><div class="stat-title">Candidates before rerank</div><div class="mini-note">Raw shortlist before reranking.</div></div><span class="badge" id="roleplay-v2-retrieval-candidate-count">0</span></div>
+              <div id="roleplay-v2-retrieval-candidates" style="margin-top:10px; display:grid; gap:8px; flex:1; min-height:0; overflow:auto;">No retrieval candidates yet.</div>
+            </div>
+            <div class="panel" style="padding:12px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); min-height:220px; display:flex; flex-direction:column;">
+              <div class="row-between"><div><div class="stat-title">Reranked shortlist</div><div class="mini-note">Final order used for Scene packet selection.</div></div><span class="badge" id="roleplay-v2-retrieval-result-count">0</span></div>
+              <div id="roleplay-v2-retrieval-results" style="margin-top:10px; display:grid; gap:8px; flex:1; min-height:0; overflow:auto;">No reranked results yet.</div>
+            </div>
+          </div>
+          <div class="panel" style="margin-top:12px; padding:12px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06);">
+            <div class="row-between"><div><div class="stat-title">Scene packet / retrieval history</div><div class="mini-note">Recent Scene packet traces for the active project or focus entity.</div></div><span class="badge" id="roleplay-v2-retrieval-history-count">0</span></div>
+            <div id="roleplay-v2-retrieval-history" style="margin-top:10px; display:grid; gap:8px; max-height:220px; overflow:auto;">No persisted retrieval traces yet.</div>
+          </div>
+          <div class="panel hidden" data-roleplay-v2-dev="recovery-eval" style="margin-top:12px; padding:12px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06);">
+            <div class="row-between"><div><div class="stat-title">Recovery eval harness</div><div class="mini-note">Evaluate how the current trace is recovering callbacks, unresolved threads, and relationship carry-forward.</div></div><span class="badge" id="roleplay-v2-recovery-eval-badge">idle</span></div>
+            <div class="row" style="margin-top:10px; gap:8px; flex-wrap:wrap;"><button class="btn btn-small" id="btn-roleplay-v2-recovery-eval" type="button">Run recovery eval</button></div>
+            <pre id="roleplay-v2-recovery-eval" style="margin-top:10px; white-space:pre-wrap; max-height:220px; overflow:auto;">Run a retrieval trace or select a persisted trace, then use the eval harness here.</pre>
+          </div>
+          <div class="panel" style="margin-top:12px; padding:12px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06);">
+            <div class="row-between"><div><div class="stat-title">Continuity steering</div><div class="mini-note">Pin, suppress, resolve, or cool down a continuity row by memory id. Leave the field blank to auto-use the selected row when available.</div></div><span class="badge">Steering</span></div>
+            <div class="row" style="margin-top:10px; gap:8px; flex-wrap:wrap; align-items:center;">
+              <input id="roleplay-v2-memory-control-id" type="text" placeholder="memory_id or leave blank to use the selected row" style="min-width:320px; flex:1;"/>
+              <button class="btn btn-small" id="btn-roleplay-v2-memory-pin" type="button">Pin</button>
+              <button class="btn btn-small" id="btn-roleplay-v2-memory-suppress" type="button">Suppress</button>
+              <button class="btn btn-small" id="btn-roleplay-v2-memory-resolve" type="button">Resolve</button>
+              <button class="btn btn-small" id="btn-roleplay-v2-memory-cooldown" type="button">Cool down</button>
+              <button class="btn btn-small" id="btn-roleplay-v2-memory-clear" type="button">Clear</button>
+            </div>
+            <div class="status" id="roleplay-v2-memory-control-status" style="margin-top:10px;"></div>
+            <div class="grid grid-2" style="margin-top:12px; gap:12px; align-items:start;">
+              <div class="panel" style="padding:12px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); min-height:280px; display:flex; flex-direction:column;">
+                <div class="row-between"><div><div class="stat-title">Continuity rows</div><div class="mini-note">Browse retrieval, writeback, and recurrence rows directly from the active runtime context.</div></div><div class="row" style="gap:8px; align-items:center;"><span class="badge" id="roleplay-v2-continuity-studio-count">0</span><button class="btn btn-small" id="btn-roleplay-v2-continuity-studio-refresh" type="button">Refresh</button></div></div>
+                <div id="roleplay-v2-continuity-studio-list" style="margin-top:10px; display:grid; gap:8px; flex:1; min-height:0; overflow:auto;">No continuity rows available in this context yet.</div>
+                <div class="status" id="roleplay-v2-continuity-studio-status" style="margin-top:10px;"></div>
+              </div>
+              <div class="panel" style="padding:12px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); min-height:280px; display:flex; flex-direction:column;">
+                <div class="row-between"><div><div class="stat-title">Continuity inspector</div><div class="mini-note">Inspect control state, recurrence, cooldown, and source traces for the selected row.</div></div><span class="badge">Inspector</span></div>
+                <div id="roleplay-v2-continuity-studio-inspector" style="margin-top:10px; flex:1; min-height:0; overflow:auto;">Select a continuity row to inspect its control state, recurrence, cooldown, and source traces.</div>
+              </div>
+            </div>
+          </div>
+  <div class="grid grid-2 hidden" data-roleplay-v2-dev="chroma" style="margin-top:12px; gap:12px; align-items:start;">
+    <div class="panel" style="padding:12px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06);">
+      <div class="row-between"><div><div class="stat-title">Chroma mirror scaffold</div><div class="mini-note">Mirror SQLite memory rows into the V2 Chroma collection and inspect semantic lookup results. If Chroma is unavailable, V2 memory still stays durable in SQLite.</div></div><span class="badge" id="roleplay-v2-chroma-ready-badge">offline</span></div>
+      <div class="row" style="margin-top:10px; gap:8px; flex-wrap:wrap;"><button class="btn btn-small" id="btn-roleplay-v2-chroma-status" type="button">Refresh Chroma status</button><button class="btn btn-small btn-primary" id="btn-roleplay-v2-chroma-sync" type="button">Sync SQLite → Chroma</button></div>
+      <pre id="roleplay-v2-chroma-status" style="margin-top:10px; white-space:pre-wrap; max-height:180px; overflow:auto;">Chroma mirror status will appear here.</pre>
+    </div>
+    <div class="panel" style="padding:12px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06);">
+      <div class="row-between"><div><div class="stat-title">Chroma semantic preview</div><div class="mini-note">Quick semantic probe against the mirrored V2 collection.</div></div><span class="badge" id="roleplay-v2-chroma-result-count">0</span></div>
+      <div class="row" style="margin-top:10px; gap:8px;"><input id="roleplay-v2-chroma-query" type="text" placeholder="Semantic probe, e.g. broken promise at the market"/><button class="btn btn-small" id="btn-roleplay-v2-chroma-query" type="button">Run semantic preview</button></div>
+      <div id="roleplay-v2-chroma-results" style="margin-top:10px; display:grid; gap:8px; max-height:180px; overflow:auto;">No semantic preview results yet.</div>
+    </div>
+  </div>
+  <div class="panel hidden" data-roleplay-v2-dev="migration" style="margin-top:12px; padding:12px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06);">
+    <div class="row-between"><div><div class="stat-title">Phase 14 — Migration + cleanup</div><div class="mini-note">Backfill current V2 JSON records into the durable backbone, sync Chroma, and verify that the legacy file retrieval path can be safely downgraded.</div></div><span class="badge" id="roleplay-v2-migration-badge">idle</span></div>
+    <div class="row" style="margin-top:10px; gap:8px; flex-wrap:wrap;"><button class="btn btn-small" id="btn-roleplay-v2-migration-refresh" type="button">Refresh migration status</button><button class="btn btn-small btn-primary" id="btn-roleplay-v2-migration-run" type="button">Run migration + cleanup</button></div>
+    <pre id="roleplay-v2-migration-status" style="margin-top:10px; white-space:pre-wrap; max-height:180px; overflow:auto;">Migration status will appear here.</pre>
+    <pre id="roleplay-v2-migration-report" style="margin-top:10px; white-space:pre-wrap; max-height:220px; overflow:auto;">Last migration run report will appear here.</pre>
+  </div>
+  <div class="panel hidden" data-roleplay-v2-dev="cutover" style="margin-top:12px; padding:12px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06);">
+    <div class="row-between"><div><div class="stat-title">Validation + V1 soft cutover</div><div class="mini-note">Validate migration readiness, inspect remaining V1 dependency warnings, and hide the legacy surface while keeping it loaded read-only for transition safety.</div></div><span class="badge" id="roleplay-v2-cutover-badge">idle</span></div>
+    <div class="row" style="margin-top:10px; gap:8px; flex-wrap:wrap;"><button class="btn btn-small" id="btn-roleplay-v2-cutover-refresh" type="button">Refresh validation</button><button class="btn btn-small btn-primary" id="btn-roleplay-v2-cutover-apply" type="button">Apply soft cutover</button><button class="btn btn-small" id="btn-roleplay-v2-cutover-disable" type="button">Disable soft cutover</button></div>
+    <pre id="roleplay-v2-cutover-status" style="margin-top:10px; white-space:pre-wrap; max-height:200px; overflow:auto;">Cutover validation status will appear here.</pre>
+    <div class="status" id="roleplay-v2-cutover-note" style="margin-top:10px;"></div>
+  </div>
+</div>
+
+<div class="panel hidden" data-roleplay-v2-studio-panel="inspector" style="padding:14px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.08);">
+          <div class="row-between"><div><div class="stat-title">V2 inspector</div><div class="mini-note">Live output from workspace, retrieval, Scene packet, and scene bridge actions.</div></div><span class="badge">Inspector</span></div>
+          <pre id="roleplay-v2-output" style="margin-top:12px; white-space:pre-wrap; max-height:420px; overflow:auto;">Roleplay V2 inspector ready.</pre>
+        </div>
+      </section>
+    </div>
+  </div>
+</section>

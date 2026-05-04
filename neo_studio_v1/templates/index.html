@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>Neo Studio — Creative Workflow Suite</title>
+<meta content="#0b1220" name="theme-color"/>
+<link href="{{ url_for('static', path='branding/neo_studio_icon.ico') }}?v=phase2-branding-20260414-1" rel="icon" type="image/x-icon"/>
+<link href="{{ url_for('static', path='branding/neo_studio_icon.png') }}?v=phase2-branding-20260414-1" rel="apple-touch-icon"/>
+<link href="{{ url_for('static', path='neo_local.css') }}?v=phase7-final-polish-20260414-1" rel="stylesheet"/>
+<link href="{{ url_for('static', path='css/neo_extension_hooks.css') }}?v=phase4-extension-hooks-20260429-1" rel="stylesheet"/>
+</head>
+<body>
+<div class="container">
+<div class="hero hero-brand-shell">
+<div class="hero-brand-head">
+<div class="hero-brand-lockup">
+<div class="hero-brand-icon-shell">
+<img alt="Neo Studio brand icon" class="hero-brand-icon" src="{{ url_for('static', path='branding/neo_studio_icon.png') }}?v=phase2-branding-20260414-1"/>
+</div>
+<div class="hero-copy">
+<div class="hero-kicker-row"><span class="badge hero-kicker">Creative workflow suite</span></div>
+<div class="hero-title-row"><h1>Neo Studio</h1><button class="btn btn-small" id="btn-open-welcome-board" type="button">Open launch board</button></div>
+<p class="hero-summary">Build image, prompt, roleplay, assistant, voice, video, and audio workflows from one calmer multi-surface creative workspace.</p>
+<div class="mini-note hero-note">Surface labels, order, maturity, and backend expectations now come from one canonical surface registry instead of being hardcoded in multiple places.</div>
+</div>
+</div>
+</div>
+</div>
+<div class="tabbar main-tabbar">
+{% for surface in surface_definitions %}
+<button {% if loop.first %}class="active" {% endif %}data-main-tab="{{ surface.id }}" data-surface-maturity="{{ surface.maturity }}" type="button">{{ surface.label }}</button>
+{% endfor %}
+</div>
+{% include 'partials/welcome_board.html' %}
+<div class="main-surface-shell" id="main-surface-shell">
+{% include 'partials/surfaces/manager_surface.html' %}
+{% include 'partials/surfaces/generation_surface.html' %}
+{% include 'partials/surfaces/video_surface.html' %}
+{% include 'partials/surfaces/voice_surface.html' %}
+{% include 'partials/surfaces/audio_surface.html' %}
+{% include 'partials/surfaces/board_surface.html' %}
+{% include 'partials/surfaces/roleplay_v2_surface.html' %}
+{% include 'partials/surfaces/assistant_surface.html' %}
+{% include 'partials/surfaces/admin_surface.html' %}
+<script>
+    window.NEO_STUDIO_BOOT = {{ boot_data | tojson }};
+  </script>
+<script defer="" src="{{ url_for('static', path='js/neo_extension_hooks.js') }}?v=phase5-backend-hooks-20260429-1"></script>
+<script defer="" src="{{ url_for('static', path='js/common.js') }}?v=phase5c-ui-20260328-2"></script>
+<script defer="" src="{{ url_for('static', path='js/search.js') }}?v=phase5c-ui-20260328-2"></script>
+<script defer="" src="{{ url_for('static', path='js/characters.js') }}?v=phase5c-ui-20260328-2"></script>
+<script defer="" src="{{ url_for('static', path='js/batch_helpers.js') }}?v=phase5c-ui-20260328-2"></script>
+<script defer="" src="{{ url_for('static', path='js/prompts.js') }}?v=phase5c-ui-20260328-2"></script>
+<script defer="" src="{{ url_for('static', path='js/captions.js') }}?v=phase5c-ui-20260328-2"></script>
+<script defer="" src="{{ url_for('static', path='js/prompt_caption_left_tabs.js') }}?v=prompt-caption-stage51-balanced-tabs-20260428"></script>
+<script defer="" src="{{ url_for('static', path='js/manager_setup_shell.js') }}?v=phase3B-manager-shell-20260410-1"></script>
+<script defer="" src="{{ url_for('static', path='js/manager_shell_tones.js') }}?v=phase3B-manager-shell-20260410-1"></script>
+<script defer="" src="{{ url_for('static', path='js/surface_registry.js') }}?v=phase86-roleplay-export-templates-20260406-1"></script>
+<script defer="" src="{{ url_for('static', path='js/roleplay_v2_surface.js') }}?v=phase110-roleplay-v2-ui-20260411-1"></script>
+<script defer="" src="{{ url_for('static', path='js/roleplay_v2_continuity_controls.js') }}?v=phase13b2-roleplay-v2-continuity-20260412-1"></script>
+<script defer="" src="{{ url_for('static', path='js/roleplay_v2_shell.js') }}?v=phaseA-roleplay-v2-shell-20260411-1"></script>
+<script defer="" src="{{ url_for('static', path='js/roleplay_v2_studio.js') }}?v=phaseA-roleplay-v2-studio-20260411-1"></script>
+<script defer="" src="{{ url_for('static', path='js/roleplay_v2_libraries_bridge.js') }}?v=phaseA-roleplay-v2-libraries-20260411-1"></script>
+<script defer="" src="{{ url_for('static', path='js/roleplay_v2_forge.js') }}?v=phaseB-roleplay-v2-forge-20260411-1"></script>
+<script defer="" src="{{ url_for('static', path='js/roleplay_v2_scene.js') }}?v=phaseA-roleplay-v2-scene-20260411-1"></script>
+<script defer="" src="{{ url_for('static', path='js/roleplay_v2_stories.js') }}?v=phaseA-roleplay-v2-stories-20260411-1"></script>
+<script defer="" src="{{ url_for('static', path='js/roleplay_v2_cutover.js') }}?v=phase14b-roleplay-v2-cutover-20260412-1"></script>
+<script defer="" src="{{ url_for('static', path='js/video_surface.js') }}?v=phase12-video-skeleton-20260409-1"></script>
+<script defer="" src="{{ url_for('static', path='js/video_setup_shell.js') }}?v=phase3B-video-shell-20260410-1"></script>
+<script defer="" src="{{ url_for('static', path='js/video_shell_tones.js') }}?v=phase3B-video-shell-20260410-1"></script>
+<script defer="" src="{{ url_for('static', path='js/voice_surface.js') }}?v=phase12-1-voice-skeleton-20260409-1"></script>
+<script defer="" src="{{ url_for('static', path='js/voice_setup_shell.js') }}?v=phase3B-voice-shell-20260410-1"></script>
+<script defer="" src="{{ url_for('static', path='js/voice_shell_tones.js') }}?v=phase3B-voice-shell-20260410-1"></script>
+<script defer="" src="{{ url_for('static', path='js/audio_surface.js') }}?v=phase12-1-audio-skeleton-20260409-1"></script>
+<script defer="" src="{{ url_for('static', path='js/audio_setup_shell.js') }}?v=phase3B-audio-shell-20260410-1"></script>
+<script defer="" src="{{ url_for('static', path='js/audio_shell_tones.js') }}?v=phase3B-audio-shell-20260410-1"></script>
+<script defer="" src="{{ url_for('static', path='js/board_surface.js') }}?v=phase3-sticky-cards-20260429-1"></script>
+<script defer="" src="{{ url_for('static', path='js/assistant_surface.js') }}?v=phase86-roleplay-export-templates-20260406-1"></script>
+<script defer="" src="{{ url_for('static', path='js/assistant_setup_shell.js') }}?v=phase3B-assistant-shell-20260410-1"></script>
+<script defer="" src="{{ url_for('static', path='js/assistant_shell_tones.js') }}?v=phase3B-assistant-shell-20260410-1"></script>
+<script defer="" src="{{ url_for('static', path='js/surface_workspace_presets.js') }}?v=phase3B2-surface-presets-20260410-1"></script>
+<script defer="" src="{{ url_for('static', path='js/roleplay_helper_bridge.js') }}?v=phase86-roleplay-export-templates-20260406-1"></script>
+<script defer="" src="{{ url_for('static', path='js/workspace_helper_foundation.js') }}?v=phase92-workspace-helper-foundation-20260407-1"></script><script defer="" src="{{ url_for('static', path='js/workspace.js') }}?v=phase86-roleplay-export-templates-20260406-1"></script>
+<script defer="" src="{{ url_for('static', path='js/neo_library.js') }}?v=phase5d-captionhost-20260402-1"></script>
+<script defer="" src="{{ url_for('static', path='js/backend_manager.js') }}?v=phase5c-ui-20260328-2"></script>
+<script defer="" src="{{ url_for('static', path='js/admin_panel.js') }}?v=phase8-admin-restructure-20260409-1"></script>
+<script defer="" src="{{ url_for('static', path='js/welcome_board.js') }}?v=phase11-welcome-board-20260409-1"></script>
+<script defer="" src="{{ url_for('static', path='js/generation_section_registry.js') }}?v=phase20-feature-intake-20260402-2"></script>
+<script defer="" src="{{ url_for('static', path='js/generation_section_contracts.js') }}?v=phase6-section-contracts-20260401-1"></script>
+<script defer="" src="{{ url_for('static', path='js/generation_feature_intake.js') }}?v=phase20-feature-intake-20260402-2"></script>
+<script defer="" src="{{ url_for('static', path='js/generation_long_task_runner.js') }}?v=phase24-long-task-runner-20260331-1"></script>
+<script defer="" src="{{ url_for('static', path='js/generation_perf.js') }}?v=phase9b-perf-20260331-1"></script>
+<script defer="" src="{{ url_for('static', path='js/generation_accordion_system.js') }}?v=phase10-accordion-20260331-1"></script>
+<script defer="" src="{{ url_for('static', path='js/generation_setup_shell.js') }}?v=phase3A2-shell-collapse-20260410-2"></script>
+<script defer="" src="{{ url_for('static', path='js/generation_guidance_registry.js') }}?v=phase14-guidance-20260402-2"></script>
+<script defer="" src="{{ url_for('static', path='js/neo_app_runtime.js') }}?v=phase125-window-cleanup-20260408-1"></script>
+<script defer="" src="{{ url_for('static', path='js/generation_runtime_shell.js') }}?v=phase124-shell-decompose-20260408-1"></script>
+<script defer="" src="{{ url_for('static', path='js/generation_image_shell.js') }}?v=phase124-shell-decompose-20260408-1"></script>
+<script defer="" src="{{ url_for('static', path='js/generation_draft_state.js') }}?v=phase124-shell-decompose-20260408-1"></script>
+<script defer="" src="{{ url_for('static', path='js/generation_results_shell.js') }}?v=phase124-shell-decompose-20260408-1"></script>
+<script defer="" src="{{ url_for('static', path='js/generation_feature_availability.js') }}?v=phase6-feature-availability-20260430-1"></script>
+<script defer="" src="{{ url_for('static', path='js/generation_node_workflow_intake_guard.js') }}?v=phase9-extension-workflow-compat-20260430-1"></script>
+<script defer="" src="{{ url_for('static', path='js/generation_extension_workflow_compat_guard.js') }}?v=phase9-extension-workflow-compat-20260430-1"></script>
+<script defer="" src="{{ url_for('static', path='js/generation_catalog_state.js') }}?v=phase3-file-split-20260409-1"></script>
+<script defer="" src="{{ url_for('static', path='js/generation_reference_finish_tools.js') }}?v=phase5-targeted-split-20260414-1"></script>
+<script defer="" src="{{ url_for('static', path='js/generation_library_tools.js') }}?v=phase5-targeted-split-20260414-1"></script>
+<script defer="" src="{{ url_for('static', path='js/generation_workspace_forms.js') }}?v=phase3-file-split-20260409-1"></script>
+<script defer="" src="{{ url_for('static', path='js/generation_mask_output_style.js') }}?v=regional-sprint5-20260421-1"></script>
+<script defer="" src="{{ url_for('static', path='js/generation_regional_admin.js') }}?v=regional-sprint5-20260421-1"></script>
+<script defer="" src="{{ url_for('static', path='js/generation_family_router.js') }}?v=phase6-family-router-20260409-1"></script>
+<script defer="" src="{{ url_for('static', path='js/generation_launch_runtime.js') }}?v=phase6-monolith-reduction-20260410-1"></script>
+<script defer="" src="{{ url_for('static', path='js/app_generation_workspace_bindings.js') }}?v=phase5-targeted-split-20260414-1"></script>
+<script defer="" src="{{ url_for('static', path='js/app.js') }}?v=phase5-targeted-split-20260414-1"></script>
+<script defer="" src="{{ url_for('static', path='js/generation_reliability.js') }}?v=phase21-core-adds-readiness-20260331-1"></script>
+<script defer="" src="{{ url_for('static', path='js/generation_smart.js') }}?v=wave3-smart-generation-20260330-1"></script>
+<script defer="" src="{{ url_for('static', path='js/generation_power.js') }}?v=wave4-power-features-20260330-1"></script>
+<script defer="" src="{{ url_for('static', path='js/generation_layout.js') }}?v=wave5-layout-refactor-20260331-17"></script>
+<script defer="" src="{{ url_for('static', path='js/generation_workspace_boundary_split.js') }}?v=phase6-1-workspace-boundary-split-20260410-1"></script>
+<script defer="" src="{{ url_for('static', path='js/generation_workspace_guidance_split.js') }}?v=phase6-1-workspace-guidance-split-20260410-1"></script>
+<script defer="" src="{{ url_for('static', path='js/generation_workspace_router.js') }}?v=phase6-1-workspace-router-split-20260410-1"></script>
+<script defer="" src="{{ url_for('static', path='js/scene_director_extension.js') }}?v=phase3-scene-director-shell-20260426-1"></script>
+<script defer="" src="{{ url_for('static', path='js/generation_goal_router.js') }}?v=phase2-goal-router-20260401-1"></script>
+<script defer="" src="{{ url_for('static', path='js/generation_shell_tones.js') }}?v=phase3A2-shell-tones-20260410-1"></script>
+<script defer="" src="{{ url_for('static', path='js/generation_action_layout_pref.js') }}?v=phase3B4-action-order-20260410-1"></script>
+<script defer="" src="{{ url_for('static', path='js/generation_save_reuse.js') }}?v=phase3-save-reuse-20260401-1"></script>
+<script defer="" src="{{ url_for('static', path='js/generation_workflow_merge.js') }}?v=phase4-workflow-merge-20260401-1"></script>
+<script defer="" src="{{ url_for('static', path='js/generation_vram_guardrails.js') }}?v=phase5-vram-guardrails-20260401-1"></script>
+<script defer="" src="{{ url_for('static', path='js/generation_action_button_states.js') }}?v=patch-action-button-states-20260401-1"></script>
+</body>
+</html>

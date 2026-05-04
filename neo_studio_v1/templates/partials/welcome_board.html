@@ -1,0 +1,55 @@
+<div class="modal-backdrop hidden" id="welcome-board-modal">
+  <div class="modal-shell modal-lg welcome-board-shell">
+    <div class="modal-header">
+      <div class="welcome-board-header-copy">
+        <div class="badge">Launch board</div>
+        <h2 class="welcome-board-title">What do you want to do today?</h2>
+        <div class="welcome-board-header-meta">
+          <div class="welcome-board-description muted small">Jump into the right surface fast, keep the launch flow tidy, and get back to your last surface without extra clicks.</div>
+          <label class="welcome-board-startup-toggle small">
+            <input id="welcome-board-show-on-launch" type="checkbox"/>
+            <span>Show this on startup</span>
+          </label>
+        </div>
+        <div class="welcome-board-utility-row">
+          <span class="badge" id="welcome-board-last-surface">Last surface: Image</span>
+          <button class="btn btn-small btn-primary" id="btn-welcome-resume-last" type="button">Resume last</button>
+          <button class="btn btn-small" id="btn-welcome-open-admin" type="button">Open Admin</button>
+          <button class="btn btn-small" id="btn-welcome-manage-backends" type="button">Manage backends</button>
+        </div>
+        <div class="status welcome-board-status" id="welcome-board-status"></div>
+      </div>
+      <button class="modal-close" id="btn-close-welcome-board" type="button">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="welcome-card-grid" id="welcome-board-card-grid">
+{% for surface in surface_definitions %}
+{% if surface.id != 'admin' %}
+{% set card_media = '' %}
+{% if surface.id == 'generate' %}{% set card_media = 'branding/cards/card_image.png' %}{% endif %}
+{% if surface.id == 'video' %}{% set card_media = 'branding/cards/card_video.png' %}{% endif %}
+{% if surface.id == 'voice' %}{% set card_media = 'branding/cards/card_voice.png' %}{% endif %}
+{% if surface.id == 'audio' %}{% set card_media = 'branding/cards/card_audio.png' %}{% endif %}
+{% if surface.id == 'manager' %}{% set card_media = 'branding/cards/card_manager.png' %}{% endif %}
+{% if surface.id == 'roleplay_v2' %}{% set card_media = 'branding/cards/card_roleplay_v2.png' %}{% endif %}
+{% if surface.id == 'assistant' %}{% set card_media = 'branding/cards/card_assistant.png' %}{% endif %}
+        <button class="welcome-card welcome-card--{{ surface.id }}" data-switch-tab="{{ surface.id }}" {% if surface.id == 'manager' %}data-manager-subtab="{{ surface.default_subsurface or 'prompt' }}" {% endif %}type="button">
+          <div class="welcome-card-media">
+            <img alt="{{ surface.label }} preview artwork" class="welcome-card-image" loading="lazy" src="{{ url_for('static', path=card_media) }}?v=phase4-card-redesign-20260414-1"/>
+            <div class="welcome-card-media-overlay"></div>
+            <span class="welcome-card-surface-chip">{{ surface.label }}</span>
+          </div>
+          <div class="welcome-card-body">
+            <div class="welcome-card-title">{{ surface.label }}</div>
+            <div class="welcome-card-copy">{{ surface.launch_board_copy or ('Open ' ~ surface.label ~ ' from the canonical surface registry.') }}</div>
+            <div class="welcome-card-meta">
+              <span class="welcome-card-stat" id="welcome-card-stat-{{ surface.id }}">Ready</span>
+            </div>
+          </div>
+        </button>
+{% endif %}
+{% endfor %}
+      </div>
+    </div>
+  </div>
+</div>

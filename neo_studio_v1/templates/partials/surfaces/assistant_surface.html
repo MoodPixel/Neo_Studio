@@ -1,0 +1,384 @@
+<section class="section" id="tab-assistant">
+<div class="panel assistant-hero-panel">
+<div class="row-between assistant-hero-head">
+<div>
+<h2>Assistant</h2>
+<div class="muted small">A universal assistant for writing, client replies, planning, brainstorming, technical help, reflective support, and day-to-day conversation inside Neo Studio.</div>
+</div>
+<div class="badge">Core assistant</div>
+</div>
+<div class="surface-setup-shell-panel" id="assistant-setup-shell-panel" style="margin-top:16px;">
+  <button aria-controls="assistant-setup-shell-content" aria-expanded="true" class="surface-setup-shell-header" id="assistant-setup-shell-header" type="button">
+    <div>
+      <div class="row" style="gap:8px; align-items:center; flex-wrap:wrap;">
+        <span class="stat-title">Assistant setup</span>
+        <span class="badge">Setup shell</span>
+      </div>
+      <div class="mini-note">Set the backend, active model capability, and thread mode here, then collapse the shell so the chat workspace can stay dominant.</div>
+    </div>
+    <div class="surface-setup-shell-header-actions">
+      <span class="surface-setup-shell-toggle-copy" id="assistant-setup-shell-toggle-copy">Collapse setup</span>
+      <span aria-hidden="true" class="surface-setup-shell-chevron" id="assistant-setup-shell-chevron">⌄</span>
+    </div>
+  </button>
+
+  <div class="surface-setup-shell-summary-strip hidden" id="assistant-setup-shell-summary-strip"></div>
+
+  <div id="assistant-setup-shell-content">
+    <div class="surface-setup-shell-grid">
+      <section class="surface-setup-shell-slot" data-ui-state="idle" data-ui-tone="neutral" id="assistant-setup-shell-backend-card">
+        <div class="surface-setup-shell-slot-head">
+          <div>
+            <div class="stat-title">Text backend</div>
+            <div class="generation-summary-title">Runtime readiness</div>
+          </div>
+          <span class="badge">1 · Backend</span>
+        </div>
+        <div class="backend-required-hint offline" id="assistant-text-backend-note" style="margin-top:14px;">
+          <div class="backend-required-copy">
+            <div class="backend-required-row">
+              <div class="backend-required-title">Text backend needed for live assistant replies</div>
+              <span class="backend-chip state-offline" id="surface-backend-assistant-state">Offline</span>
+            </div>
+            <div class="mini-note" id="surface-backend-assistant-name" style="margin-top:6px;">No active text backend</div>
+            <div class="backend-required-body" id="assistant-text-backend-note-body">Connect a Text Backend to send live assistant messages. Profile setup, thread management, and saved drafts still stay usable locally.</div>
+          </div>
+          <div class="row" style="gap:8px; flex-wrap:wrap; align-items:center;">
+            <button class="btn btn-small" id="btn-surface-backend-assistant-launch" type="button">Launch Backend</button>
+            <button class="btn btn-small btn-primary" id="btn-surface-backend-assistant-connect" type="button">Connect Text Backend</button>
+            <button class="btn btn-small" id="btn-surface-backend-assistant-disconnect" type="button">Disconnect</button>
+            <button class="btn btn-small" id="btn-assistant-note-manage-backend" type="button">Manage in Admin</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="surface-setup-shell-slot" data-ui-state="ready" data-ui-tone="primary" id="assistant-setup-shell-model-card">
+        <div class="surface-setup-shell-slot-head">
+          <div>
+            <div class="stat-title">Model capability</div>
+            <div class="generation-summary-title">Active text lane</div>
+          </div>
+          <span class="badge" id="assistant-model-capability-badge">Text-only</span>
+        </div>
+        <div class="stat-value" id="assistant-active-model">default</div>
+        <div class="mini-note" id="assistant-active-model-meta" style="margin-top:8px;">Assistant uses the shared active text model from the manager-wide controls.</div>
+        <div class="help" id="assistant-model-capability-note" style="margin-top:10px;">Capability is inferred from the active model name until the backend exposes a direct capability contract.</div>
+        <div class="row" style="margin-top:12px; gap:8px; flex-wrap:wrap;">
+          <button class="btn btn-small" id="btn-assistant-open-model-manager" type="button">Open Prompt &amp; Caption</button>
+        </div>
+      </section>
+
+      <section class="surface-setup-shell-slot" data-ui-state="ready" data-ui-tone="primary" id="assistant-setup-shell-mode-card">
+        <div class="surface-setup-shell-slot-head">
+          <div>
+            <div class="stat-title">Thread mode</div>
+            <div class="generation-summary-title">Session lane</div>
+          </div>
+          <span class="badge" id="assistant-mode-active-badge">General</span>
+        </div>
+        <label for="assistant-project-select" style="margin-top:14px;">Project</label>
+        <select id="assistant-project-select">
+          <option value="">Unassigned</option>
+        </select>
+        <label for="assistant-mode" style="margin-top:12px;">Thread mode</label>
+        <select id="assistant-mode"></select>
+        <div class="mini-note" id="assistant-mode-meta" style="margin-top:10px;">Balanced day-to-day help for questions, planning, writing, and conversation.</div>
+      </section>
+    </div>
+    <div class="surface-setup-shell-grid">
+      <section class="surface-setup-shell-slot surface-setup-shell-slot--span-full" data-ui-state="neutral" data-ui-tone="neutral" id="assistant-setup-shell-preset-card">
+        <div class="surface-setup-shell-slot-head">
+          <div><div class="stat-title">Workspace preset</div><div class="generation-summary-title">Built-in starters + saved UI setup</div></div>
+          <span class="badge">4 · Preset</span>
+        </div>
+        <div class="row u-gap-8 u-wrap surface-setup-shell-preset-row" style="margin-top:12px;">
+          <select class="u-shell-select-width" id="assistant-shell-preset-select"><option value="">Workspace presets…</option></select>
+          <button class="btn btn-small" id="btn-assistant-load-preset" type="button">Load</button>
+          <button class="btn btn-small" id="btn-assistant-save-preset" type="button">Save preset</button>
+          <button class="btn btn-small" id="btn-assistant-update-preset" type="button">Update preset</button>
+          <button class="btn btn-small btn-danger" id="btn-assistant-delete-preset" type="button">Delete</button>
+          <button class="btn btn-small" id="btn-assistant-set-default-preset" type="button">Set default</button>
+          <button class="btn btn-small" id="btn-assistant-clear-default-preset" type="button">Clear default</button>
+          <div class="badge" id="assistant-preset-active-badge">Manual setup</div>
+          <span class="status" id="assistant-shell-preset-status"></span>
+        </div>
+        <div class="mini-note" style="margin-top:12px;">Workspace presets here are browser-local UI presets. Save the current Assistant shell mode when you want to reopen the same setup later. Saved chats, projects, profiles, and context records stay separate below.</div>
+      </section>
+    </div>
+  </div>
+</div>
+<div class="surface-workspace-shell">
+  <div class="surface-workspace-shell-header">
+    <div class="surface-workspace-shell-copy">
+      <div class="stat-title">Workspace lane</div>
+      <div class="generation-summary-title">Assistant workspace</div>
+      <div class="muted small">Keep the active thread below. Backend, model capability, workspace, and workspace preset stay in the setup shell above, while saved chats and context records stay separate below.</div>
+    </div>
+    <div class="badge">Active workspace</div>
+  </div>
+<div class="assistant-workspace-tabs-shell" id="assistant-workspace-tabs-shell">
+  <div aria-label="Assistant workspaces" class="assistant-workspace-tabbar" role="tablist">
+    <button aria-selected="true" class="active" data-assistant-workspace-tab="chat" role="tab" type="button">New assistant chat</button>
+    <button aria-selected="false" data-assistant-workspace-tab="assistant" role="tab" type="button">Assistant</button>
+    <button aria-selected="false" data-assistant-workspace-tab="memory" role="tab" type="button">Memory</button>
+    <button aria-selected="false" data-assistant-workspace-tab="project" role="tab" type="button">Project</button>
+    <button aria-selected="false" data-assistant-workspace-tab="bridge" role="tab" type="button">Creative Bridge</button>
+  </div>
+  <section class="assistant-workspace-tabpanel active" data-assistant-workspace-panel="chat" role="tabpanel">
+<div class="assistant-layout">
+<div class="panel assistant-sidebar-panel">
+<div class="row-between">
+<div>
+<h3 style="margin:0;">Chats</h3>
+<div class="muted small">Saved assistant threads from <code>neo_library_data/assistant</code>.</div>
+</div>
+<button class="btn btn-primary btn-small" id="btn-assistant-new-session" type="button">＋ New chat</button>
+</div>
+<label for="assistant-project-filter" style="margin-top:14px;">Project filter</label>
+<select id="assistant-project-filter">
+<option value="all">All projects</option>
+<option value="__unassigned__">Unassigned chats</option>
+</select>
+<div class="row" style="margin-top:10px; gap:10px; flex-wrap:wrap;">
+<button class="btn btn-small" id="btn-assistant-new-project" type="button">＋ New project</button>
+<button class="btn btn-small" id="btn-assistant-rename-project" type="button">Rename project</button>
+<button class="btn btn-small" id="btn-assistant-delete-project" type="button">Delete project</button>
+</div>
+<label for="assistant-session-search" style="margin-top:14px;">Search chats</label>
+<input id="assistant-session-search" placeholder="Find by title, mode, or preview..." type="text"/>
+<div class="row" style="margin-top:10px; gap:10px; flex-wrap:wrap;">
+<button class="btn btn-small" id="btn-assistant-search-context" type="button">Search assistant context</button>
+<button class="btn btn-small" id="btn-assistant-clear-search-results" type="button">Clear results</button>
+</div>
+<div class="assistant-search-results hidden" id="assistant-search-results" style="margin-top:14px;"></div>
+<div class="assistant-session-list" id="assistant-session-list" style="margin-top:14px;"></div>
+<div class="status" id="assistant-session-status" style="margin-top:12px;"></div>
+</div>
+<div class="panel assistant-chat-panel">
+<div class="row-between assistant-chat-head">
+<div>
+<h3 id="assistant-thread-title" style="margin:0;">Assistant chat</h3>
+<div class="muted small" id="assistant-thread-meta">No thread selected yet.</div>
+<div class="mini-note hidden" id="assistant-helper-meta" style="margin-top:6px;"></div><div class="assistant-context-source-row hidden" id="assistant-context-source-row" style="margin-top:8px;"></div>
+</div>
+<div class="row" style="gap:8px;">
+<button class="btn btn-small" id="btn-assistant-rename-session" type="button">Rename</button>
+<button class="btn btn-small" disabled="" id="btn-assistant-continue" type="button">Continue</button>
+<button class="btn btn-small" id="btn-assistant-regenerate" type="button">Regenerate</button>
+<button class="btn btn-danger btn-small" id="btn-assistant-delete-session" type="button">Delete</button>
+</div>
+</div>
+<div class="assistant-thread" id="assistant-thread">
+<div class="assistant-empty-state" id="assistant-empty-state">
+<div>
+<h4 style="margin:0 0 8px;">Ask anything</h4>
+<div class="muted small">Use Neo Assistant for writing, planning, support, creative work, client communication, technical help, or just thinking out loud.</div><div class="mini-note" style="margin-top:10px;">Project-aware, workspace-aware, and memory-aware. You can also add thread text context or image context from the tools below.</div>
+</div>
+<div class="assistant-starter-grid" style="margin-top:14px;">
+<button class="btn" data-assistant-starter="Help me write a short reply to a client who asked for my best price." type="button">Reply to a client</button>
+<button class="btn" data-assistant-starter="Help me draft a social caption for an art post on DeviantArt or Patreon." type="button">Write a social caption</button>
+<button class="btn" data-assistant-starter="I need to vent for a minute and then sort out what to do next." type="button">Vent and reset</button>
+<button class="btn" data-assistant-starter="Help me brainstorm three strong creative directions for this idea." type="button">Brainstorm ideas</button>
+</div>
+</div>
+</div>
+<div class="row assistant-thread-jump-row" style="margin-top:10px; justify-content:flex-end;">
+<button class="btn btn-small hidden" id="btn-assistant-jump-latest" type="button">Jump to latest ↓</button>
+</div>
+<div class="assistant-composer-shell">
+<label for="assistant-composer">Composer</label><div class="mini-note" style="margin-top:6px;">Enter sends · Shift+Enter adds a newline</div>
+<textarea id="assistant-composer" placeholder="Ask a question, draft a reply, vent, plan, or drop in what you want help with..." rows="6"></textarea>
+<div class="row assistant-composer-actions" style="margin-top:12px; gap:10px; flex-wrap:wrap;">
+<button class="btn btn-primary" id="btn-assistant-send" type="button">Send</button>
+<button class="btn" disabled="" id="btn-assistant-stop" type="button">Stop</button>
+<button class="btn" id="btn-assistant-clear-thread" type="button">Clear thread</button>
+<button class="btn" id="btn-assistant-open-manager" type="button">Open shared model controls</button>
+</div>
+<div class="status" id="assistant-chat-status" style="margin-top:12px;"></div>
+</div>
+</div>
+</div>
+  </section>
+<section class="assistant-workspace-tabpanel" data-assistant-workspace-panel="assistant" role="tabpanel">
+<div class="assistant-grouped-tools-stack">
+<details class="assistant-tools-section"><summary class="assistant-tools-section-summary">Assistant profile</summary><div class="assistant-tools-section-body"><div class="assistant-settings-block">
+<div class="stat-title">Assistant profile</div>
+<label for="assistant-profile-name" style="margin-top:12px;">Assistant name</label>
+<input id="assistant-profile-name" placeholder="Neo" type="text"/>
+<label for="assistant-profile-user-name" style="margin-top:12px;">How should the assistant address you?</label>
+<input id="assistant-profile-user-name" placeholder="Sparky" type="text"/>
+<div class="grid grid-2" style="margin-top:14px; gap:14px;">
+<div>
+<label for="assistant-profile-address-style">Address style</label>
+<select id="assistant-profile-address-style">
+<option value="adaptive">Adaptive</option>
+<option value="casual">Casual</option>
+<option value="friendly">Friendly</option>
+<option value="professional">Professional</option>
+<option value="minimal">Minimal</option>
+</select>
+</div>
+<div>
+<label for="assistant-profile-response-detail">Response detail</label>
+<select id="assistant-profile-response-detail">
+<option value="concise">Concise</option>
+<option value="balanced">Balanced</option>
+<option value="detailed">Detailed</option>
+</select>
+</div>
+<div>
+<label for="assistant-profile-default-mode">Default mode</label>
+<select id="assistant-profile-default-mode"></select>
+</div>
+<div>
+<label for="assistant-profile-support-style">Support style</label>
+<select id="assistant-profile-support-style">
+<option value="gentle">Gentle</option>
+<option value="balanced">Balanced</option>
+<option value="direct">Direct</option>
+</select>
+</div>
+</div>
+<label for="assistant-profile-about-user" style="margin-top:14px;">About you</label>
+<textarea id="assistant-profile-about-user" placeholder="Who you are, what you do, what context helps the assistant respond better." rows="4"></textarea>
+<label for="assistant-profile-preferences" style="margin-top:14px;">Preferences</label>
+<textarea id="assistant-profile-preferences" placeholder="Tone preferences, writing preferences, workflow preferences, recurring needs, etc." rows="4"></textarea>
+<label for="assistant-profile-avoid" style="margin-top:14px;">Avoid / boundaries</label>
+<textarea id="assistant-profile-avoid" placeholder="Things the assistant should avoid doing or saying when possible." rows="3"></textarea>
+</div><div class="row assistant-settings-actions" style="margin-top:14px; gap:10px; flex-wrap:wrap;"><button class="btn" id="btn-assistant-save-profile" type="button">Save profile</button></div><div class="status" id="assistant-profile-status" style="margin-top:12px;"></div></div></details>
+<details class="assistant-tools-section is-wide"><summary class="assistant-tools-section-summary">Reply settings</summary><div class="assistant-tools-section-body"><div class="grid grid-2" style="margin-top:14px; gap:14px;">
+<div>
+<label for="assistant-max-tokens">Max tokens</label>
+<input id="assistant-max-tokens" max="4000" min="64" step="1" type="number" value="640"/>
+</div>
+<div>
+<label for="assistant-temperature">Temperature</label>
+<input id="assistant-temperature" max="1.5" min="0" step="0.01" type="number" value="0.7"/>
+</div>
+<div>
+<label for="assistant-top-p">Top P</label>
+<input id="assistant-top-p" max="1" min="0" step="0.01" type="number" value="0.92"/>
+</div>
+<div>
+<label for="assistant-top-k">Top K</label>
+<input id="assistant-top-k" max="200" min="0" step="1" type="number" value="60"/>
+</div>
+</div><div class="row assistant-bottom-tools-actions" style="margin-top:14px; gap:10px; flex-wrap:wrap;"><button class="btn" id="btn-assistant-apply-mode" type="button">Apply mode defaults</button></div><div class="status" id="assistant-settings-status" style="margin-top:12px;"></div></div></details>
+<details class="assistant-tools-section" open=""><summary class="assistant-tools-section-summary">Thread defaults</summary><div class="assistant-tools-section-body"><label for="assistant-thread-instruction" style="margin-top:14px;">Thread instruction</label><textarea id="assistant-thread-instruction" placeholder="Optional thread-specific instruction for this chat." rows="5"></textarea></div></details>
+</div>
+</section>
+<section class="assistant-workspace-tabpanel" data-assistant-workspace-panel="memory" role="tabpanel">
+<div class="assistant-grouped-tools-stack">
+<details class="assistant-tools-section">
+<summary class="assistant-tools-section-summary">Thread memory</summary>
+<div class="assistant-tools-section-body">
+<div class="mini-note">Older messages are compressed into a rolling memory summary once a thread grows long. Neo keeps recent turns raw and older turns lighter.</div>
+<label for="assistant-memory-summary" style="margin-top:14px;">Rolling memory summary</label>
+<textarea id="assistant-memory-summary" placeholder="Thread memory will appear here once the conversation gets longer." readonly="" rows="8"></textarea>
+<label for="assistant-memory-backend" style="margin-top:14px;">Embedding backend</label>
+<div class="row" style="margin-top:10px; gap:10px; flex-wrap:wrap; align-items:end;">
+<div style="flex:1 1 240px; min-width:220px;">
+<select id="assistant-memory-backend"></select>
+</div>
+<button class="btn btn-small" id="btn-assistant-apply-memory-backend" type="button">Apply backend</button>
+</div>
+<div class="mini-note" id="assistant-memory-backend-note" style="margin-top:8px;">Memory backend status will appear here.</div>
+<label for="assistant-memory-chunk-type-filter" style="margin-top:14px;">Forget filter</label>
+<select id="assistant-memory-chunk-type-filter">
+<option value="all">All chunk types</option>
+<option value="preference">Preference</option>
+<option value="style_shift">Style shift</option>
+<option value="workflow">Workflow</option>
+<option value="project_fact">Project fact</option>
+<option value="example_output">Example output</option>
+<option value="summary">Summary</option>
+</select>
+<div class="row" style="margin-top:12px; gap:10px; flex-wrap:wrap;">
+<button class="btn" id="btn-assistant-refresh-memory" type="button">Refresh memory summary</button>
+<button class="btn btn-small" id="btn-assistant-preview-memory" type="button">Preview adaptive memory</button>
+<button class="btn btn-small" id="btn-assistant-repair-memory" type="button">Rebuild adaptive memory</button>
+<button class="btn btn-small" id="btn-assistant-reset-session-memory" type="button">Reset thread memory</button>
+<button class="btn btn-small" id="btn-assistant-reset-project-memory" type="button">Reset project memory</button>
+</div>
+<label for="assistant-retrieved-memory-preview" style="margin-top:14px;">Adaptive retrieval preview</label>
+<textarea id="assistant-retrieved-memory-preview" placeholder="Preview what Neo would inject from adaptive memory for this thread." readonly="" rows="8"></textarea>
+<div class="assistant-context-list" id="assistant-memory-item-list" style="margin-top:14px;"></div>
+<div class="status" id="assistant-memory-status" style="margin-top:12px;"></div>
+</div>
+</details>
+<details class="assistant-tools-section is-wide">
+<summary class="assistant-tools-section-summary">Global memory admin</summary>
+<div class="assistant-tools-section-body">
+<div class="mini-note">Inspect both Assistant and Roleplay memory globally, pin strong memories, suppress bad ones, and resolve overlaps when two chunks disagree.</div>
+<div class="grid grid-3" style="margin-top:14px; gap:14px;">
+<div>
+<label for="assistant-memory-admin-lane">Lane</label>
+<select id="assistant-memory-admin-lane">
+<option value="">All lanes</option>
+<option value="assistant">Assistant</option>
+<option value="roleplay">Roleplay</option>
+</select>
+</div>
+<div>
+<label for="assistant-memory-admin-chunk-type">Chunk type</label>
+<select id="assistant-memory-admin-chunk-type">
+<option value="">All chunk types</option>
+<option value="preference">Preference</option>
+<option value="style_shift">Style shift</option>
+<option value="workflow">Workflow</option>
+<option value="project_fact">Project fact</option>
+<option value="example_output">Example output</option>
+<option value="summary">Summary</option>
+<option value="event">Event</option>
+<option value="relationship_shift">Relationship shift</option>
+<option value="world_fact">World fact</option>
+<option value="character_fact">Character fact</option>
+<option value="unresolved_thread">Unresolved thread</option>
+<option value="callback">Callback</option>
+</select>
+</div>
+<div>
+<label for="assistant-memory-admin-query">Search memory</label>
+<input id="assistant-memory-admin-query" placeholder="Search text, source ref, entity ID..." type="text"/>
+</div>
+</div>
+<div class="row" style="margin-top:12px; gap:10px; flex-wrap:wrap; align-items:center;">
+<label class="mini-note" style="display:flex; align-items:center; gap:8px; margin:0;"><input id="assistant-memory-admin-include-suppressed" type="checkbox"/> Include suppressed</label>
+<button class="btn btn-small" id="btn-assistant-refresh-memory-admin" type="button">Refresh global memory</button>
+</div>
+<div class="grid grid-3" id="assistant-memory-admin-overview" style="margin-top:14px; gap:12px;"></div>
+<label style="margin-top:14px;">Potential conflicts</label>
+<div class="assistant-context-list" id="assistant-memory-conflict-list" style="margin-top:12px;"></div>
+<label style="margin-top:14px;">Memory items</label>
+<div class="assistant-context-list" id="assistant-memory-admin-item-list" style="margin-top:12px;"></div>
+<div class="status" id="assistant-memory-admin-status" style="margin-top:12px;"></div>
+</div>
+</details>
+<details class="assistant-tools-section is-wide" open=""><summary class="assistant-tools-section-summary">Context shelf</summary><div class="assistant-tools-section-body"><div class="mini-note" style="margin-top:10px;">Pin thread-specific notes here, or upload a text file so Neo can use it as extra context in this chat. Text files only for now.</div><label for="assistant-context-note" style="margin-top:12px;">Pinned context note</label><textarea id="assistant-context-note" placeholder="Brief, notes, social post context, client details, story constraints, or anything this thread should keep in mind." rows="5"></textarea><label for="assistant-context-upload" style="margin-top:14px;">Upload text context</label><input accept=".txt,.md,.markdown,.json,.csv,.log,.py,.js,.ts,.html,.css,.xml,.yaml,.yml,text/plain,application/json,text/markdown,text/csv" id="assistant-context-upload" type="file"/><div class="row" style="margin-top:10px; gap:10px; flex-wrap:wrap;">
+<button class="btn btn-small" id="btn-assistant-add-context-file" type="button">Add uploaded context</button>
+<button class="btn btn-small" id="btn-assistant-clear-context" type="button">Clear context shelf</button>
+</div><div class="assistant-context-list" id="assistant-context-list" style="margin-top:14px;"></div><div class="status" id="assistant-context-status" style="margin-top:12px;"></div></div></details>
+</div>
+</section>
+<section class="assistant-workspace-tabpanel" data-assistant-workspace-panel="project" role="tabpanel">
+<div class="assistant-grouped-tools-stack">
+<details class="assistant-tools-section"><summary class="assistant-tools-section-summary">Project brief</summary><div class="assistant-tools-section-body"><div class="mini-note" id="assistant-project-brief-meta" style="margin-top:10px;">Assign this thread to a project to keep a shared brief and context that every related chat can inherit.</div><label for="assistant-project-brief" style="margin-top:12px;">Shared project brief</label><textarea disabled="" id="assistant-project-brief" placeholder="Select a project above to edit the shared project brief." rows="5"></textarea><div class="row" style="margin-top:10px; gap:10px; flex-wrap:wrap;">
+<button class="btn btn-small" disabled="" id="btn-assistant-save-project-brief" type="button">Save project brief</button>
+</div><div class="status" id="assistant-project-status" style="margin-top:12px;"></div></div></details>
+<details class="assistant-tools-section"><summary class="assistant-tools-section-summary">Project dashboard</summary><div class="assistant-tools-section-body"><div class="mini-note" id="assistant-project-dashboard-meta" style="margin-top:10px;">Assign this thread to a project to see a quick overview, linked chats, and linked records.</div><div class="card-lite" id="assistant-project-dashboard-summary" style="margin-top:12px;">No active project yet.</div><div class="grid grid-3" id="assistant-project-dashboard-stats" style="margin-top:14px; gap:12px;"></div><label style="margin-top:14px;">Linked chats</label><div class="assistant-context-list" id="assistant-project-thread-list" style="margin-top:12px;"></div><label for="assistant-project-record-title" style="margin-top:14px;">Linked record title</label><input disabled="" id="assistant-project-record-title" placeholder="Prompt export, Caption draft, Character sheet, Output note..." type="text"/><div class="grid grid-2" style="margin-top:14px; gap:14px;"><div><label for="assistant-project-record-type">Record type</label><select disabled="" id="assistant-project-record-type"><option value="roleplay">Roleplay</option><option value="generation">Generation</option><option value="prompt">Prompt</option><option value="caption">Caption</option><option value="output">Output</option><option selected="" value="other">Other</option></select></div><div><label for="assistant-project-record-note">Note</label><input disabled="" id="assistant-project-record-note" placeholder="Optional note about what was linked." type="text"/></div></div><div class="row" style="margin-top:10px; gap:10px; flex-wrap:wrap;"><button class="btn btn-small" disabled="" id="btn-assistant-add-project-record" type="button">Add linked record</button></div><div class="assistant-context-list" id="assistant-project-record-list" style="margin-top:14px;"></div><div class="status" id="assistant-project-record-status" style="margin-top:12px;"></div></div></details>
+<details class="assistant-tools-section"><summary class="assistant-tools-section-summary">Project context cards</summary><div class="assistant-tools-section-body"><div class="mini-note" id="assistant-project-cards-meta" style="margin-top:10px;">Reusable project-level context blocks for voice, client notes, lore rules, constraints, or any shared grounding.</div><label for="assistant-project-card-title" style="margin-top:12px;">Card title</label><input disabled="" id="assistant-project-card-title" placeholder="Brand voice, Client notes, World rules..." type="text"/><label for="assistant-project-card-content" style="margin-top:12px;">Card content</label><textarea disabled="" id="assistant-project-card-content" placeholder="Add reusable context this whole project should carry." rows="4"></textarea><div class="row" style="margin-top:10px; gap:10px; flex-wrap:wrap;">
+<button class="btn btn-small" disabled="" id="btn-assistant-add-project-card" type="button">Add context card</button>
+</div><div class="assistant-context-list" id="assistant-project-card-list" style="margin-top:14px;"></div><div class="status" id="assistant-project-card-status" style="margin-top:12px;"></div></div></details>
+<details class="assistant-tools-section"><summary class="assistant-tools-section-summary">Project text attachments</summary><div class="assistant-tools-section-body"><div class="mini-note" id="assistant-project-files-meta" style="margin-top:10px;">Attach reusable text files to this project so every related Assistant thread can inherit them.</div><label for="assistant-project-file-upload" style="margin-top:12px;">Upload text file</label><input accept=".txt,.md,.markdown,.json,.csv,.log,.py,.js,.ts,.html,.css,.xml,.yaml,.yml,text/plain,application/json,text/markdown,text/csv" disabled="" id="assistant-project-file-upload" type="file"/><div class="row" style="margin-top:10px; gap:10px; flex-wrap:wrap;">
+<button class="btn btn-small" disabled="" id="btn-assistant-add-project-file" type="button">Add project file</button>
+</div><div class="assistant-context-list" id="assistant-project-file-list" style="margin-top:14px;"></div><div class="status" id="assistant-project-file-status" style="margin-top:12px;"></div></div></details>
+</div>
+</section>
+<section class="assistant-workspace-tabpanel" data-assistant-workspace-panel="bridge" role="tabpanel">
+<div class="assistant-grouped-tools-stack">
+<details class="assistant-tools-section"><summary class="assistant-tools-section-summary">Image context bridge</summary><div class="assistant-tools-section-body"><div class="mini-note" style="margin-top:10px;">Upload an image here and Neo will turn it into text context for this thread using the existing captioning path. This gives the Assistant grounded image context without pretending the text model can see the file directly.</div><label for="assistant-image-bridge-upload" style="margin-top:12px;">Upload image</label><input accept="image/*" id="assistant-image-bridge-upload" type="file"/><label for="assistant-image-bridge-instruction" style="margin-top:14px;">Optional focus</label><textarea id="assistant-image-bridge-instruction" placeholder="Example: describe this for a Patreon post, focus on outfit and mood, or tell Neo what matters in the image." rows="4"></textarea><div class="row" style="margin-top:10px; gap:10px; flex-wrap:wrap;"><button class="btn btn-small" id="btn-assistant-add-image-bridge" type="button">Describe image for Assistant</button></div><div class="status" id="assistant-image-bridge-status" style="margin-top:12px;"></div></div></details>
+</div>
+</section>
+</div>
+</div>
+</section>

@@ -1,0 +1,2577 @@
+<section class="section active" id="tab-generate">
+<div class="panel generation-global-panel">
+<div class="row-between">
+<div>
+<h2>Image</h2>
+<div class="muted small" id="generation-tab-intro">Prep image workflows first, then move into the full tab below once your image lane is set.</div>
+</div>
+</div>
+<input id="generation-family" type="hidden" value="sdxl_sd"/>
+<div class="panel generation-setup-shell-panel" style="margin-top:14px;">
+<div class="row-between generation-setup-shell-header" id="generation-setup-shell-header" role="button" tabindex="0">
+<div>
+<div class="stat-title">Image setup</div>
+<div class="generation-summary-title">Backend, family, workspace, and presets</div>
+<div class="muted small">Keep launch setup in one shell, then collapse it so the real Image build area can stay prominent.</div>
+</div>
+<div class="generation-setup-shell-header-actions">
+<div class="badge">Setup shell</div>
+<div class="generation-setup-shell-toggle-copy" id="generation-setup-shell-toggle-copy">Collapse setup</div>
+<div class="generation-setup-shell-chevron" id="generation-setup-shell-chevron" aria-hidden="true">▾</div>
+</div>
+</div>
+<div class="generation-setup-shell-summary-strip hidden" id="generation-setup-shell-summary-strip"></div>
+<div id="generation-setup-shell-content">
+<div class="generation-setup-shell-grid generation-setup-shell-grid--primary">
+<div class="generation-setup-shell-slot generation-setup-shell-slot--backend" data-ui-state="neutral" data-ui-tone="neutral" id="generation-setup-shell-backend-card">
+<div class="generation-setup-shell-slot-head">
+<div>
+<div class="stat-title">Image backend</div>
+<div class="muted small">Choose the image queue endpoint first. The workspace can stay local until you actually want to run or poll jobs.</div>
+</div>
+<div class="badge">1 · Backend</div>
+</div>
+<div class="surface-backend-strip" data-backend-role="image" data-surface-backend="generate" style="margin-top:12px;">
+<div class="surface-backend-copy">
+<div class="surface-backend-kicker">Image backend</div>
+<div class="surface-backend-row">
+<span class="backend-chip state-offline" id="surface-backend-generate-state">Offline</span>
+<span class="mini-note" id="surface-backend-generate-name">No active image backend</span>
+</div>
+<div class="surface-backend-meta mini-note" id="surface-backend-generate-meta">Image stays usable locally. Connect an Image Backend only when you want to queue or run jobs.</div>
+</div>
+<div class="surface-backend-actions">
+<button class="btn btn-small" id="btn-surface-backend-generate-launch" type="button">Launch Backend</button>
+<button class="btn btn-small btn-primary" id="btn-surface-backend-generate-connect" type="button">Connect Image Backend</button>
+<button class="btn btn-small" id="btn-surface-backend-generate-disconnect" type="button">Disconnect</button>
+<button class="btn btn-small" id="btn-surface-backend-generate-manage" type="button">Manage in Admin</button>
+</div>
+</div>
+</div>
+<div class="generation-setup-shell-slot generation-setup-shell-slot--family" data-ui-state="active" data-ui-tone="primary" id="generation-setup-shell-family-card">
+<div class="generation-setup-shell-slot-head">
+<div>
+<div class="stat-title">Model family selector</div>
+<div class="muted small">Pick the family before touching the lower workspace so the shell stops mixing checkpoint, Flux, and edit flows together.</div>
+</div>
+<div class="badge">2 · Family</div>
+</div>
+<div class="generation-family-shell" style="margin-top:12px;">
+<div class="tabbar subtabbar generation-family-tabbar" id="generation-family-tabbar">
+<button class="active" data-generation-family="sdxl_sd" type="button">SDXL / SD</button>
+<button data-generation-family="flux" type="button">Flux</button>
+<button data-generation-family="qwen_image_edit" type="button">Qwen Image Edit</button>
+<button data-generation-family="zimage" type="button">Zimage</button>
+</div>
+<div class="card-lite generation-family-summary-card" style="margin-top:12px; padding:12px; border:1px solid rgba(96,165,250,0.18); background:rgba(15,23,42,0.22);">
+<div class="row-between" style="gap:12px; flex-wrap:wrap; align-items:flex-start;">
+<div>
+<div class="stat-title" id="generation-family-kicker">Core family</div>
+<div class="generation-summary-title" id="generation-family-title">SDXL / SD</div>
+<div class="muted small" id="generation-family-note">Checkpoint-first family for the main SDXL / SD workspace. Flux GGUF is now split into its own family so the core path stops pretending both workflows are the same thing.</div>
+</div>
+<div class="generation-launch-chip-row" id="generation-family-capability-strip"></div>
+</div>
+</div>
+<div class="card-lite hidden" id="generation-family-warning-card" style="margin-top:12px; padding:12px; border:1px solid rgba(245,158,11,0.22); background:rgba(120,53,15,0.14);">
+<div class="row-between" style="gap:12px; flex-wrap:wrap; align-items:flex-start;">
+<div>
+<div class="accordion-title" id="generation-family-warning-title">Family staging note</div>
+<div class="muted small" id="generation-family-warning-body">This family is staged separately so Neo can keep shared previews, results, and helper flows without lying about workflow support.</div>
+</div>
+<span class="badge" id="generation-family-warning-badge">Staged</span>
+</div>
+</div>
+</div>
+</div>
+<div class="generation-setup-shell-slot generation-setup-shell-slot--goal" data-ui-state="neutral" data-ui-tone="neutral" id="generation-setup-shell-goal-card">
+<div class="generation-setup-shell-slot-head">
+<div>
+<div class="stat-title">Image workspace</div>
+<div class="muted small">Pick the actual image mode here so the lower build area stops carrying a second visible mode selector.</div>
+</div>
+<div class="badge">3 · Workspace</div>
+</div>
+<div id="generation-setup-goal-anchor" style="margin-top:12px;"></div>
+</div>
+</div>
+<div class="generation-setup-shell-grid generation-setup-shell-grid--secondary">
+<div class="generation-setup-shell-slot generation-setup-shell-slot--presets generation-setup-shell-slot--span-full" data-ui-state="neutral" data-ui-tone="neutral" id="generation-setup-shell-preset-card">
+<div class="generation-setup-shell-slot-head">
+<div>
+<div class="stat-title">Workspace preset</div>
+<div class="muted small">Load starter bundles or your own saved presets here so setup stays simple after goals stop pretending to be presets.</div>
+</div>
+<div class="badge">4 · Preset</div>
+</div>
+<div class="row u-gap-8 u-wrap generation-setup-shell-preset-row" style="margin-top:12px;">
+<button class="btn btn-small" id="btn-generation-reset-shell" onclick="return window.NeoStudioApp?.generation?.handlers?.resetShellClick ? window.NeoStudioApp.generation.handlers.resetShellClick(event) : (document.getElementById('generation-status').textContent='Reset handler missing before click binding.', document.getElementById('generation-status').className='status error', false);" title="Reset the current generation workspace back to defaults" type="button">Reset workspace</button>
+<button class="btn btn-small" id="btn-generation-save-snapshot" title="Save the current generation workspace as a named preset" type="button">💾</button>
+<select class="u-shell-select-width" id="generation-shell-snapshot-select">
+<option value="">Workspace presets…</option>
+</select>
+<button class="btn btn-small" id="btn-generation-set-default-snapshot" title="Make the selected workspace preset load automatically on startup" type="button">⭐ Default</button>
+<button class="btn btn-small" id="btn-generation-clear-default-snapshot" title="Stop auto-loading the default workspace preset on startup" type="button">Clear default</button>
+<button class="btn btn-small" id="btn-generation-load-snapshot" type="button">Load</button>
+<button class="btn btn-small" id="btn-generation-update-snapshot" type="button">Update</button>
+<button class="btn btn-small" id="btn-generation-rename-snapshot" title="Rename the selected workspace preset" type="button">Rename</button>
+<button class="btn btn-small" id="btn-generation-duplicate-snapshot" title="Create a copy of the selected workspace preset" type="button">Duplicate</button>
+<button class="btn btn-small" id="btn-generation-export-snapshot" title="Export the selected workspace preset as JSON" type="button">Export</button>
+<button class="btn btn-small" id="btn-generation-import-snapshot" title="Import one or more workspace presets from JSON" type="button">Import</button>
+<input accept="application/json,.json" hidden="" id="generation-shell-snapshot-import-file" type="file"/>
+<button class="btn btn-small" id="btn-generation-delete-snapshot" type="button">Delete</button>
+<div class="badge" id="generation-preset-active-badge">Default workspace</div>
+</div>
+</div>
+</div>
+</div>
+<div id="generation-shell-workspace-boundary" data-generation-boundary="shell-workspace"></div>
+<div class="u-mt-14" id="generation-runtime-summary-anchor"></div>
+</div>
+<div class="grid grid-2 u-mt-14 u-align-start">
+<div class="generation-actions-card generation-shell-launch-card generation-shell-launch-card--span-full">
+<div class="generation-launch-topbar">
+<div>
+<div class="stat-title">Image Workspace</div>
+<div class="generation-summary-title">Run, queue, and watch progress</div>
+<div class="help u-mt-10" id="generation-action-help">Main launch controls stay up top so the first thing you see is what you actually need: generate, pause, stop, queue, refresh, and watch progress.</div>
+</div>
+<div class="generation-launch-chip-row">
+<span class="generation-action-chip is-idle" id="generation-action-status-chip">Idle</span>
+<span class="generation-action-chip is-detail" id="generation-action-mode-chip">txt2img</span>
+<div class="badge" id="generation-action-backend-badge">Backend idle</div>
+</div>
+</div>
+<div class="generation-toolbar-stack u-mt-14">
+<div class="row generation-toolbar-actions-row">
+<div class="generation-toolbar-main-actions">
+<button aria-label="Start generation" class="btn btn-primary generation-toolbar-icon-btn generation-toolbar-main-btn" id="btn-generation-run" onclick="return window.NeoStudioApp?.generation?.handlers?.runClick ? window.NeoStudioApp.generation.handlers.runClick(event) : (document.getElementById('generation-status').textContent='Generate handler missing before click binding.', document.getElementById('generation-status').className='status error', false);" title="Start generation" type="button">Generate now</button>
+<button aria-label="Pause pending queue" class="btn generation-toolbar-icon-btn generation-toolbar-main-btn" id="btn-generation-pause" onclick="return window.NeoStudioApp?.generation?.handlers?.pauseClick ? (window.NeoStudioApp.generation.handlers.pauseClick(event), false) : (document.getElementById('generation-status').textContent='Pause handler missing before click binding.', document.getElementById('generation-status').className='status error', false);" title="Pause pending queue" type="button">Pause queue</button>
+<button aria-label="Stop current generation" class="btn generation-toolbar-icon-btn generation-toolbar-main-btn" id="btn-generation-cancel" onclick="return window.NeoStudioApp?.generation?.handlers?.cancelClick ? (window.NeoStudioApp.generation.handlers.cancelClick(event), false) : (document.getElementById('generation-status').textContent='Stop handler missing before click binding.', document.getElementById('generation-status').className='status error', false);" title="Stop current generation" type="button">Stop run</button>
+</div>
+<div class="generation-toolbar-utility-actions">
+<button aria-label="Queue only" class="btn generation-toolbar-icon-btn" id="btn-generation-queue" onclick="return window.NeoStudioApp?.generation?.handlers?.queueClick ? window.NeoStudioApp.generation.handlers.queueClick(event) : false;" title="Queue only" type="button">Queue only</button>
+<button aria-label="Refresh queue / backend state" class="btn generation-toolbar-icon-btn" id="btn-generation-refresh-status" title="Refresh queue / backend state" type="button">Refresh</button>
+<details class="generation-debug-tools"><summary class="btn generation-toolbar-debug-toggle">Debug</summary><div class="generation-debug-tools-menu"><button aria-label="Copy payload JSON" class="btn generation-toolbar-debug-btn" id="btn-generation-copy-payload" title="Copy payload JSON" type="button">Copy payload</button></div></details>
+</div>
+</div>
+</div>
+<div class="status u-mt-12" id="generation-status"></div>
+<div class="card-lite generation-history-card" id="generation-history-card" style="margin-top:12px; padding:12px; border:1px solid rgba(59,130,246,0.16); background:rgba(15,23,42,0.16);">
+<div class="row-between" style="gap:12px; flex-wrap:wrap; align-items:flex-start;">
+<div>
+<div class="stat-title">Recent runs + hotkeys</div>
+<div class="mini-note" id="generation-history-note">Review, rerun, or restore a recent payload from the Results lane so the launch area can stay focused on actions.</div>
+</div>
+<div class="badge" id="generation-history-badge">History idle</div>
+</div>
+<div class="grid grid-3" style="margin-top:12px; gap:12px; align-items:end;">
+<div style="grid-column: span 2;">
+<label for="generation-history-select">Recent runs</label>
+<select id="generation-history-select"><option value="">No recent runs yet</option></select>
+</div>
+<div>
+<label for="generation-hotkey-hint">Hotkeys</label>
+<input id="generation-hotkey-hint" readonly type="text" value="Ctrl/Cmd+Enter = Generate · Ctrl/Cmd+Shift+Enter = Queue"/>
+</div>
+</div>
+<div class="row" style="margin-top:10px; gap:8px; flex-wrap:wrap;">
+<button class="btn btn-small" id="btn-generation-history-rerun-last" type="button">Rerun last</button>
+<button class="btn btn-small" id="btn-generation-history-queue-last" type="button">Queue last</button>
+<button class="btn btn-small" id="btn-generation-history-restore" type="button">Restore selected</button>
+</div>
+</div>
+<div class="generation-progress-shell generation-shell-launch-progress u-mt-12">
+<div class="generation-progress-head">
+<div class="generation-progress-head-main">
+<div class="generation-progress-kicker">Live progress</div>
+<div class="generation-progress-meta">
+<span id="generation-progress-label">Idle</span>
+<span id="generation-progress-eta">ETA —</span>
+</div>
+</div>
+<div class="generation-progress-side">
+<span class="generation-action-chip is-detail" id="generation-progress-percent">0%</span>
+<span class="generation-progress-side-note" id="generation-progress-elapsed">Elapsed —</span>
+</div>
+</div>
+<div class="generation-progress-track"><div class="generation-progress-bar" id="generation-progress-bar"></div></div>
+<div class="generation-progress-foot">
+<span id="generation-progress-detail">No active job</span>
+<span id="generation-progress-job-id">Job —</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="card-lite workspace-helper-panel" style="margin-top:16px;">
+<div class="row-between" style="gap:10px; align-items:flex-start;">
+<div>
+<div class="stat-title">Workspace helper</div>
+<h4 style="margin:6px 0 0;">Image helper</h4>
+<div class="mini-note" style="margin-top:6px;">Package the current Image workspace into Assistant so it can help with prompts, settings, workflow tuning, or troubleshooting without losing the actual Neo Studio context.</div>
+</div>
+<div class="badge">Phase 92</div>
+</div>
+<div class="grid grid-2" style="margin-top:14px; gap:14px;">
+<div>
+<label for="generation-helper-target">Helper target</label>
+<select id="generation-helper-target">
+<option value="prompt_direction">Prompt direction</option>
+<option value="settings_tune">Settings tune</option>
+<option value="workflow_debug">Workflow / debug</option>
+<option value="variation_ideas">Variation ideas</option>
+</select>
+</div>
+<div>
+<label for="generation-helper-action">Helper action</label>
+<select id="generation-helper-action">
+<option value="brainstorm">Brainstorm</option>
+<option value="improve">Improve</option>
+<option value="explain">Explain current setup</option>
+<option value="troubleshoot">Troubleshoot</option>
+</select>
+</div>
+</div>
+<label for="generation-helper-prompt" style="margin-top:14px;">What do you want help with?</label>
+<textarea id="generation-helper-prompt" placeholder="Example: help me tighten this cinematic fantasy setup without flattening the mood." rows="4"></textarea>
+<div class="mini-note workspace-helper-contract-note" id="generation-helper-note" style="margin-top:10px;"></div>
+<label for="generation-helper-context-preview" style="margin-top:14px;">Context preview</label>
+<textarea id="generation-helper-context-preview" readonly="" rows="8"></textarea>
+<div class="row" style="margin-top:12px; gap:10px; flex-wrap:wrap;">
+<button class="btn" id="btn-generation-helper-refresh" type="button">Refresh context</button>
+<button class="btn btn-primary" id="btn-generation-helper-open-assistant" type="button">Open in Assistant</button>
+<button class="btn" id="btn-generation-helper-apply-last" type="button">Apply last Assistant draft</button>
+<button class="btn" id="btn-generation-helper-apply-open" type="button">Apply + Open</button>
+</div>
+<div class="status" id="generation-helper-status" style="margin-top:12px;"></div>
+</div>
+<div class="panel generation-workspace-nav-panel" id="generation-workspace-nav-panel">
+<div class="row-between generation-workspace-nav-head">
+<div>
+<h3 style="margin:0;">Image Tasks</h3>
+<div class="muted small" id="generation-workspace-copy">Start in Create for fresh image setups, then switch workspaces when you need repair, reference matching, finish polish, reusable assets, or result review.</div>
+</div>
+<div class="badge" id="generation-workspace-badge">Default workspace</div>
+</div>
+<div aria-label="Image workspaces" class="generation-workspace-tabbar" role="tablist">
+<button class="active" data-generation-workspace="create" type="button">Create</button>
+<button data-generation-workspace="fix_expand" type="button">Fix / Expand</button>
+<button data-generation-workspace="guide_match" type="button">Reference / Match</button>
+<button data-generation-workspace="enhance" type="button">Finish / Polish</button>
+<button data-generation-workspace="assets_reuse" type="button">Assets / Reuse</button>
+<button data-generation-workspace="results" type="button">Results / Metadata</button>
+</div>
+</div>
+<div class="panel generation-shell-panel">
+<div class="generation-workbench-shell" id="generation-workbench-shell" style="margin-top:0;">
+<div class="generation-workbench-grid">
+<div class="generation-setup-rail" id="generation-setup-rail"></div>
+<div class="generation-session-column" id="generation-session-column">
+<div class="generation-live-workspace" id="generation-live-workspace"></div>
+<div class="generation-support-column" id="generation-support-column">
+<div class="generation-support-host" id="generation-output-settings-host"></div>
+<div class="generation-support-host" id="generation-support-reliability-host"></div>
+<div class="generation-support-host" id="generation-support-smart-host"></div>
+<div class="generation-support-host" id="generation-support-power-host"></div>
+</div>
+</div>
+</div>
+</div>
+<div class="grid grid-2 generation-shell-grid" style="margin-top:14px;">
+<div class="card-lite generation-shell-card">
+<div class="row-between">
+<div>
+<div class="accordion-title">Core Generation</div>
+<div class="muted small">Main generation path. Workspace mode now lives in the top shell, while build controls stay here with the actual runtime values.</div>
+</div>
+<span class="badge">Image backend</span>
+</div>
+<div class="grid grid-2" style="margin-top:14px; gap:14px; align-items:end;">
+<div aria-hidden="true" style="display:none;">
+<label for="generation-workflow-type">Mode</label>
+<select id="generation-workflow-type">
+<option value="txt2img">Txt2img</option>
+<option value="img2img">Img2img</option>
+<option value="inpaint">Inpaint</option>
+<option value="outpaint">Outpaint</option>
+</select>
+</div>
+<div id="generation-model-source-wrap">
+<label for="generation-model-source">Model source</label>
+<select id="generation-model-source">
+<option value="checkpoint">Checkpoint workflow</option>
+<option value="gguf">GGUF workflow</option>
+</select>
+<div class="mini-note" id="generation-model-source-note" style="margin-top:8px;">Family tabs now manage whether Neo uses the checkpoint path or the dedicated Flux GGUF runtime.</div>
+</div>
+</div>
+<div class="card-lite" data-admin-dev-only id="generation-experimental-dev-card" style="margin-top:12px; padding:12px; border:1px solid rgba(168,85,247,0.22); background:rgba(88,28,135,0.10); display:none;">
+<div class="row-between" style="gap:12px; flex-wrap:wrap; align-items:flex-start;">
+<div>
+<div class="stat-title">Safe experimental mode</div>
+<div class="muted small" id="generation-experimental-mode-note">Keep risky node workflows in a named sandbox instead of mixing them into the core launch path blindly.</div>
+</div>
+<div class="badge" id="generation-experimental-mode-badge">Off</div>
+</div>
+<div class="grid grid-3" style="margin-top:12px; gap:12px; align-items:end;">
+<div>
+<label for="generation-experimental-mode">Mode</label>
+<select id="generation-experimental-mode">
+<option value="off">Off</option>
+<option value="safe_sandbox">Safe sandbox</option>
+<option value="open_experimental">Open experimental</option>
+</select>
+</div>
+<div>
+<label for="generation-advanced-slot-a">Advanced slot A</label>
+<select id="generation-advanced-slot-a">
+<option value="none">None</option>
+<option value="qwen_image_edit">Qwen Image Edit</option>
+<option value="community_node_workflow">Community node workflow</option>
+</select>
+</div>
+<div>
+<label for="generation-advanced-slot-b">Advanced slot B</label>
+<select id="generation-advanced-slot-b">
+<option value="none">None</option>
+<option value="custom_finish_chain">Custom finish chain</option>
+<option value="manual_lab_slot">Manual lab slot</option>
+</select>
+</div>
+</div>
+<div class="muted small" id="generation-experimental-capability-strip" style="margin-top:10px; display:flex; flex-wrap:wrap; gap:8px;"></div>
+</div>
+<div class="grid grid-2" style="margin-top:14px; gap:14px; align-items:end;">
+<div id="generation-checkpoint-wrap">
+<label for="generation-checkpoint">Checkpoint</label>
+<select id="generation-checkpoint">
+<option value="">Connect ComfyUI to load checkpoints</option>
+</select>
+</div>
+<div>
+<label for="generation-vae">VAE</label>
+<select id="generation-vae">
+<option value="">Use checkpoint VAE</option>
+</select>
+</div>
+</div>
+<div class="card-lite hidden" id="generation-gguf-wrap" style="margin-top:14px; padding:12px; border:1px solid rgba(128,90,213,0.28); background:rgba(128,90,213,0.08);">
+<div class="row-between" style="align-items:flex-start; gap:12px;">
+<div>
+<div class="accordion-title">GGUF runtime</div>
+<div class="muted small">Use a GGUF diffusion model from <code>models/unet</code> or <code>models/diffusion_models</code> and load matching encoders from <code>models/clip</code> or <code>models/text_encoders</code>. Flux-style GGUF models will reveal the dual-encoder path here.</div>
+</div>
+<span class="badge">GGUF</span>
+</div>
+<div class="grid grid-2" style="margin-top:12px; gap:14px; align-items:end;">
+<div>
+<label for="generation-gguf-unet">GGUF model</label>
+<select id="generation-gguf-unet">
+<option value="">Connect ComfyUI to load GGUF models</option>
+</select>
+</div>
+<div>
+<label for="generation-gguf-clip-mode">Encoder layout</label>
+<select id="generation-gguf-clip-mode">
+<option value="dual">Dual encoder</option>
+<option value="single">Single encoder</option>
+</select>
+</div>
+</div>
+<div class="grid grid-3" style="margin-top:12px; gap:14px; align-items:end;">
+<div>
+<label for="generation-gguf-clip-type">Architecture</label>
+<select id="generation-gguf-clip-type">
+<option value="flux">Flux</option>
+<option value="sd3">SD3</option>
+<option value="sdxl">SDXL</option>
+<option value="stable_diffusion">Stable Diffusion</option>
+<option value="qwen_image">Qwen Image</option>
+</select>
+</div>
+<div>
+<label for="generation-gguf-clip-primary" id="generation-gguf-clip-primary-label">Encoder A</label>
+<select id="generation-gguf-clip-primary">
+<option value="">Connect ComfyUI to load encoders</option>
+</select>
+</div>
+<div id="generation-gguf-clip-secondary-wrap">
+<label for="generation-gguf-clip-secondary" id="generation-gguf-clip-secondary-label">Encoder B</label>
+<select id="generation-gguf-clip-secondary">
+<option value="">Choose the second encoder</option>
+</select>
+</div>
+</div>
+<div class="grid grid-2" style="margin-top:12px; gap:14px; align-items:end;">
+<div id="generation-gguf-guidance-wrap">
+<label for="generation-gguf-guidance">Flux guidance</label>
+<div class="slider-input-pair">
+<input id="generation-gguf-guidance" step="0.1" type="number" value="3.5"/>
+<input id="generation-gguf-guidance-range" max="10" min="0" step="0.1" type="range" value="3.5"/>
+</div>
+</div>
+<div>
+<div class="mini-note" id="generation-gguf-note">Flux is still the main GGUF target here, but Neo now tracks broader architecture families so the runtime shell stops pretending every GGUF setup is the same.</div>
+</div>
+</div>
+<div id="generation-gguf-validator" class="card-lite" style="margin-top:12px; padding:10px 12px; border:1px solid rgba(128,90,213,0.22); background:rgba(15,23,42,0.22);">
+<div class="row-between" style="gap:12px; align-items:flex-start;">
+<div>
+<div class="accordion-title" style="font-size:13px;">GGUF bundle check</div>
+<div class="muted small" id="generation-gguf-validator-summary">Pick a GGUF model family to see what Neo expects.</div>
+</div>
+<span class="badge" id="generation-gguf-validator-badge">Waiting</span>
+</div>
+<div id="generation-gguf-validator-lines" class="mini-note" style="margin-top:10px;"></div>
+</div>
+</div>
+<div class="grid grid-2" style="margin-top:14px;">
+<div>
+<label for="generation-sampler">Sampling method</label>
+<select id="generation-sampler">
+<option value="euler">Euler</option>
+</select>
+</div>
+<div>
+<label for="generation-scheduler">Schedule type</label>
+<select id="generation-scheduler">
+<option value="normal">Normal</option>
+</select>
+</div>
+</div>
+<div id="generation-res4lyf-status" class="card-lite" style="margin-top:10px; padding:10px 12px; border:1px solid rgba(128,90,213,0.22); background:rgba(15,23,42,0.22);">
+<div class="row-between" style="gap:12px; align-items:flex-start;">
+<div>
+<div class="accordion-title" style="font-size:13px;">RES4LYF sampler support</div>
+<div class="muted small" id="generation-res4lyf-summary">Waiting for ComfyUI catalog refresh.</div>
+<div class="mini-note" id="generation-res4lyf-details" style="margin-top:4px;">No workflow changes applied. Existing KSampler path remains active.</div>
+<div id="generation-res4lyf-presets" class="row-wrap" style="gap:6px; margin-top:8px; display:none;">
+<button type="button" class="btn ghost small" data-res4lyf-preset="balanced" id="generation-res4lyf-preset-balanced">RES Balanced</button>
+<button type="button" class="btn ghost small" data-res4lyf-preset="detail_slow" id="generation-res4lyf-preset-detail-slow">RES Detail Slow</button>
+<button type="button" class="btn ghost small" data-res4lyf-preset="experimental" id="generation-res4lyf-preset-experimental">RES Experimental</button>
+</div>
+<div class="mini-note" id="generation-res4lyf-preset-note" style="margin-top:5px; display:none;">Compatibility matrix active. Presets only switch sampler/scheduler values; unsafe routes stay blocked.</div>
+</div>
+<span class="badge is-disabled" id="generation-res4lyf-badge">RES4LYF: Checking</span>
+</div>
+</div>
+<div class="grid grid-2" style="gap:14px; align-content:start;">
+<div>
+<label for="generation-width">Width</label>
+<input id="generation-width" type="number" value="1024"/>
+</div>
+<div>
+<label for="generation-height">Height</label>
+<input id="generation-height" type="number" value="1024"/>
+</div>
+<div style="grid-column:1 / -1;">
+<label for="generation-size-preset">Size preset</label>
+<div class="generation-size-preset-row">
+<select id="generation-size-preset">
+<option value="custom">Custom size</option>
+</select>
+<button class="btn btn-small generation-icon-btn" id="btn-generation-size-swap" title="Swap width and height" type="button">↔️</button>
+<button class="btn btn-small generation-icon-btn" id="btn-generation-size-preset-add" title="Add the current width × height as a preset" type="button">➕</button>
+</div>
+<div class="mini-note" id="generation-size-preset-note">Pick a built-in SD 1.5 or SDXL friendly size, or save the current size as a custom preset.</div>
+</div>
+<div>
+<label for="generation-steps">Steps</label>
+<div class="slider-input-pair">
+<input id="generation-steps" type="number" value="28"/>
+<input id="generation-steps-range" max="150" min="1" step="1" type="range" value="28"/>
+</div>
+</div>
+<div id="generation-batch-size-wrap">
+<label for="generation-batch-size">Batch size</label>
+<input id="generation-batch-size" type="number" value="1"/>
+</div>
+<div>
+<label for="generation-cfg">CFG</label>
+<div class="slider-input-pair">
+<input id="generation-cfg" step="0.1" type="number" value="5.2"/>
+<input id="generation-cfg-range" max="30" min="1" step="0.1" type="range" value="5.2"/>
+</div>
+</div>
+
+<div id="generation-denoise-wrap">
+<label for="generation-denoise">Denoise</label>
+<div class="slider-input-pair">
+<input id="generation-denoise" step="0.01" type="number" value="1.0"/>
+<input id="generation-denoise-range" max="1" min="0" step="0.01" type="range" value="1.0"/>
+</div>
+</div>
+<div class="generation-dynamic-thresholding-card" id="generation-dynamic-thresholding-card" style="grid-column:1 / -1; border:1px solid var(--border, rgba(255,255,255,0.12)); border-radius:14px; padding:14px; margin-top:0; background:rgba(255,255,255,0.035); width:100%; box-sizing:border-box;">
+<div class="row-between" style="align-items:flex-start; gap:14px; margin-bottom:10px; flex-wrap:wrap;">
+<div style="min-width:240px; flex:1 1 420px;">
+<label for="generation-dynamic-thresholding-preset">CFG Fix / Dynamic Thresholding</label>
+<div class="mini-note" id="generation-dynamic-thresholding-note">SDXL-only CFG highlight control. Hidden for Flux/Qwen/Zimage families.</div>
+</div>
+<span class="badge" id="generation-dynamic-thresholding-status">Detecting</span>
+</div>
+<div class="grid grid-4 generation-dynamic-thresholding-controls" style="gap:12px; align-items:end; grid-template-columns:minmax(180px,1fr) minmax(150px,0.8fr) minmax(170px,0.8fr) minmax(220px,1fr);">
+<div>
+<label for="generation-dynamic-thresholding-preset">Preset</label>
+<select id="generation-dynamic-thresholding-preset">
+<option value="off">Off</option>
+<option value="safe">Safe detail</option>
+<option value="detail_push">Detail push</option>
+<option value="aggressive">Aggressive pop control</option>
+<option value="smart_auto">Smart auto</option>
+<option value="advanced">Custom / Advanced</option>
+</select>
+</div>
+<div>
+<label for="generation-dynamic-thresholding-mode">Mode</label>
+<select id="generation-dynamic-thresholding-mode">
+<option value="simple">Simple</option>
+<option value="full">Full</option>
+</select>
+</div>
+<div class="generation-dynamic-thresholding-spacer" aria-hidden="true"></div>
+<div class="generation-dynamic-thresholding-advanced" style="display:none; grid-column:1 / -1;">
+<div style="display:grid; gap:12px; grid-template-columns:minmax(120px,180px) minmax(150px,200px); align-items:end; max-width:410px;">
+<div>
+<label for="generation-dynamic-thresholding-mimic">Mimic CFG</label>
+<input id="generation-dynamic-thresholding-mimic" min="1" max="30" step="0.1" type="number" value="7.0" style="max-width:180px;"/>
+</div>
+<div>
+<label for="generation-dynamic-thresholding-percentile">Threshold percentile</label>
+<input id="generation-dynamic-thresholding-percentile" min="0.80" max="1.00" step="0.01" type="number" value="1.00" style="max-width:200px;"/>
+</div>
+</div>
+</div>
+<div style="grid-column:1 / -1; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+<label class="generation-toggle-pill" style="justify-content:center;"><input id="generation-dynamic-thresholding-customize" type="checkbox"/> Customize values</label>
+</div>
+<div style="grid-column:1 / -1; min-width:0;">
+<div class="mini-note" id="generation-dynamic-thresholding-summary" style="display:block; max-width:100%; white-space:normal; overflow-wrap:anywhere; line-height:1.35;">Off. Enable only when high CFG starts burning contrast.</div>
+</div>
+</div>
+
+</div>
+<div>
+<label for="generation-seed">Seed</label>
+<div class="seed-action-row" style="margin-top:8px;">
+<button aria-label="Randomize the seed" class="btn btn-small generation-icon-btn" id="btn-generation-seed-randomize" title="Randomize the seed" type="button">🎲</button>
+<button aria-label="Reuse the last used seed" class="btn btn-small generation-icon-btn" id="btn-generation-seed-reuse" title="Reuse the last used seed" type="button">♻️</button>
+<button aria-label="Seed is unlocked. Click to lock the current seed." class="btn btn-small generation-icon-btn" data-locked="false" id="btn-generation-seed-lock" title="Seed is unlocked. Click to lock the current seed." type="button">🔓</button>
+</div>
+<input id="generation-seed" style="margin-top:8px;" type="text" value="-1"/>
+</div>
+</div>
+<div class="panel neo-image-extension-host" data-neo-extension-slot="image.panel" data-neo-surface="image" data-neo-extension-mount="panel" style="margin-top:14px;">
+  <div class="row-between" style="align-items:flex-start; gap:12px;">
+    <div>
+      <div class="stat-title">Image extensions</div>
+      <div class="muted small">Enabled Image panel extensions mount here without editing the core Image UI.</div>
+    </div>
+    <span class="badge">External panels</span>
+  </div>
+</div>
+
+<div class="grid grid-1 generation-image-panel-grid" style="margin-top:14px;">
+<div class="generation-image-panel" id="generation-source-wrap">
+<div class="row-between" style="margin-bottom:8px;align-items:flex-start;">
+<div>
+<label for="generation-source-image">Source image</label>
+<div class="mini-note">For img2img, inpaint, and outpaint. In inpaint mode, use Edit Mask here and watch the saved mask overlay directly on this same source image. In outpaint mode, Neo auto-builds the expansion mask from your padding values.</div>
+</div>
+<div class="row" style="gap:6px;flex-wrap:wrap;">
+<button class="btn btn-small" id="btn-generation-source-edit-mask" type="button">Edit Mask</button>
+<button class="btn btn-small" id="btn-generation-source-outpaint-canvas" type="button">Outpaint Canvas</button>
+<button class="btn btn-small" id="btn-generation-source-clear-mask" type="button">Clear Mask</button>
+<button class="btn btn-small" id="btn-generation-source-replace" type="button">Replace</button>
+<button class="btn btn-small" id="btn-generation-source-clear" type="button">Clear Image</button>
+<button class="btn btn-small hidden" id="btn-generation-add-qwen-source-image" type="button">＋ Add source image</button>
+</div>
+</div>
+<input accept="image/*" class="hidden" id="generation-source-image" type="file"/>
+<div aria-label="Select a source image" class="generation-image-dropzone" id="generation-source-dropzone" role="button" tabindex="0">
+<div class="generation-image-empty" id="generation-source-empty">Drop a source image here or click to browse.</div>
+<div class="generation-preview-stack generation-source-preview-stack hidden" id="generation-source-preview-stack">
+<img alt="Source preview" class="generation-image-preview hidden" id="generation-source-preview"/>
+<img alt="Mask overlay" class="generation-source-mask-overlay hidden" id="generation-source-mask-overlay"/>
+</div>
+</div>
+<div class="mini-note generation-image-meta" id="generation-source-meta" style="margin-top:8px;">No source image selected.</div>
+<div class="card-lite hidden" id="generation-qwen-source-role-card" style="margin-top:12px; padding:12px; border:1px solid rgba(59,130,246,0.18); background:rgba(15,23,42,0.18);">
+<div class="row-between" style="gap:12px; flex-wrap:wrap; align-items:flex-start;">
+<div>
+<div class="stat-title">Source images</div>
+<div class="mini-note">image1 is the anchor. Add image2 and image3 only when they have a clear job.</div>
+</div>
+<div class="badge">Qwen</div>
+</div>
+<div style="margin-top:10px;">
+<label for="generation-qwen-source-role-1">Source image 1 role</label>
+<select id="generation-qwen-source-role-1">
+<option value="main_subject">Main subject</option>
+<option value="secondary_subject">Secondary subject</option>
+<option value="outfit_donor">Outfit donor</option>
+<option value="style_donor">Style donor</option>
+<option value="background_character">Background character</option>
+<option value="scene_reference">Scene reference</option>
+<option value="object_reference">Object / prop reference</option>
+</select>
+</div>
+<div class="mini-note" id="generation-qwen-source-role-summary" style="margin-top:8px;">Sample role map: image1 = main subject.</div>
+<div class="generation-dynamic-stack" id="generation-qwen-source-extra-list" style="margin-top:12px;"></div>
+</div>
+<div class="card-lite hidden" id="generation-qwen-thumb-card" style="margin-top:12px; padding:10px; border:1px solid rgba(148,163,184,0.16); background:rgba(15,23,42,0.16);">
+<div class="stat-title">Source order + thumbnails</div>
+<div class="mini-note" style="margin-top:6px;">Drag thumbnail cards to reorder priority. The top order becomes image1 → image2 → image3 inside Qwen. Click a card to replace that slot.</div>
+<div id="generation-qwen-source-thumb-strip" style="margin-top:10px; display:flex; flex-wrap:wrap; gap:10px;"></div>
+</div>
+<details class="card-lite hidden" id="generation-qwen-multi-source-card" style="margin-top:12px; padding:0; border:1px solid rgba(59,130,246,0.18); background:rgba(15,23,42,0.18);">
+<summary class="row-between" style="list-style:none; cursor:pointer; gap:12px; flex-wrap:wrap; align-items:flex-start; padding:12px;">
+<div>
+<div class="stat-title">Qwen multi-source references</div>
+<div class="mini-note">Qwen can use up to 3 source images through TextEncodeQwenImageEditPlus. Expand this only when you need the helper notes and presets.</div>
+</div>
+<div class="row" style="gap:8px; align-items:center;">
+<div class="badge">Up to 3</div>
+<span class="mini-note">Click to expand</span>
+</div>
+</summary>
+<div style="padding:0 12px 12px;">
+<div class="mini-note" id="generation-qwen-source-prompt-note" style="margin-top:8px;">Prompting tip: “Use the person from image1 as the main subject, the outfit from image2, and place the person from image3 in the background.” Be explicit when each image has a different job.</div>
+<div class="card-lite" style="margin-top:12px; padding:10px; border:1px solid rgba(148,163,184,0.16); background:rgba(15,23,42,0.16);">
+<div class="stat-title">Prompt helper</div>
+<div class="mini-note" style="margin-top:6px;">Best results usually come from naming what each image contributes. Keep each image on one main job when possible.</div>
+<div class="row" style="margin-top:10px; gap:8px; flex-wrap:wrap;">
+<button class="btn btn-small" id="btn-generation-qwen-insert-image-refs" type="button">Insert image1 / image2 / image3 refs</button>
+<button class="btn btn-small" id="btn-generation-qwen-build-sample-prompt" type="button">Build sample prompt</button>
+</div>
+<div class="mini-note" id="generation-qwen-prompt-helper-note" style="margin-top:8px;">Example: “Use the person from image1 as the main subject. Use the outfit from image2. Place the person from image3 in the background watching.”</div>
+</div>
+<div class="card-lite" style="margin-top:12px; padding:10px; border:1px solid rgba(148,163,184,0.16); background:rgba(15,23,42,0.16);">
+<div class="stat-title">Prompt preset templates</div>
+<div class="mini-note" style="margin-top:6px;">Use these when you want a cleaner starter prompt for common multi-image jobs instead of writing from scratch every time.</div>
+<div style="margin-top:10px;">
+<label for="generation-qwen-prompt-preset">Preset template</label>
+<select id="generation-qwen-prompt-preset">
+<option value="">Choose a preset…</option>
+<option value="two_character_scene">2-character scene</option>
+<option value="face_outfit_transfer">Face + outfit transfer</option>
+<option value="subject_background_witness">Subject + background witness</option>
+<option value="character_prop_reference">Character + prop reference</option>
+</select>
+</div>
+<div class="mini-note" id="generation-qwen-preset-summary" style="margin-top:8px;">Pick a preset to get a structured starter prompt for common Qwen multi-image setups.</div>
+<div class="card-lite" id="generation-qwen-smart-suggestion-card" style="margin-top:10px; padding:10px; border:1px solid rgba(59,130,246,0.16); background:rgba(2,6,23,0.22);">
+<div class="stat-title">Smart preset suggestion</div>
+<div style="margin-top:6px; font-weight:600;" id="generation-qwen-smart-title">Single-image mode active</div>
+<div class="mini-note" id="generation-qwen-smart-summary" style="margin-top:6px;">Only image1 is loaded right now, so multi-image presets are optional.</div>
+<div class="mini-note" id="generation-qwen-smart-recommendation" style="margin-top:6px;">Use image1 as the anchor. Add image2 or image3 only when you need a second subject, donor outfit, prop, or scene cue.</div>
+<div class="mini-note" id="generation-qwen-smart-refs" style="margin-top:6px;">Suggested refs: image1</div>
+<div class="row" style="margin-top:8px; gap:8px; flex-wrap:wrap;">
+<button class="btn btn-small" id="btn-generation-qwen-apply-smart-preset" type="button">Use suggested preset</button>
+</div>
+</div>
+<div class="row" style="margin-top:10px; gap:8px; flex-wrap:wrap;">
+<button class="btn btn-small" id="btn-generation-qwen-build-preset-prompt" type="button">Build preset prompt</button>
+</div>
+</div>
+</div>
+</details>
+<div style="margin-top:12px;">
+<label for="generation-source-resize-mode">Resize behavior</label>
+<select id="generation-source-resize-mode">
+<option value="native">Keep source size</option>
+<option value="fit">Fit to width &amp; height</option>
+<option value="crop">Crop to width &amp; height</option>
+<option value="stretch">Stretch to width &amp; height</option>
+</select>
+<div class="mini-note" style="margin-top:6px;">Saved with the workspace now, ready for deeper source-aware routing across img2img and outpaint.</div>
+<div class="card-lite" id="generation-image-preflight-card" style="margin-top:12px; padding:12px; border:1px solid rgba(59,130,246,0.18); background:rgba(15,23,42,0.18);">
+<div class="row-between" style="gap:12px; flex-wrap:wrap; align-items:flex-start;">
+<div>
+<div class="stat-title">Image Prep / Preflight</div>
+<div class="mini-note">Check source vs target size, then route the same source into the right prep lane without rebuilding the workflow by hand.</div>
+</div>
+<div class="badge" id="generation-preflight-badge">Idle</div>
+</div>
+<div class="mini-note" id="generation-preflight-summary" style="margin-top:8px;">Load a source image to compare it against the current target size.</div>
+<div id="generation-preflight-strip" style="margin-top:10px; display:flex; flex-wrap:wrap; gap:8px;"></div>
+<div class="mini-note" id="generation-preflight-warning" style="margin-top:8px;">Neo will suggest fit, crop, or outpaint based on the current source/target mismatch.</div>
+<div class="row" style="margin-top:12px; gap:8px; flex-wrap:wrap;">
+<button class="btn btn-small" id="btn-generation-preflight-fit" type="button">Fit to target</button>
+<button class="btn btn-small" id="btn-generation-preflight-crop" type="button">Crop to target</button>
+<button class="btn btn-small" id="btn-generation-preflight-outpaint" type="button">Open outpaint prep</button>
+<button class="btn btn-small" id="btn-generation-preflight-controlnet" type="button">Send to ControlNet</button>
+<button class="btn btn-small" id="btn-generation-preflight-output" type="button">Load as output preview</button>
+</div>
+</div>
+</div>
+</div>
+<div class="generation-image-panel" id="generation-mask-wrap">
+<div class="row-between" style="margin-bottom:8px;align-items:flex-start;">
+<div>
+<label for="generation-mask-image">Mask controls</label>
+<div class="mini-note">The actual masking now belongs to the same source image via <strong>Edit Mask</strong>. This panel just holds the settings and the optional raw mask override.</div>
+</div>
+</div>
+<div class="mini-note generation-image-meta" id="generation-mask-meta" style="margin-top:8px;">No mask image selected.</div>
+<details class="accordion-block generation-inline-accordion" data-accordion-id="generation-inpaint-controls" data-default-open="true" id="generation-inpaint-settings-wrap" open="" style="margin-top:12px;">
+<summary class="accordion-summary">
+<div>
+<div class="accordion-title">Inpaint controls</div>
+<div class="accordion-hint">Selection target, backend, composition guidance, and mask tuning for inpaint runs.</div>
+</div>
+<span aria-hidden="true" class="accordion-chevron">▾</span>
+</summary>
+<div class="accordion-body">
+<div class="grid grid-2">
+<div>
+<label for="generation-inpaint-backend">Inpaint backend</label>
+<select id="generation-inpaint-backend">
+<option value="standard">Standard</option>
+<option value="lanpaint">LanPaint</option>
+</select>
+<div class="mini-note" id="generation-inpaint-backend-note" style="margin-top:6px;">Standard keeps the classic latent inpaint path. Extra backends only appear when a live family branch actually supports them.</div>
+</div>
+<div class="card-lite is-hidden" id="generation-lanpaint-settings-panel" style="grid-column:1 / -1; margin-top:10px; padding:12px; border:1px solid rgba(14,165,233,0.22); background:rgba(14,165,233,0.055);">
+<div class="row-between" style="gap:10px; align-items:flex-start; flex-wrap:wrap;">
+<div>
+<div class="stat-title">LanPaint settings</div>
+<div class="mini-note" id="generation-lanpaint-status-note">Visible only for active LanPaint inpaint routes. These controls are payload-ready; workflow node wiring lands in the next integration phase.</div>
+</div>
+<span class="badge" id="generation-lanpaint-active-badge">Inactive</span>
+</div>
+<div class="form-grid compact" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:10px; align-items:end; margin-top:10px;">
+<div>
+<label for="generation-lanpaint-preset">LanPaint preset</label>
+<select id="generation-lanpaint-preset">
+<option value="custom">Custom</option>
+<option value="fast">Fast test</option>
+<option value="balanced" selected>Balanced</option>
+<option value="hard_repair">Hard repair</option>
+<option value="character_match">Character match</option>
+</select>
+</div>
+<div>
+<label for="generation-lanpaint-num-steps">Thinking depth</label>
+<input id="generation-lanpaint-num-steps" type="number" min="1" max="20" step="1" value="5"/>
+</div>
+<div>
+<label for="generation-lanpaint-prompt-mode">Prompt mode</label>
+<select id="generation-lanpaint-prompt-mode">
+<option value="Image First" selected>Image First</option>
+<option value="Prompt First">Prompt First</option>
+</select>
+</div>
+<div>
+<label for="generation-lanpaint-lambda">Content alignment</label>
+<input id="generation-lanpaint-lambda" type="number" min="0" max="50" step="0.1" value="6"/>
+</div>
+<div>
+<label for="generation-lanpaint-step-size">Step size</label>
+<input id="generation-lanpaint-step-size" type="number" min="0" max="10" step="0.01" value="0.25"/>
+</div>
+<div>
+<label for="generation-lanpaint-beta">Beta</label>
+<input id="generation-lanpaint-beta" type="number" min="0" max="50" step="0.1" value="1"/>
+</div>
+<div>
+<label for="generation-lanpaint-friction">Friction</label>
+<input id="generation-lanpaint-friction" type="number" min="0" max="100" step="0.1" value="12"/>
+</div>
+<div>
+<label for="generation-lanpaint-early-stop">Early stop</label>
+<input id="generation-lanpaint-early-stop" type="number" min="0" max="20" step="1" value="2"/>
+</div>
+</div>
+<div class="mini-note" id="generation-lanpaint-effective-note" style="margin-top:8px; line-height:1.45;">Balanced: depth 5, Image First, lambda 6, friction 12.</div>
+</div>
+<div id="generation-composition-guide-wrap">
+<label for="generation-composition-guide-type">Composition guide</label>
+<select id="generation-composition-guide-type">
+<option value="none">None</option>
+<option value="depth">Depth</option>
+<option value="pose">Pose</option>
+</select>
+<div class="mini-note" id="generation-composition-guide-note" style="margin-top:6px;">Composition guides stay hidden until a live backend branch exposes them.</div>
+</div>
+</div>
+<div id="generation-composition-source-wrap" style="margin-top:10px;">
+<label for="generation-composition-source-mode">Composition source</label>
+<select id="generation-composition-source-mode">
+<option value="source_image">Use source image</option>
+<option value="composition_image">Use composition image (image3)</option>
+</select>
+<div class="mini-note" style="margin-top:6px;">Use composition image when you loaded image3 as a dedicated scene / framing cue. If image3 is missing, Neo falls back to image1.</div>
+</div>
+<label for="generation-inpaint-target">Selection target</label>
+<select id="generation-inpaint-target">
+<option value="masked">Inpaint masked area</option>
+<option value="unmasked">Inpaint not masked</option>
+</select>
+<div style="margin-top:10px;">
+<label for="generation-inpaint-context">Context mode</label>
+<select id="generation-inpaint-context">
+<option value="full_image">Full image context</option>
+<option value="masked_focus">Masked region focus</option>
+</select>
+<div class="mini-note" style="margin-top:6px;">Full image keeps more scene awareness and only resamples the selected region. Masked region focus pushes harder inside the selection.</div>
+</div>
+<div style="margin-top:10px;">
+<label for="generation-grow-mask-by">Grow mask by</label>
+<input id="generation-grow-mask-by" max="128" min="0" type="number" value="6"/>
+</div>
+<div style="margin-top:10px;">
+<label for="generation-mask-feather">Mask feather</label>
+<input id="generation-mask-feather" max="64" min="0" type="number" value="0"/>
+<div class="mini-note" style="margin-top:6px;">White = repaint. Black = protect. Feather softens the mask edge. Grow mask expands the region during focused inpaint encoding.</div>
+</div>
+</div>
+</details>
+<details class="accordion-block generation-inline-accordion is-hidden" data-accordion-id="generation-outpaint-controls" data-default-open="true" id="generation-outpaint-wrap" open="" style="margin-top:12px;">
+<summary class="accordion-summary">
+<div>
+<div class="accordion-title">Outpaint controls</div>
+<div class="accordion-hint">Canvas expansion, anchor, padding, and blend settings for outpaint runs.</div>
+</div>
+<span aria-hidden="true" class="accordion-chevron">▾</span>
+</summary>
+<div class="accordion-body">
+<div class="mini-note" style="margin-bottom:8px;">Outpaint extends the canvas, auto-builds the expanded-area mask, and sends that straight into the Comfy outpaint flow.</div>
+<div class="grid grid-2">
+<div>
+<label for="generation-outpaint-preset">Target size preset</label>
+<select id="generation-outpaint-preset">
+<option value="custom">Custom / manual padding</option>
+<option value="896x1344">Portrait · 896 × 1344</option>
+<option value="1024x1536">Portrait · 1024 × 1536</option>
+<option value="1344x896">Landscape · 1344 × 896</option>
+<option value="1536x1024">Landscape · 1536 × 1024</option>
+<option value="1024x1024">Square · 1024 × 1024</option>
+</select>
+</div>
+<div>
+<label for="generation-outpaint-anchor">Anchor</label>
+<select id="generation-outpaint-anchor">
+<option value="center">Center</option>
+<option value="keep_bottom">Keep bottom</option>
+<option value="keep_top">Keep top</option>
+<option value="keep_left">Keep left</option>
+<option value="keep_right">Keep right</option>
+</select>
+</div>
+</div>
+<div class="mini-note" id="generation-outpaint-size-summary" style="margin-top:8px;">Load a source image, then pick a target preset to auto-calculate padding.</div>
+<div class="mini-note" id="generation-outpaint-size-warning" style="margin-top:6px;"></div>
+<div class="row" style="gap:8px;flex-wrap:wrap;margin-top:10px;">
+<button class="btn btn-small" id="btn-generation-outpaint-canvas-editor" type="button">Open visual canvas editor</button>
+<span class="mini-note" id="generation-outpaint-canvas-editor-state">Uses the source image and writes back to padding fields.</span>
+</div>
+<div class="grid grid-2" style="margin-top:10px;">
+<div>
+<label for="generation-outpaint-left">Pad left</label>
+<input id="generation-outpaint-left" max="2048" min="0" step="8" type="number" value="0"/>
+</div>
+<div>
+<label for="generation-outpaint-right">Pad right</label>
+<input id="generation-outpaint-right" max="2048" min="0" step="8" type="number" value="0"/>
+</div>
+<div>
+<label for="generation-outpaint-top">Pad top</label>
+<input id="generation-outpaint-top" max="2048" min="0" step="8" type="number" value="0"/>
+</div>
+<div>
+<label for="generation-outpaint-bottom">Pad bottom</label>
+<input id="generation-outpaint-bottom" max="2048" min="0" step="8" type="number" value="0"/>
+</div>
+</div>
+<div class="mini-note" style="margin-top:6px;">Preset mode auto-fills these values. Switch back to Custom if you want to hand-tune the padding.</div>
+<div style="margin-top:10px;">
+<label for="generation-outpaint-feather">Feather / blend</label>
+<input id="generation-outpaint-feather" max="512" min="0" type="number" value="24"/>
+<div class="mini-note" style="margin-top:6px;">Higher values smooth the seam between the original image and the newly expanded canvas before sampling.</div>
+</div>
+</div>
+</details>
+<details class="accordion-block generation-inline-accordion" data-accordion-id="generation-mask-raw-upload" data-default-open="false" id="generation-mask-raw-accordion" style="margin-top:12px;">
+<summary class="accordion-summary">
+<div>
+<div class="accordion-title">Advanced raw mask override</div>
+<div class="accordion-hint">Only use this if you already have a prepared black/white mask file that lines up with the source image.</div>
+</div>
+<span aria-hidden="true" class="accordion-chevron">▾</span>
+</summary>
+<div class="accordion-body">
+<div class="row" style="gap:6px;flex-wrap:wrap;margin-bottom:10px;">
+<button class="btn btn-small" id="btn-generation-mask-replace" type="button">Replace</button>
+<button class="btn btn-small" id="btn-generation-mask-clear" type="button">Clear</button>
+</div>
+<input accept="image/*" class="hidden" id="generation-mask-image" type="file"/>
+<div aria-label="Select a mask image" class="generation-image-dropzone generation-mask-raw-dropzone" id="generation-mask-dropzone" role="button" tabindex="0">
+<div class="generation-image-empty" id="generation-mask-empty">Drop a prepared black/white mask here only if you want to override the mask editor result.</div>
+<img alt="Mask preview" class="generation-image-preview hidden" id="generation-mask-preview"/>
+</div>
+</div>
+</details>
+</div>
+</div>
+
+
+<div id="generation-finish-stack-foundation-host" style="margin-top:14px;"></div>
+<details class="accordion-block generation-inline-accordion" data-accordion-id="generation-hires-settings" data-default-open="false" style="margin-top:14px;">
+<summary class="accordion-summary">
+<div>
+<div class="accordion-title">Upscale Lab</div>
+<div class="accordion-hint">Final polish lane for larger delivery sizes. Pick an Upscale Lab profile, then fine-tune the preserve-first upscale/refine pass or route into SUPIR below for heavier restoration.</div>
+</div>
+<span aria-hidden="true" class="accordion-chevron">▾</span>
+</summary>
+<div class="accordion-body">
+<div class="grid grid-4">
+<div>
+<label for="generation-refine-profile">Upscale Lab profile</label>
+<select id="generation-refine-profile">
+<option value="custom">Custom</option>
+<option value="gentle_polish">Gentle polish</option>
+<option value="balanced_finish">Balanced finish</option>
+<option value="detail_push">Detail push</option>
+<option value="bigger_finish">Bigger finish</option>
+</select>
+</div>
+<div>
+<label for="generation-refine-enabled">Enable Upscale Lab</label>
+<select id="generation-refine-enabled">
+<option value="false">Off</option>
+<option value="true">On</option>
+</select>
+</div>
+<div>
+<label for="generation-refine-strategy">Upscale strategy</label>
+<select id="generation-refine-strategy">
+<option value="standard">Preserve-first Hi-Res</option>
+<option value="qwen_reedit">Qwen Re-Edit</option>
+</select>
+</div>
+<div>
+<label for="generation-refine-mode">Highres mode</label>
+<select id="generation-refine-mode">
+<option value="latent">Latent upscale + refine</option>
+<option value="image_upscale">Image upscale + preserve</option>
+</select>
+</div>
+<div>
+<label for="generation-refine-resize-method">Resize method</label>
+<select id="generation-refine-resize-method">
+<option value="lanczos">Lanczos</option>
+<option value="bicubic">Bicubic</option>
+<option value="bilinear">Bilinear</option>
+<option value="area">Area</option>
+<option value="nearest-exact">Nearest exact</option>
+</select>
+</div>
+<div id="generation-refine-upscaler-wrap">
+<label for="generation-refine-upscaler">Upscaler model</label>
+<select id="generation-refine-upscaler">
+<option value="">Interpolation only</option>
+</select>
+</div>
+<div>
+<label for="generation-refine-scale">Upscale amount</label>
+<div class="slider-input-pair">
+<input id="generation-refine-scale" step="0.05" type="number" value="1.5"/>
+<input id="generation-refine-scale-range" max="4" min="1.1" step="0.05" type="range" value="1.5"/>
+</div>
+</div>
+<div>
+<label for="generation-refine-steps">Second pass steps</label>
+<div class="slider-input-pair">
+<input id="generation-refine-steps" step="1" type="number" value="12"/>
+<input id="generation-refine-steps-range" max="80" min="4" step="1" type="range" value="12"/>
+</div>
+</div>
+<div>
+<label for="generation-refine-denoise">Second pass denoise</label>
+<div class="slider-input-pair">
+<input id="generation-refine-denoise" step="0.01" type="number" value="0.12"/>
+<input id="generation-refine-denoise-range" max="0.95" min="0.05" step="0.01" type="range" value="0.12"/>
+</div>
+</div>
+<div>
+<label for="generation-refine-cfg">Second pass CFG</label>
+<input id="generation-refine-cfg" step="0.1" type="number" value="5.2"/>
+</div>
+<div>
+<label for="generation-refine-sampler">Second pass sampler</label>
+<select id="generation-refine-sampler">
+<option value="">Reuse main sampler</option>
+</select>
+</div>
+<div>
+<label for="generation-refine-scheduler">Second pass scheduler</label>
+<select id="generation-refine-scheduler">
+<option value="">Reuse main scheduler</option>
+</select>
+</div>
+<div>
+<label for="generation-refine-tiled-vae">Tiled VAE safety</label>
+<select id="generation-refine-tiled-vae">
+<option value="true">On</option>
+<option value="false">Off</option>
+</select>
+</div>
+<div>
+<label for="generation-refine-tile-size">Tile size</label>
+<input id="generation-refine-tile-size" max="4096" min="64" step="64" type="number" value="512"/>
+</div>
+<div>
+<label for="generation-refine-tile-overlap">Tile overlap</label>
+<input id="generation-refine-tile-overlap" max="1024" min="0" step="32" type="number" value="64"/>
+</div>
+<div class="mini-note" id="generation-refine-lab-summary" style="grid-column:1 / -1;">Upscale Lab is off. Turn it on when the base image already works and you just want a cleaner larger finish.</div>
+<div class="mini-note" style="grid-column:1 / -1;">Latent mode is lighter and faster. Image-upscale mode now prefers a preserve-first Ultimate SD Upscale workflow when the backend supports it; otherwise Neo falls back to decode → upscale/interpolate → re-encode → second sampler pass. Tiled VAE keeps larger sizes from eating your VRAM alive. SUPIR below is the heavier restoration route.</div>
+</div>
+</div>
+</details>
+<details class="accordion-block generation-inline-accordion" data-accordion-id="generation-image-upscale-settings" data-default-open="false" style="margin-top:14px;">
+<summary class="accordion-summary">
+<div>
+<div class="accordion-title">Image Upscale</div>
+<div class="accordion-hint">Finish-stage pixel upscale for single images or uploaded batches. Use this after the composition already works and you want a cleaner delivery-size export without another full redraw pass.</div>
+</div>
+<span aria-hidden="true" class="accordion-chevron">▾</span>
+</summary>
+<div class="accordion-body">
+<div class="grid grid-4">
+<div>
+<label for="generation-image-upscale-profile">Image Upscale preset</label>
+<select id="generation-image-upscale-profile">
+<option value="custom">Custom</option>
+<option value="preserve_2x">Preserve 2×</option>
+<option value="preserve_4x">Preserve 4×</option>
+<option value="portrait_restore_2x">Portrait restore 2×</option>
+</select>
+</div>
+<div>
+<label for="generation-image-upscale-model">Upscale model</label>
+<select id="generation-image-upscale-model">
+<option value="">Interpolation only</option>
+</select>
+</div>
+<div>
+<label for="generation-image-upscale-scale">Target scale</label>
+<input id="generation-image-upscale-scale" max="8" min="0.25" step="0.05" type="number" value="2.0"/>
+</div>
+<div>
+<label for="generation-image-upscale-resize-method">Resize method</label>
+<select id="generation-image-upscale-resize-method">
+<option value="lanczos">Lanczos</option>
+<option value="bicubic">Bicubic</option>
+<option value="bilinear">Bilinear</option>
+<option value="area">Area</option>
+<option value="nearest-exact">Nearest exact</option>
+</select>
+</div>
+<div>
+<label for="generation-image-upscale-restore-assist">Restore assist</label>
+<select id="generation-image-upscale-restore-assist">
+<option value="off">Off</option>
+<option value="codeformer">CodeFormer</option>
+</select>
+</div>
+<div id="generation-image-upscale-restore-model-wrap">
+<label for="generation-image-upscale-restore-model">Restore model</label>
+<select id="generation-image-upscale-restore-model">
+<option value="">Choose CodeFormer model</option>
+</select>
+</div>
+<div id="generation-image-upscale-restore-fidelity-wrap">
+<label for="generation-image-upscale-restore-fidelity">CodeFormer fidelity</label>
+<input id="generation-image-upscale-restore-fidelity" max="1" min="0" step="0.05" type="number" value="0.65"/>
+</div>
+<div id="generation-image-upscale-restore-detection-wrap">
+<label for="generation-image-upscale-restore-detection">Face detection</label>
+<select id="generation-image-upscale-restore-detection">
+<option value="retinaface_resnet50">RetinaFace ResNet50</option>
+<option value="retinaface_mobile0.25">RetinaFace Mobile0.25</option>
+<option value="YOLOv5l">YOLOv5l</option>
+<option value="YOLOv5n">YOLOv5n</option>
+</select>
+</div>
+<div style="grid-column:1 / -1;">
+<label for="generation-image-upscale-batch-files">Batch source images</label>
+<input accept="image/*" id="generation-image-upscale-batch-files" multiple="" type="file"/>
+<div class="mini-note" id="generation-image-upscale-batch-note" style="margin-top:8px;">Use the selected result button for single-image finishing. If no result is selected but exactly one image is uploaded here, that button will use the uploaded image. Upload multiple files for a batch upscale pass.</div>
+</div>
+<div class="row" style="grid-column:1 / -1; gap:8px; flex-wrap:wrap;">
+<button class="btn btn-small btn-primary" id="btn-generation-image-upscale-selected" type="button">⬆️ Upscale selected result</button>
+<button class="btn btn-small" id="btn-generation-image-upscale-batch" type="button">🗂️ Run uploaded batch</button>
+</div>
+<div class="mini-note" id="generation-image-upscale-summary" style="grid-column:1 / -1;">Image Upscale is ready. Pick a model for preserve-first scaling, then optionally add CodeFormer for face cleanup on portraits.</div>
+</div>
+</div>
+</details>
+<details class="accordion-block generation-inline-accordion" data-accordion-id="generation-supir-settings" data-default-open="false" style="margin-top:14px;">
+<summary class="accordion-summary">
+<div>
+<div class="accordion-title">SUPIR Restoration</div>
+<div class="accordion-hint">Optional final restoration pass when you want stronger cleanup than the standard Upscale Lab pass. This route is heavier, slower, and best saved for late-stage work.</div>
+</div>
+<span aria-hidden="true" class="accordion-chevron">▾</span>
+</summary>
+<div class="accordion-body">
+<div class="grid grid-4">
+<div>
+<label for="generation-supir-enabled">Enable SUPIR</label>
+<select id="generation-supir-enabled">
+<option value="false">Off</option>
+<option value="true">On</option>
+</select>
+</div>
+<div>
+<label for="generation-supir-model">SUPIR model</label>
+<select id="generation-supir-model">
+<option value="">Choose SUPIR checkpoint</option>
+</select>
+</div>
+<div>
+<label for="generation-supir-sdxl-model">SDXL model</label>
+<select id="generation-supir-sdxl-model">
+<option value="">Choose SDXL checkpoint</option>
+</select>
+</div>
+<div>
+<label for="generation-supir-scale">Upscale amount</label>
+<input id="generation-supir-scale" step="0.05" type="number" value="1.5"/>
+</div>
+<div>
+<label for="generation-supir-steps">Steps</label>
+<input id="generation-supir-steps" step="1" type="number" value="45"/>
+</div>
+<div>
+<label for="generation-supir-restoration-scale">Restoration scale</label>
+<input id="generation-supir-restoration-scale" step="0.1" type="number" value="-1"/>
+</div>
+<div>
+<label for="generation-supir-cfg-scale">CFG scale</label>
+<input id="generation-supir-cfg-scale" step="0.05" type="number" value="4.0"/>
+</div>
+<div>
+<label for="generation-supir-control-scale">Control scale</label>
+<input id="generation-supir-control-scale" step="0.05" type="number" value="1.0"/>
+</div>
+<div>
+<label for="generation-supir-color-fix-type">Color fix</label>
+<select id="generation-supir-color-fix-type">
+<option value="Wavelet">Wavelet</option>
+<option value="AdaIn">AdaIn</option>
+<option value="None">None</option>
+</select>
+</div>
+<div>
+<label for="generation-supir-tiled-vae">Use tiled VAE</label>
+<select id="generation-supir-tiled-vae">
+<option value="true">On</option>
+<option value="false">Off</option>
+</select>
+</div>
+<div>
+<label for="generation-supir-encoder-tile-size">Encoder tile size</label>
+<input id="generation-supir-encoder-tile-size" max="8192" min="64" step="64" type="number" value="512"/>
+</div>
+<div>
+<label for="generation-supir-decoder-tile-size">Decoder tile size</label>
+<input id="generation-supir-decoder-tile-size" max="8192" min="32" step="64" type="number" value="64"/>
+</div>
+<div style="grid-column:1 / -1;">
+<label for="generation-supir-a-prompt">SUPIR positive / quality prompt</label>
+<textarea id="generation-supir-a-prompt" rows="2">high quality, detailed</textarea>
+</div>
+<div style="grid-column:1 / -1;">
+<label for="generation-supir-n-prompt">SUPIR negative prompt</label>
+<textarea id="generation-supir-n-prompt" rows="2">bad quality, blurry, messy</textarea>
+</div>
+<div class="mini-note" style="grid-column:1 / -1;">This runs as a final image-stage restoration pass after the regular generation pipeline when a compatible SUPIR route is available.</div>
+</div>
+</div>
+</details>
+<details class="accordion-block generation-inline-accordion" data-accordion-id="generation-lora-settings" data-default-open="false" style="margin-top:14px;">
+<summary class="accordion-summary">
+<div>
+<div class="accordion-title">LoRA settings</div>
+<div class="accordion-hint">Add LoRAs from the library below and keep the stack order clean.</div>
+</div>
+<span aria-hidden="true" class="accordion-chevron">▾</span>
+</summary>
+<div class="accordion-body">
+<div aria-hidden="true" class="hidden">
+<input checked="" id="generation-lora-enabled" type="checkbox"/>
+<select id="generation-lora-name" onchange="window.NeoStudioApp?.generation?.library?.inspectLoraFromSelect?.(this)"><option value="">None</option></select>
+<input id="generation-lora-strength" step="0.05" type="number" value="0.8"/>
+<div id="generation-lora-primary-summary"></div>
+</div>
+<div class="accordion-hint" style="margin-bottom:10px;">LoRAs are added from the library below to keep the workflow clean and avoid duplicate entry points.</div>
+<div class="generation-dynamic-stack" id="generation-lora-extra-list"></div>
+<div class="generation-lora-library-shell" id="generation-lora-library-shell" style="margin-top:14px;">
+<div class="generation-lora-library-topbar">
+<div>
+<div class="generation-unit-title">LoRA library details</div>
+<div class="accordion-hint">Scan your LoRA folder, inspect the selected LoRA, click trigger/keyword chips to send them to the main prompt, and only unlock editing when you actually want to modify metadata.</div>
+</div>
+<div class="generation-lora-library-actions">
+<button class="btn btn-small generation-toolbar-icon-btn" id="btn-generation-lora-library-edit" title="Edit / modify the selected LoRA metadata" type="button">✏️</button>
+<button class="btn btn-small generation-toolbar-icon-btn" disabled="" id="btn-generation-lora-library-save" title="Update the selected LoRA metadata" type="button">💾</button>
+<button class="btn btn-small generation-toolbar-icon-btn" disabled="" id="btn-generation-lora-library-pull" title="Pull tags and preview data from CivitAI" type="button">🌐</button>
+</div>
+</div>
+<div class="grid grid-4" style="margin-top:12px; align-items:end;">
+<div>
+<label for="generation-lora-library-dir">LoRA folder scan path</label>
+<input id="generation-lora-library-dir" placeholder="Path to your LoRA folder" type="text"/>
+</div>
+<div>
+<label for="generation-lora-library-search">Search LoRA library</label>
+<input id="generation-lora-library-search" placeholder="portrait, anime, skin detail..." type="text"/>
+</div>
+<div>
+<label for="generation-lora-library-select">Saved LoRA metadata</label>
+<select id="generation-lora-library-select" onchange="window.NeoStudioApp?.generation?.library?.loadLoraLibraryRecordBySelect?.(this)"><option value="">Pick a scanned LoRA</option></select>
+</div>
+<div class="generation-lora-library-actions generation-lora-library-actions-compact">
+<button class="btn btn-small" id="btn-generation-lora-library-add-to-workflow" onclick="window.NeoStudioApp?.generation?.library?.addSelectedLibraryLoraToWorkflow?.()" title="Add the selected library LoRA into the workflow stack" type="button">＋ Add LoRA</button>
+<button class="btn btn-small generation-toolbar-icon-btn" id="btn-generation-lora-library-scan" title="Scan the LoRA folder into the metadata database" type="button">🔎</button>
+<button class="btn btn-small generation-toolbar-icon-btn" id="btn-generation-lora-library-refresh" title="Refresh the saved LoRA browser" type="button">↻</button>
+</div>
+</div>
+<input id="generation-lora-library-id" type="hidden"/>
+<div class="generation-lora-library-grid" style="margin-top:14px;">
+<div class="generation-lora-library-preview-shell">
+<button class="generation-lora-library-preview-card" id="btn-generation-lora-library-preview" title="Click to zoom preview" type="button">
+<img alt="LoRA preview" id="generation-lora-library-preview"/>
+<span class="generation-lora-library-preview-empty" id="generation-lora-library-preview-empty">Select a scanned LoRA to show its preview here.</span>
+</button>
+<div class="generation-lora-library-actions generation-lora-library-actions-compact generation-lora-preview-nav" style="justify-content:center;">
+<button class="btn btn-small generation-toolbar-icon-btn" id="btn-generation-lora-library-preview-prev" title="Previous preview" type="button">←</button>
+<div class="mini-note generation-lora-preview-count" id="generation-lora-library-preview-count">0 / 0</div>
+<button class="btn btn-small generation-toolbar-icon-btn" id="btn-generation-lora-library-preview-next" title="Next preview" type="button">→</button>
+</div>
+<div class="mini-note" id="generation-lora-library-preview-note" style="margin-top:10px;">No LoRA selected yet.</div>
+</div>
+<div class="generation-lora-library-form">
+<div class="grid grid-3">
+<div>
+<label for="generation-lora-library-name">LoRA name</label>
+<input id="generation-lora-library-name" readonly="" type="text"/>
+</div>
+<div>
+<label for="generation-lora-library-base-model">Base model</label>
+<input id="generation-lora-library-base-model" readonly="" type="text"/>
+</div>
+<div>
+<label for="generation-lora-library-style-category">Style / category</label>
+<input id="generation-lora-library-style-category" readonly="" type="text"/>
+</div>
+</div>
+<div class="grid grid-3" style="margin-top:12px;">
+<div>
+<label for="generation-lora-library-strength">Default strength</label>
+<input id="generation-lora-library-strength" max="2" min="0" readonly="" step="0.05" type="number" value="0.8"/>
+</div>
+<div>
+<label for="generation-lora-library-min-strength">Recommended min</label>
+<input id="generation-lora-library-min-strength" max="2" min="0" readonly="" step="0.05" type="number" value="0.6"/>
+</div>
+<div>
+<label for="generation-lora-library-max-strength">Recommended max</label>
+<input id="generation-lora-library-max-strength" max="2" min="0" readonly="" step="0.05" type="number" value="1.0"/>
+</div>
+</div>
+<div style="margin-top:12px;">
+<label for="generation-lora-library-civitai-url">CivitAI link</label>
+<input id="generation-lora-library-civitai-url" placeholder="https://civitai.com/models/..." readonly="" type="text"/>
+</div>
+<div style="margin-top:12px;">
+<label for="generation-lora-library-triggers">Trigger words (CSV)</label>
+<input id="generation-lora-library-triggers" readonly="" type="text"/>
+<div class="generation-lora-chip-wrap" id="generation-lora-library-trigger-chips" style="margin-top:8px;"></div>
+</div>
+</div>
+<div style="grid-column:1 / -1; margin-top:4px;">
+<label for="generation-lora-library-keywords">Keywords / tags (CSV)</label>
+<textarea id="generation-lora-library-keywords" readonly="" rows="4" style="width:100%;"></textarea>
+<div class="generation-lora-chip-wrap" id="generation-lora-library-keyword-chips" style="margin-top:8px;"></div>
+</div>
+<div class="generation-lora-library-option-shell" style="margin-top:12px;">
+<div class="grid grid-2 generation-lora-library-option-grid" style="align-items:end; gap:12px;">
+<div>
+<label for="generation-lora-library-prompt-option-select">Prompt option</label>
+<select id="generation-lora-library-prompt-option-select"><option value="">Default sample prompt</option></select>
+</div>
+<div>
+<label for="generation-lora-library-prompt-option-name">Option name</label>
+<input id="generation-lora-library-prompt-option-name" placeholder="Outfit A / Close-up / Smile" readonly="" type="text"/>
+</div>
+</div>
+<div class="generation-lora-library-actions generation-lora-library-actions-compact generation-lora-library-option-toolbar" style="margin-top:10px; justify-content:flex-start;">
+<button class="btn btn-small" id="btn-generation-lora-library-prompt-load" title="Load the selected prompt option into the sample prompt box" type="button">Load option</button>
+<button class="btn btn-small" disabled="" id="btn-generation-lora-library-prompt-save-option" title="Save the current sample prompt as a new option" type="button">＋ Save option</button>
+<button class="btn btn-small" disabled="" id="btn-generation-lora-library-prompt-update-option" title="Update the selected prompt option" type="button">💾 Update option</button>
+<button class="btn btn-small" disabled="" id="btn-generation-lora-library-prompt-delete-option" title="Delete the selected prompt option" type="button">🗑️</button>
+</div>
+<label for="generation-lora-library-example" style="margin-top:12px;">Sample prompt</label>
+<textarea id="generation-lora-library-example" placeholder="Load a LoRA to show its sample prompt..." readonly="" rows="4"></textarea>
+<div class="generation-lora-library-actions generation-lora-library-actions-compact generation-lora-library-example-toolbar" style="margin-top:8px; justify-content:flex-start;">
+<button class="btn btn-small" id="btn-generation-lora-library-append-example" title="Append the sample prompt to the main prompt" type="button">Append example to prompt</button>
+<button class="btn btn-small" id="btn-generation-lora-library-replace-example" title="Replace the main prompt with the sample prompt" type="button">Replace prompt</button>
+</div>
+</div>
+</div>
+<div class="generation-lora-progress-shell hidden" id="generation-lora-library-progress-shell" style="margin-top:12px;">
+<div class="generation-progress-meta"><span id="generation-lora-library-progress-label">Working…</span><span id="generation-lora-library-progress-note">Please wait</span></div>
+<div class="generation-progress-track generation-lora-progress-track"><div class="generation-progress-bar generation-lora-progress-bar-indeterminate"></div></div>
+</div>
+<div class="status" id="generation-lora-library-status" style="margin-top:12px;"></div>
+</div>
+</div>
+</details>
+<details class="accordion-block generation-inline-accordion" data-accordion-id="generation-ti-settings" data-default-open="false" style="margin-top:14px;">
+<summary class="accordion-summary">
+<div>
+<div class="accordion-title">Embeddings</div>
+<div class="accordion-hint">Keep textual inversions separate from LoRAs and insert the token into the positive or negative prompt only when needed.</div>
+</div>
+<span aria-hidden="true" class="accordion-chevron">▾</span>
+</summary>
+<div class="accordion-body">
+<div class="grid grid-4" style="align-items:end;">
+<div class="generation-pass-target-field">
+<label for="generation-ti-helper-target">Send TI helper tokens to</label>
+<select id="generation-ti-helper-target">
+<option value="both">Base + Finish</option>
+<option value="base">Base pass only</option>
+<option value="finish">Finish / redraw only</option>
+</select>
+</div>
+<div>
+<label for="generation-ti-library-dir">TI folder scan path</label>
+<input id="generation-ti-library-dir" placeholder="Path to your embeddings folder" type="text"/>
+</div>
+<div>
+<label for="generation-ti-library-search">Search TI library</label>
+<input id="generation-ti-library-search" placeholder="skin detail, anime eyes, negative embed..." type="text"/>
+</div>
+<div>
+<label for="generation-ti-library-select">Saved TI metadata</label>
+<select id="generation-ti-library-select"><option value="">Pick a scanned TI</option></select>
+</div>
+<div class="generation-lora-library-actions generation-lora-library-actions-compact">
+<button class="btn btn-small generation-toolbar-icon-btn" id="btn-generation-ti-library-scan" title="Scan the embeddings folder into the metadata database" type="button">🔎</button>
+<button class="btn btn-small generation-toolbar-icon-btn" id="btn-generation-ti-library-refresh" title="Refresh the saved TI browser" type="button">↻</button>
+</div>
+</div>
+<input id="generation-ti-library-id" type="hidden"/>
+<div class="grid grid-2" style="margin-top:14px; gap:12px;">
+<div>
+<label for="generation-ti-base-positive">Base pass TI · positive</label>
+<textarea id="generation-ti-base-positive" placeholder="Stage TI tokens for the first pass positive prompt..." rows="2"></textarea>
+</div>
+<div>
+<label for="generation-ti-base-negative">Base pass TI · negative</label>
+<textarea id="generation-ti-base-negative" placeholder="Stage TI tokens for the first pass negative prompt..." rows="2"></textarea>
+</div>
+<div>
+<label for="generation-ti-finish-positive">Finish pass TI · positive</label>
+<textarea id="generation-ti-finish-positive" placeholder="Stage TI tokens for the redraw / finish positive prompt..." rows="2"></textarea>
+</div>
+<div>
+<label for="generation-ti-finish-negative">Finish pass TI · negative</label>
+<textarea id="generation-ti-finish-negative" placeholder="Stage TI tokens for the redraw / finish negative prompt..." rows="2"></textarea>
+</div>
+</div>
+<div class="mini-note" style="margin-top:10px;">Base tokens stay in the first pass only. Finish tokens only join redraw / highres style passes. Use Base + Finish if you want the helper buttons to stage the token into both stacks.</div>
+<div class="generation-lora-library-grid" style="margin-top:14px;">
+<div class="generation-lora-library-preview-shell">
+<button class="generation-lora-library-preview-card" id="btn-generation-ti-library-preview" title="Click to zoom preview" type="button">
+<img alt="TI preview" id="generation-ti-library-preview"/>
+<span class="generation-lora-library-preview-empty" id="generation-ti-library-preview-empty">Select a scanned TI to show its preview here.</span>
+</button>
+<div class="mini-note" id="generation-ti-library-preview-note" style="margin-top:10px;">No TI selected yet.</div>
+</div>
+<div class="generation-lora-library-form">
+<div class="grid grid-3">
+<div>
+<label for="generation-ti-library-name">Embedding name</label>
+<input id="generation-ti-library-name" readonly="" type="text"/>
+</div>
+<div>
+<label for="generation-ti-library-token">Prompt token</label>
+<input id="generation-ti-library-token" readonly="" type="text"/>
+</div>
+<div>
+<label for="generation-ti-library-base-model">Base model</label>
+<input id="generation-ti-library-base-model" readonly="" type="text"/>
+</div>
+</div>
+<div style="margin-top:12px;">
+<label for="generation-ti-library-file">Embedding path</label>
+<input id="generation-ti-library-file" readonly="" type="text"/>
+</div>
+<div style="margin-top:12px;">
+<label for="generation-ti-library-keywords">Keywords / notes</label>
+<textarea id="generation-ti-library-keywords" readonly="" rows="3"></textarea>
+</div>
+<div style="margin-top:12px;">
+<label for="generation-ti-library-example">Example prompt</label>
+<textarea id="generation-ti-library-example" placeholder="Load a TI to show its sample prompt..." readonly="" rows="4"></textarea>
+</div>
+<div class="mini-note" id="generation-ti-library-presence" style="margin-top:10px;">Detected in: Not used</div>
+<div class="generation-lora-library-actions generation-lora-library-actions-compact" style="margin-top:10px; justify-content:flex-start;">
+<button class="btn btn-small generation-ti-helper-btn" id="btn-generation-ti-append-positive" title="Append this TI token to the positive prompt" type="button">＋ Positive</button>
+<button class="btn btn-small generation-ti-helper-btn" id="btn-generation-ti-append-negative" title="Append this TI token to the negative prompt" type="button">－ Negative</button>
+</div>
+</div>
+</div>
+<div class="status" id="generation-ti-library-status" style="margin-top:12px;"></div>
+</div>
+</details>
+<details class="accordion-block generation-inline-accordion" data-accordion-id="generation-detailer-settings" data-default-open="false" style="margin-top:14px;">
+<summary class="accordion-summary">
+<div>
+<div class="accordion-title">Selective Repair (ADetailer)</div>
+<div class="accordion-hint">Generic detector + detailer shell for Impact Pack style passes. Shared defaults stay separate, while each pass focuses on its own target logic.</div>
+</div>
+<span aria-hidden="true" class="accordion-chevron">▾</span>
+</summary>
+<div class="accordion-body">
+<div class="row-between" style="gap:12px; align-items:flex-start; flex-wrap:wrap;">
+<div>
+<div class="mini-note">This pass scans your available detector and SAM folders, then stores the selective-repair config in the generation payload.</div>
+<div class="mini-note" id="generation-detailer-model-meta" style="margin-top:6px;">No detailer model scan yet.</div>
+</div>
+<div class="row" style="gap:8px; flex-wrap:wrap;">
+<label class="generation-toggle-pill"><input id="generation-detailer-enabled" type="checkbox"/> Enabled</label>
+<button class="btn btn-small" id="btn-generation-detailer-refresh" type="button">Refresh models</button>
+</div>
+</div>
+<div class="card-lite" style="margin-top:14px;">
+<div class="accordion-title" style="font-size:14px;">Shared defaults</div>
+<div class="accordion-hint">These settings affect the whole detailer stack. Keep them here instead of repeating them inside every pass card.</div>
+<div class="grid grid-2" style="margin-top:14px; gap:12px;">
+<div>
+<label for="generation-detailer-custom-detector-root">Custom detector path</label>
+<input id="generation-detailer-custom-detector-root" placeholder="E:\01. AI Modals\models\adetailer" type="text"/>
+</div>
+<div>
+<label for="generation-detailer-custom-sam-root">Custom SAM path</label>
+<input id="generation-detailer-custom-sam-root" placeholder="Leave blank to use ComfyUI\models\sams" type="text"/>
+</div>
+</div>
+<div class="row" style="margin-top:10px; gap:8px; flex-wrap:wrap; align-items:end;">
+<div>
+<label for="generation-detailer-sam-preset">SAM preset</label>
+<select id="generation-detailer-sam-preset">
+<option value="">Pick SAM preset…</option>
+<option value="vit_b">SAM ViT-B</option>
+<option value="vit_l">SAM ViT-L</option>
+<option value="vit_h">SAM ViT-H</option>
+</select>
+</div>
+<button class="btn btn-small" id="btn-generation-detailer-download-sam" type="button">Download SAM</button>
+</div>
+<div class="grid grid-4" style="margin-top:14px; gap:12px; align-items:end;">
+<div>
+<label for="generation-detailer-provider">Detector provider</label>
+<select id="generation-detailer-provider">
+<option value="ultralytics">Ultralytics</option>
+<option value="onnx">ONNX</option>
+</select>
+</div>
+<div>
+<label for="generation-detailer-sam-model">SAM refine model</label>
+<select id="generation-detailer-sam-model">
+<option value="">None</option>
+</select>
+</div>
+<div>
+<label for="generation-detailer-custom-classes">Custom classes / notes</label>
+<input id="generation-detailer-custom-classes" placeholder="person, face, left hand, clothing..." type="text"/>
+</div>
+<div class="mini-note">Shared repair defaults reduce repeated pass setup.</div>
+</div>
+<div class="grid grid-5" style="margin-top:14px; gap:12px; align-items:end;">
+<div>
+<label for="generation-detailer-confidence">Confidence</label>
+<input id="generation-detailer-confidence" max="1" min="0" step="0.01" type="number" value="0.35"/>
+</div>
+<div>
+<label for="generation-detailer-topk">Top-K</label>
+<input id="generation-detailer-topk" min="0" step="1" type="number" value="0"/>
+</div>
+<div>
+<label for="generation-detailer-bbox-grow">BBox grow</label>
+<input id="generation-detailer-bbox-grow" min="0" step="1" type="number" value="12"/>
+</div>
+<div>
+<label for="generation-detailer-mask-blur">Mask blur</label>
+<input id="generation-detailer-mask-blur" min="0" step="1" type="number" value="4"/>
+</div>
+<div>
+<label for="generation-detailer-denoise">Denoise</label>
+<input id="generation-detailer-denoise" max="1" min="0" step="0.01" type="number" value="0.12"/>
+</div>
+</div>
+<div class="grid grid-4" style="margin-top:14px; gap:12px; align-items:end;">
+<div>
+<label for="generation-detailer-steps">Steps</label>
+<input id="generation-detailer-steps" min="1" step="1" type="number" value="12"/>
+</div>
+<div style="display:flex; align-items:end;">
+<label><input checked="" id="generation-detailer-use-main-prompt" type="checkbox"/> Use main prompts</label>
+</div>
+<div style="display:flex; align-items:end;">
+<label><input checked="" id="generation-detailer-force-inpaint" type="checkbox"/> Force inpaint pass</label>
+</div>
+<div class="mini-note">Set Top-K to 0 to allow every detection.</div>
+</div>
+</div>
+
+<div class="card-lite" id="generation-detailer-smart-presets" style="margin-top:14px; border:1px solid rgba(168,85,247,.24); background:rgba(168,85,247,.055);">
+<div class="row-between" style="gap:12px; align-items:flex-start; flex-wrap:wrap;">
+<div style="min-width:260px; flex:1 1 360px;">
+<div class="accordion-title" style="font-size:14px;">Smart preset buttons</div>
+<div class="accordion-hint">One-click starting points for common ADetailer repairs. Presets update shared defaults + the primary pass, then you can fine-tune manually.</div>
+</div>
+<div class="row" style="gap:8px; flex-wrap:wrap; justify-content:flex-end;">
+<select id="generation-detailer-user-preset-select" style="min-width:210px;">
+<option value="">Saved presets…</option>
+</select>
+<button class="btn btn-small" id="btn-generation-detailer-save-preset" type="button">Save current</button>
+<button class="btn btn-small" id="btn-generation-detailer-delete-preset" type="button">Delete saved</button>
+</div>
+</div>
+<div class="row" id="generation-detailer-smart-preset-chips" style="margin-top:12px; gap:8px; flex-wrap:wrap;">
+<button class="btn btn-small generation-detailer-preset-chip" data-detailer-preset="face_clean" type="button">Face Clean</button>
+<button class="btn btn-small generation-detailer-preset-chip" data-detailer-preset="face_rebuild" type="button">Face Rebuild</button>
+<button class="btn btn-small generation-detailer-preset-chip" data-detailer-preset="hands_fix" type="button">Hands Fix</button>
+<button class="btn btn-small generation-detailer-preset-chip" data-detailer-preset="eyes_polish" type="button">Eyes Polish</button>
+<button class="btn btn-small generation-detailer-preset-chip" data-detailer-preset="anime_face" type="button">Anime Face</button>
+<button class="btn btn-small generation-detailer-preset-chip" data-detailer-preset="product_logo" type="button">Product / Logo Repair</button>
+<button class="btn btn-small generation-detailer-preset-chip" data-detailer-preset="clothing_detail" type="button">Clothing Detail</button>
+</div>
+<div id="generation-detailer-smart-preset-status" class="mini-note" style="margin-top:10px; line-height:1.45;">Pick a preset as a starting point. Built-ins are safe defaults; saved presets are stored in this browser.</div>
+</div>
+<div class="card-lite" style="margin-top:14px;">
+<div class="accordion-title" style="font-size:14px;">Primary pass</div>
+<div class="accordion-hint">Per-pass targeting starts here. Extra passes below inherit the shared defaults above.</div>
+<div class="grid grid-4" style="margin-top:14px; gap:12px; align-items:end;">
+<div>
+<label for="generation-detailer-mode">Detail target</label>
+<select id="generation-detailer-mode">
+<option value="face">Face</option>
+<option value="hands">Hands</option>
+<option value="person">Person</option>
+<option value="custom">Custom detector</option>
+</select>
+</div>
+<div>
+<label for="generation-detailer-detector-type">Detector type</label>
+<select id="generation-detailer-detector-type">
+<option value="bbox">BBox</option>
+<option value="segm">Segmentation</option>
+</select>
+</div>
+<div>
+<label for="generation-detailer-model">Detector model</label>
+<select id="generation-detailer-model">
+<option value="">Load detector models…</option>
+</select>
+</div>
+<div>
+<label for="generation-detailer-order">Target order</label>
+<select id="generation-detailer-order">
+<option value="auto">Auto</option>
+<option value="left_to_right">Left → Right</option>
+<option value="right_to_left">Right → Left</option>
+<option value="top_to_bottom">Top → Bottom</option>
+<option value="bottom_to_top">Bottom → Top</option>
+<option value="largest_first">Largest first</option>
+<option value="smallest_first">Smallest first</option>
+<option value="center_first">Center first</option>
+</select>
+</div>
+</div>
+<div class="grid grid-5" style="margin-top:14px; gap:12px; align-items:end;">
+<div>
+<label for="generation-detailer-start-index">Start at</label>
+<input id="generation-detailer-start-index" min="1" step="1" type="number" value="1"/>
+</div>
+<div>
+<label for="generation-detailer-count">Count</label>
+<input id="generation-detailer-count" min="0" step="1" type="number" value="1"/>
+</div>
+<div>
+<label for="generation-detailer-min-area">Min area</label>
+<input id="generation-detailer-min-area" min="0" step="1" type="number" value="0"/>
+</div>
+<div>
+<label for="generation-detailer-max-area">Max area</label>
+<input id="generation-detailer-max-area" min="0" step="1" type="number" value="0"/>
+</div>
+<div>
+<label for="generation-detailer-reference-lock">Reference lock</label>
+<select id="generation-detailer-reference-lock">
+<option value="none">Off</option>
+<option value="soft_identity">Soft identity</option>
+<option value="strong_identity">Strong identity</option>
+<option value="face_only">Face only</option>
+<option value="style_only">Style only</option>
+<option value="controlnet">Follow ControlNet</option>
+<option value="ipadapter">Legacy IP-Adapter / FaceID</option>
+<option value="both">Legacy both</option>
+</select>
+<div class="mini-note" id="generation-detailer-reference-lock-hint" style="margin-top:6px; line-height:1.35;">Off: no extra reference lock for the detail pass.</div>
+</div>
+</div>
+<div class="grid grid-2" style="margin-top:14px; gap:12px; align-items:start;">
+<div>
+<label for="generation-detailer-target-mode">Target mode</label>
+<select id="generation-detailer-target-mode">
+<option value="auto_detect">Auto detect</option>
+<option value="manual_boxes">Manual boxes</option>
+</select>
+</div>
+<div id="generation-detailer-primary-manual-boxes-wrap">
+<label for="generation-detailer-manual-boxes">Manual boxes</label>
+<textarea id="generation-detailer-manual-boxes" placeholder="One box per line. Examples: xywh:120,80,300,300 or xyxy:120,80,420,380 or 12%,10%,28%,28%" rows="3"></textarea>
+</div>
+</div>
+<div class="card-lite" id="generation-detailer-box-editor" style="margin-top:12px; display:none;">
+<div class="row-between" style="gap:12px; align-items:flex-start; flex-wrap:wrap;">
+<div>
+<div class="accordion-title" style="font-size:14px;">Visual box drawer + target picker</div>
+<div class="accordion-hint">Draw boxes over the source image or the current output preview. Uncheck any target you do not want Neo to repair, then sync the kept boxes back into the manual-box field.</div>
+<div class="mini-note" id="generation-detailer-editor-scope" style="margin-top:6px;">Editing primary detailer pass.</div>
+</div>
+<div class="row" style="gap:8px; flex-wrap:wrap;">
+<button class="btn btn-small" id="btn-generation-detailer-editor-load-source" type="button">Use source image</button>
+<button class="btn btn-small" id="btn-generation-detailer-editor-load-preview" type="button">Use current output</button>
+<button class="btn btn-small" id="btn-generation-detailer-editor-preview-source" type="button">Preview source detections</button>
+<button class="btn btn-small" id="btn-generation-detailer-editor-preview-output" type="button">Preview output detections</button>
+<select id="generation-detailer-editor-preview-merge" style="min-width:180px;">
+<option value="replace">Replace current targets</option>
+<option value="append">Append to current targets</option>
+</select>
+<select id="generation-detailer-editor-priority-preset" style="min-width:190px;">
+<option value="respect_pass">Respect pass settings</option>
+<option value="primary_subject">Main subject only</option>
+<option value="primary_plus_secondary">Main + secondary</option>
+<option value="balanced">Balanced</option>
+<option value="crowd_scan">Crowd scan</option>
+</select>
+<label class="generation-toggle-pill"><input checked id="generation-detailer-editor-auto-suppress-tiny" type="checkbox"/> Auto-suppress tiny background faces</label>
+<label class="generation-toggle-pill"><input checked id="generation-detailer-editor-confidence-heat" type="checkbox"/> Confidence heat preview</label>
+<button class="btn btn-small" id="btn-generation-detailer-editor-export" type="button">Export snapshot</button>
+<button class="btn btn-small" id="btn-generation-detailer-editor-import" type="button">Import snapshot</button>
+<input accept="application/json,.json" id="generation-detailer-editor-import-file" style="display:none;" type="file"/>
+<select id="generation-detailer-editor-history-select" style="min-width:190px;"><option value="">No pass history yet</option></select>
+<button class="btn btn-small" id="btn-generation-detailer-editor-restore-history" type="button">Restore history</button>
+<button class="btn btn-small" id="btn-generation-detailer-editor-sync-text" type="button">Sync from text</button>
+<button class="btn btn-small" id="btn-generation-detailer-editor-clear" type="button">Clear boxes</button>
+<button class="btn btn-small" id="btn-generation-detailer-editor-close" type="button">Hide</button>
+</div>
+</div>
+<div class="mini-note" id="generation-detailer-editor-note" style="margin-top:8px;">Load a source image or current output preview, drag to add boxes, or preview auto detections and keep only the targets you want Neo to repair. Use Replace/Append to control how new detections merge into the current target list, then use a subject-priority preset or tiny-face suppression to keep background blur junk out of the handoff. You can also export/import a true detection snapshot with lock/ignore tags intact.</div>
+<div class="card-lite" style="margin-top:12px; padding:10px;">
+<div class="accordion-title" style="font-size:13px;">Suppression tuning + heat preview</div>
+<div class="accordion-hint">These preview-only controls are remembered per detailer pass while you switch between the primary pass and extra passes.</div>
+<div class="grid grid-2" style="margin-top:10px; gap:12px; align-items:start;">
+<div>
+<label for="generation-detailer-editor-tiny-main-ratio">Tiny/main ratio <span class="mini-note" id="generation-detailer-editor-tiny-main-ratio-label">0.18×</span></label>
+<input id="generation-detailer-editor-tiny-main-ratio" max="0.35" min="0.08" step="0.01" type="range" value="0.18"/>
+<div class="mini-note">Higher values suppress more tiny detections relative to the strongest face.</div>
+</div>
+<div>
+<label for="generation-detailer-editor-tiny-image-floor">Image floor % <span class="mini-note" id="generation-detailer-editor-tiny-image-floor-label">0.25%</span></label>
+<input id="generation-detailer-editor-tiny-image-floor" max="1.00" min="0.05" step="0.05" type="range" value="0.25"/>
+<div class="mini-note">Minimum percent of the full image area a face must reach before Neo stops treating it like background noise.</div>
+</div>
+</div>
+<div class="row" style="margin-top:10px; gap:8px; flex-wrap:wrap; align-items:center;">
+<span class="mini-note">Quick threshold tuning</span>
+<button class="btn btn-small" id="btn-generation-detailer-tuning-lenient" type="button">Lenient</button>
+<button class="btn btn-small" id="btn-generation-detailer-tuning-balanced" type="button">Balanced</button>
+<button class="btn btn-small" id="btn-generation-detailer-tuning-strict" type="button">Strict</button>
+</div>
+<div class="grid grid-2" style="margin-top:10px; gap:12px; align-items:start;">
+<div>
+<label for="generation-detailer-editor-foreground-bias">Foreground bias</label>
+<select id="generation-detailer-editor-foreground-bias">
+<option value="off">Off</option>
+<option value="center_bias">Center bias</option>
+<option value="foreground_subjects">Foreground boost</option>
+<option value="pinned_subjects">Pinned subjects</option>
+</select>
+<div class="mini-note">Boost likely front subjects before order/count filters run. Pinned-subject mode uses any manually pinned targets as anchors.</div>
+</div>
+<div>
+<label class="generation-toggle-pill"><input checked id="generation-detailer-editor-cluster-merge" type="checkbox"/> Auto-detector cluster merge</label>
+<div class="mini-note" style="margin-top:8px;">Merge overlapping or near-duplicate detections before suppression and preview selection.</div>
+</div>
+</div>
+</div>
+<div style="margin-top:12px; display:flex; flex-direction:column; gap:12px; align-items:flex-start;">
+<div style="position:relative; width:100%; max-width:720px; border:1px solid rgba(255,255,255,.12); border-radius:12px; overflow:auto; background:rgba(255,255,255,.04);">
+<canvas id="generation-detailer-editor-base" style="display:block; width:100%; height:auto;"></canvas>
+<canvas id="generation-detailer-editor-overlay" style="position:absolute; inset:0; width:100%; height:100%; cursor:crosshair;"></canvas>
+</div>
+<div class="mini-note">Drag to create a box. Click a row below to highlight it. Kept boxes are written back into the manual-box textarea as <code>xywh</code> pixels.</div>
+<div style="width:100%; max-width:720px;">
+<div class="accordion-title" style="font-size:13px;">Target list</div>
+<div class="accordion-hint">Keep/remove picker for manual boxes and auto detections. Kept targets are written back into the manual-box field so later runs stay deterministic.</div>
+<div id="generation-detailer-editor-box-list" style="margin-top:10px; display:flex; flex-direction:column; gap:8px;"></div>
+</div>
+</div>
+</div>
+<div class="row" id="generation-detailer-primary-picker-row" style="margin-top:10px; gap:8px; flex-wrap:wrap;">
+<button class="btn btn-small" id="btn-generation-detailer-editor-open" type="button">🧩 Open primary picker</button>
+<button class="btn btn-small" id="btn-generation-detailer-preview-active" type="button">🎯 Preview targets</button>
+<span class="mini-note">Primary-pass helper for manual target boxes, true auto-detection preview, and quick keep/remove cleanup.</span>
+</div>
+<div class="mini-note" style="margin-top:10px;">Use ordering + size filters to focus on the main subjects and ignore tiny blurred background detections. Manual boxes let you force exact regions when auto detection grabs blurred background faces. IP-Adapter / FaceID lock now builds a detail-pass-only reference-guided model, while ControlNet lock still uses the SEGS path.</div>
+<div class="grid grid-2" style="margin-top:14px; gap:12px;">
+<div>
+<label for="generation-detailer-positive">Detailer prompt override</label>
+<textarea id="generation-detailer-positive" placeholder="Leave blank to reuse the main positive prompt. Use [SEP] to target ordered characters." rows="3"></textarea>
+</div>
+<div>
+<label for="generation-detailer-negative">Detailer negative override</label>
+<textarea id="generation-detailer-negative" placeholder="Leave blank to reuse the main negative prompt. [SEP] also works here." rows="3"></textarea>
+</div>
+<div class="card-lite" id="generation-detailer-prompt-mapper" style="grid-column:1 / -1; width:100%; margin-top:12px; padding:12px; border:1px solid rgba(99,179,237,.24); background:rgba(99,179,237,.06);">
+<div class="row-between" style="gap:12px; align-items:flex-start; flex-wrap:wrap; width:100%;">
+<div style="min-width:260px; flex:1 1 360px;">
+<div class="accordion-title" style="font-size:14px;">Per-target prompts</div>
+<div class="accordion-hint">Click <strong>Detect targets</strong> first. Neo numbers the faces/hands using the selected Target order, then these rows compile back into the existing [SEP] prompt fields.</div>
+</div>
+<div class="row" style="gap:8px; flex-wrap:wrap; justify-content:flex-end;">
+<button class="btn btn-small" id="btn-generation-detailer-prompt-map-detect" type="button">🎯 Detect targets</button>
+<button class="btn btn-small" id="btn-generation-detailer-prompt-map-apply" type="button">Apply → Main Prompt</button>
+<button class="btn btn-small" id="btn-generation-detailer-prompt-map-same" type="button">Use #1 for all</button>
+<button class="btn btn-small" id="btn-generation-detailer-prompt-map-clear" type="button">Clear</button>
+</div>
+</div>
+<div id="generation-detailer-prompt-map-status" class="mini-note" style="margin-top:8px;">Run Detect targets to create #1/#2/#3 prompt rows.</div>
+<div id="generation-detailer-prompt-map-list" style="margin-top:10px; display:flex; flex-direction:column; gap:10px; width:100%;"></div>
+</div>
+</div>
+</div>
+
+<div class="card-lite" id="generation-detailer-report-panel" style="grid-column:1 / -1; width:100%; margin-top:12px; padding:12px; border:1px solid rgba(74,222,128,.22); background:rgba(74,222,128,.055);">
+<div class="row-between" style="gap:12px; align-items:flex-start; flex-wrap:wrap; width:100%;">
+<div style="min-width:260px; flex:1 1 360px;">
+<div class="accordion-title" style="font-size:14px;">ADetailer report</div>
+<div class="accordion-hint">Live summary of detection, selected targets, prompt mapping, and repair readiness.</div>
+</div>
+<div class="row" style="gap:8px; flex-wrap:wrap; justify-content:flex-end;">
+<button class="btn btn-small" id="btn-generation-detailer-report-refresh" type="button">Refresh report</button>
+<button class="btn btn-small" id="btn-generation-detailer-report-copy" type="button">Copy report</button>
+</div>
+</div>
+<div id="generation-detailer-report-content" class="mini-note" style="margin-top:10px; line-height:1.55;">Run Detect targets to populate the report.</div>
+</div>
+
+<div style="margin-top:14px;">
+<div class="row-between" style="gap:12px; align-items:flex-start; flex-wrap:wrap;">
+<div>
+<div class="accordion-title" style="font-size:14px;">Additional detailer passes</div>
+<div class="accordion-hint">Stack more passes for face + hands + person workflows. These cards inherit the shared defaults above.</div>
+</div>
+<button class="btn btn-small" id="btn-generation-detailer-add-pass" type="button">＋ Add pass</button>
+</div>
+<div class="generation-dynamic-stack" id="generation-detailer-extra-list" style="margin-top:10px;"></div>
+</div>
+<div class="status" id="generation-detailer-status" style="margin-top:12px;"></div>
+</div>
+</details>
+<details class="accordion-block generation-inline-accordion" data-accordion-id="generation-controlnet-settings" data-default-open="false" style="margin-top:14px;">
+<summary class="accordion-summary">
+<div>
+<div class="accordion-title">ControlNet</div>
+<div class="accordion-hint">Each unit gets its own Unit type, matched preprocessors, relevant models, strength, and control image. Preprocessor can stay on None for direct models like Union-style runs.</div>
+</div>
+<span aria-hidden="true" class="accordion-chevron">▾</span>
+</summary>
+<div class="accordion-body">
+<div class="grid grid-5 generation-dynamic-row generation-primary-row generation-unit-card generation-unit-card-controlnet" data-primary="true" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));" data-unit-kind="controlnet">
+<div class="generation-unit-topbar" style="grid-column:1 / -1;">
+<div class="generation-unit-heading">
+<span class="generation-unit-index">01</span>
+<div>
+<div class="generation-unit-title">Primary ControlNet unit</div>
+<div class="accordion-hint">Attach a control image per unit, then stack more underneath if you need them.</div>
+</div>
+</div>
+<label class="generation-toggle-pill"><input checked="" id="generation-controlnet-enabled" type="checkbox"/> Enabled</label>
+</div>
+<div>
+<label for="generation-controlnet-unit">Unit</label>
+<select id="generation-controlnet-unit">
+<option value="auto">Auto</option>
+</select>
+</div>
+<div>
+<label for="generation-controlnet-preprocessor">Preprocessor</label>
+<select id="generation-controlnet-preprocessor">
+<option value="none">None</option>
+</select>
+</div>
+<div>
+<label for="generation-controlnet-name">ControlNet model</label>
+<select id="generation-controlnet-name">
+<option value="">None</option>
+</select>
+</div>
+<div>
+<label for="generation-controlnet-strength">ControlNet strength</label>
+<input id="generation-controlnet-strength" step="0.05" type="number" value="1.0"/>
+</div>
+<div class="generation-controlnet-build-lane" style="grid-column:1 / -1;">
+<label for="generation-control-image">Control image</label>
+<input accept="image/*" class="generation-control-image" id="generation-control-image" type="file"/>
+<div class="generation-controlnet-preview-first" style="display:block; margin-top:10px; width:100%;">
+<div class="generation-controlnet-controls-panel" style="width:100%; max-width:none;">
+<div class="row" style="gap:8px; flex-wrap:wrap;">
+<button class="btn btn-small" id="btn-generation-controlnet-build-map" title="Build a preview map from the selected preprocessor and current source/control image" type="button">🧭 Build preview map</button>
+<button class="btn btn-small" id="btn-generation-controlnet-apply-map" type="button" disabled>Send map to primary ControlNet unit</button>
+<button class="btn btn-small" id="btn-generation-controlnet-download-map" type="button" disabled>Download preview map</button>
+</div>
+<div class="mini-note" id="generation-controlnet-build-map-note" style="margin-top:8px;">Uses the selected preprocessor and the current source image when no control image is loaded yet.</div>
+<div class="mini-note" id="generation-controlnet-save-map-note" style="margin-top:6px;">Generated maps are saved to ComfyUI output when Comfy Aux is used.</div>
+<div class="generation-controlnet-map-settings generation-controlnet-real-settings" style="margin-top:10px; display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; align-items:end;">
+  <div data-cn-setting="quality">
+    <label for="generation-controlnet-detect-resolution">Detect res</label>
+    <select id="generation-controlnet-detect-resolution" class="generation-controlnet-detect-resolution">
+      <option value="512">512 fast</option>
+      <option value="768" selected>768 balanced</option>
+      <option value="1024">1024 sharper</option>
+      <option value="1280">1280 max</option>
+    </select>
+  </div>
+  <div data-cn-setting="timing"><label for="generation-controlnet-start-percent">Start percent</label><input id="generation-controlnet-start-percent" class="generation-controlnet-start-percent" type="number" min="0" max="1" step="0.01" value="0" /></div>
+  <div data-cn-setting="timing"><label for="generation-controlnet-end-percent">End percent</label><input id="generation-controlnet-end-percent" class="generation-controlnet-end-percent" type="number" min="0" max="1" step="0.01" value="1" /></div>
+  <div data-cn-setting="fit"><label for="generation-controlnet-fit-mode">Control image fit</label><select id="generation-controlnet-fit-mode" class="generation-controlnet-fit-mode"><option value="contain" selected>Contain / no crop</option><option value="cover">Cover / fill frame</option><option value="stretch">Stretch exact</option><option value="source">Keep source size</option></select></div>
+  <div data-cn-setting="quality">
+    <label for="generation-controlnet-safe-mode">Safe mode</label>
+    <select id="generation-controlnet-safe-mode" class="generation-controlnet-safe-mode">
+      <option value="true" selected>On</option>
+      <option value="false">Off</option>
+    </select>
+  </div>
+  <div data-cn-setting="canny"><label for="generation-controlnet-canny-low">Canny low</label><input id="generation-controlnet-canny-low" class="generation-controlnet-canny-low" type="number" min="0" max="255" step="1" value="100" /></div>
+  <div data-cn-setting="canny"><label for="generation-controlnet-canny-high">Canny high</label><input id="generation-controlnet-canny-high" class="generation-controlnet-canny-high" type="number" min="0" max="255" step="1" value="200" /></div>
+  <label class="generation-toggle-pill" data-cn-setting="openpose" style="justify-content:center;"><input id="generation-controlnet-openpose-body" class="generation-controlnet-openpose-body" type="checkbox" checked /> Body</label>
+  <label class="generation-toggle-pill" data-cn-setting="openpose" style="justify-content:center;"><input id="generation-controlnet-openpose-hand" class="generation-controlnet-openpose-hand" type="checkbox" checked /> Hands</label>
+  <label class="generation-toggle-pill" data-cn-setting="openpose" style="justify-content:center;"><input id="generation-controlnet-openpose-face" class="generation-controlnet-openpose-face" type="checkbox" /> Face</label>
+  <label class="generation-toggle-pill" data-cn-setting="output" style="justify-content:center;"><input id="generation-controlnet-invert-map" class="generation-controlnet-invert-map" type="checkbox" /> Invert map</label>
+  <label class="generation-toggle-pill" data-cn-setting="output" style="justify-content:center;"><input id="generation-controlnet-save-intermediate" class="generation-controlnet-save-intermediate" type="checkbox" checked /> Save map</label>
+</div>
+<div class="mini-note generation-controlnet-settings-hint" style="margin-top:8px;">Real map controls: timing affects generation, detect/Canny/OpenPose affects preview map quality, fit controls how the image is prepared for ControlNet.</div>
+</div>
+<div class="generation-controlnet-preview-panel" style="width:100%; margin-top:14px; overflow:hidden;">
+<div class="grid grid-2" style="gap:14px; grid-template-columns:repeat(2,minmax(260px,1fr)); align-items:stretch;">
+<div class="generation-unit-preview-card" style="min-height:460px; overflow:hidden; display:flex; align-items:center; justify-content:center;">
+<div class="generation-unit-preview-empty" id="generation-controlnet-primary-source-preview-empty">No source preview yet.</div>
+<img alt="Primary ControlNet source preview" class="generation-unit-preview-image hidden" id="generation-controlnet-primary-source-preview" style="width:100%; max-height:620px; object-fit:contain;"/>
+</div>
+<div class="generation-unit-preview-card" style="min-height:460px; overflow:hidden; display:flex; align-items:center; justify-content:center;">
+<div class="generation-unit-preview-empty" id="generation-controlnet-primary-map-preview-empty">No generated map preview yet.</div>
+<img alt="Generated Primary ControlNet map preview" class="generation-unit-preview-image hidden" id="generation-controlnet-primary-map-preview" style="width:100%; max-height:620px; object-fit:contain;"/>
+</div>
+</div>
+<div class="generation-unit-summary" id="generation-controlnet-primary-summary" style="margin-top:8px;">Primary ControlNet unit is idle.</div>
+</div>
+</div>
+</div>
+<div class="generation-dynamic-stack" id="generation-controlnet-extra-list"></div>
+<div class="row" style="margin-top:12px;">
+<button class="btn btn-small" id="btn-generation-add-controlnet" onclick="window.NeoStudioApp?.generation?.workflow?.addControlnetRow &amp;&amp; window.NeoStudioApp.generation.workflow.addControlnetRow()" title="Add another ControlNet unit" type="button">＋ Add ControlNet</button>
+</div>
+</div>
+</details>
+<details class="accordion-block generation-inline-accordion" data-accordion-id="generation-ipadapter-settings" data-default-open="false" style="margin-top:14px;">
+<summary class="accordion-summary">
+<div>
+<div class="accordion-title">IP-Adapter Controls</div>
+<div class="accordion-hint">Reference-image guidance with its own model, CLIP Vision encoder, timing window, and stacked extra units. Use this for reference matching, same-face/character consistency, style references, and advanced FaceID/IP-Adapter control.</div>
+</div>
+<span aria-hidden="true" class="accordion-chevron">▾</span>
+</summary>
+<div class="accordion-body">
+
+<div class="generation-unit-preset-strip" id="generation-ipadapter-identity-presets" style="grid-column:1 / -1; margin:0 0 12px 0;">
+<div class="generation-unit-topbar" style="margin-bottom:10px;">
+<div class="generation-unit-heading">
+<span class="generation-unit-index">ID</span>
+<div>
+<div class="generation-unit-title">Identity presets</div>
+<div class="accordion-hint">Use these presets to stage same-face, same-character, or style-reference routing directly through IP-Adapter.</div>
+</div>
+</div>
+</div>
+<div class="grid grid-4">
+<div>
+<label for="generation-identity-goal">Identity goal</label>
+<select id="generation-identity-goal">
+<option value="off">Off</option>
+<option value="same_face">Same face / same person</option>
+<option value="same_character">Same character / look</option>
+<option value="style_reference">Style / vibe reference</option>
+</select>
+</div>
+<div>
+<label for="generation-identity-route">Route</label>
+<select id="generation-identity-route">
+<option value="auto">Auto</option>
+<option value="ipadapter_standard">IP-Adapter standard</option>
+<option value="ipadapter_faceid">IP-Adapter FaceID</option>
+</select>
+</div>
+<div>
+<label for="generation-identity-strength">Reference strength</label>
+<input id="generation-identity-strength" max="2" min="0" step="0.05" type="number" value="0.85"/>
+</div>
+<div>
+<label for="generation-identity-faceid-lora">FaceID LoRA strength</label>
+<input id="generation-identity-faceid-lora" max="2" min="0" step="0.05" type="number" value="0.75"/>
+</div>
+<div>
+<label for="generation-identity-start">Start at</label>
+<input id="generation-identity-start" max="1" min="0" step="0.01" type="number" value="0"/>
+</div>
+<div>
+<label for="generation-identity-end">End at</label>
+<input id="generation-identity-end" max="1" min="0" step="0.01" type="number" value="1"/>
+</div>
+<div style="grid-column:1 / -1;">
+<label for="generation-identity-notes">Identity notes</label>
+<textarea id="generation-identity-notes" placeholder="What must stay consistent: face, hairstyle, outfit logic, framing vibe, makeup, accessories, subject energy..." rows="2"></textarea>
+</div>
+<div class="row" style="grid-column:1 / -1; gap:8px; flex-wrap:wrap;">
+<button class="btn btn-small" id="btn-generation-identity-prep" type="button">🧬 Prep identity preset</button>
+<button class="btn btn-small" id="btn-generation-identity-use-source" type="button">🪞 Use source as IP-Adapter reference</button>
+</div>
+<div class="mini-note" id="generation-identity-summary" style="grid-column:1 / -1;">Identity presets are off. Pick a goal to stage IP-Adapter / FaceID reference routing.</div>
+</div>
+</div>
+<div class="grid grid-5 generation-dynamic-row generation-primary-row generation-unit-card generation-unit-card-ipadapter" data-primary="true" data-unit-kind="ipadapter">
+<div class="generation-unit-topbar" style="grid-column:1 / -1;">
+<div class="generation-unit-heading">
+<span class="generation-unit-index">01</span>
+<div>
+<div class="generation-unit-title">Primary IP-Adapter unit</div>
+<div class="accordion-hint">Give it a reference image, IP-Adapter model, and CLIP Vision encoder. Stack more underneath when one reference image is not enough.</div>
+</div>
+</div>
+<label class="generation-toggle-pill"><input id="generation-ipadapter-enabled" type="checkbox"/> Enabled</label>
+</div>
+<div>
+<label for="generation-ipadapter-mode">Mode</label>
+<select id="generation-ipadapter-mode">
+<option value="standard">Standard</option>
+<option value="faceid">FaceID / FaceID Plus</option>
+</select>
+</div>
+<div>
+<label for="generation-ipadapter-name">IP-Adapter model</label>
+<select id="generation-ipadapter-name">
+<option value="">None</option>
+</select>
+</div>
+<div>
+<label for="generation-ipadapter-clip-vision">CLIP Vision</label>
+<select id="generation-ipadapter-clip-vision">
+<option value="">None</option>
+</select>
+</div>
+<div>
+<label for="generation-ipadapter-faceid-preset">FaceID preset</label>
+<select id="generation-ipadapter-faceid-preset">
+<option value="FACEID PLUS V2">FACEID PLUS V2</option>
+</select>
+</div>
+<div>
+<label for="generation-ipadapter-faceid-provider">InsightFace provider</label>
+<select id="generation-ipadapter-faceid-provider">
+<option value="CUDA">CUDA</option>
+</select>
+</div>
+<div>
+<label>FaceID LoRA strength</label>
+<div class="mini-note">Uses Identity Presets global value.</div>
+<input id="generation-ipadapter-faceid-lora-strength" type="hidden" value="0.75"/>
+</div>
+<div>
+<label for="generation-ipadapter-weight">Weight</label>
+<input id="generation-ipadapter-weight" step="0.05" type="number" value="1.0"/>
+</div>
+<div>
+<label for="generation-ipadapter-weight-faceidv2">FaceID V2 weight</label>
+<input id="generation-ipadapter-weight-faceidv2" step="0.05" type="number" value="1.0"/>
+</div>
+<div>
+<label for="generation-ipadapter-weight-type">Weight type</label>
+<select id="generation-ipadapter-weight-type">
+<option value="linear">Linear</option>
+</select>
+</div>
+<div>
+<label for="generation-ipadapter-image">Reference image</label>
+<input accept="image/*" class="generation-ipadapter-image" id="generation-ipadapter-image" multiple="" type="file"/>
+</div>
+<div>
+<label for="generation-ipadapter-combine-embeds">Combine embeds</label>
+<select id="generation-ipadapter-combine-embeds">
+<option value="concat">Concat</option>
+</select>
+</div>
+<div>
+<label for="generation-ipadapter-embeds-scaling">Embeds scaling</label>
+<select id="generation-ipadapter-embeds-scaling">
+<option value="V only">V only</option>
+</select>
+</div>
+<div>
+<label for="generation-ipadapter-start-at">Start at</label>
+<input id="generation-ipadapter-start-at" max="1" min="0" step="0.01" type="number" value="0"/>
+</div>
+<div>
+<label for="generation-ipadapter-end-at">End at</label>
+<input id="generation-ipadapter-end-at" max="1" min="0" step="0.01" type="number" value="1"/>
+</div>
+<div class="generation-unit-preview-wrap" style="grid-column:1 / -1;">
+<div class="generation-unit-preview-card">
+<div class="generation-unit-preview-empty" id="generation-ipadapter-primary-preview-empty">No reference image yet for the primary IP-Adapter unit.</div>
+<img alt="Primary IP-Adapter preview" class="generation-unit-preview-image hidden" id="generation-ipadapter-primary-preview"/>
+</div>
+<div class="generation-unit-summary" id="generation-ipadapter-primary-summary">Primary IP-Adapter unit is idle.</div>
+</div>
+</div>
+<div class="generation-dynamic-stack" id="generation-ipadapter-extra-list"></div>
+<div class="row" style="margin-top:12px;">
+<button class="btn btn-small" id="btn-generation-add-ipadapter" onclick="window.NeoStudioApp?.generation?.workflow?.addIpAdapterRow &amp;&amp; window.NeoStudioApp.generation.workflow.addIpAdapterRow()" title="Add another IP-Adapter unit" type="button">＋ Add IP-Adapter</button>
+</div>
+</div>
+</details>
+<label for="generation-workflow-notes" style="margin-top:14px;">Workflow notes</label>
+<textarea id="generation-workflow-notes" placeholder="Project notes, region-prompt plan, workflow ideas, or reminders..."></textarea>
+<div class="mini-note" style="margin-top:10px;">Current adapter scope: txt2img, img2img, inpaint, outpaint, cleanup staging, IP-Adapter reference matching, optional VAE override, stacked LoRAs, multi-ControlNet units, stacked reference units, selective repair, and an Upscale Lab finish pass.</div>
+</div>
+<div class="card-lite generation-shell-card">
+<div class="row-between">
+<div>
+<div class="accordion-title">Prompt Stack</div>
+<div class="muted small">Use Prompt Studio or recovered metadata as the source, then keep the generation-specific tweaks here.</div>
+</div>
+</div>
+<div class="row generation-prompt-save-row" style="margin-top:14px; gap:10px; flex-wrap:wrap; align-items:end;">
+<div style="flex:1 1 320px; min-width:260px;">
+<label for="generation-saved-prompt-select">Saved prompt</label>
+<select id="generation-saved-prompt-select"><option value="">Choose a saved prompt</option></select>
+</div>
+<div aria-label="Saved prompt actions" class="generation-inline-action-row">
+<button aria-label="Load selected saved prompt" class="btn btn-small generation-toolbar-icon-btn" id="btn-generation-saved-prompt-load" title="Load selected saved prompt" type="button">📂</button>
+<button aria-label="Append selected saved prompt" class="btn btn-small generation-toolbar-icon-btn" id="btn-generation-saved-prompt-append" title="Append selected saved prompt" type="button">➕</button>
+<button aria-label="Save current generation prompt" class="btn btn-small generation-toolbar-icon-btn" id="btn-generation-saved-prompt-save" title="Save current generation prompt" type="button">💾</button>
+<button aria-label="Open prompt manager" class="btn btn-small generation-toolbar-icon-btn" id="btn-generation-prompt-manager-open" title="Open prompt manager" type="button">🗂️</button>
+</div>
+</div>
+<label for="generation-positive" style="margin-top:14px;">Positive prompt</label>
+<textarea id="generation-positive" placeholder="Generation-ready positive prompt..."></textarea>
+<div class="counter" id="generation-positive-counter">0 chars</div>
+<div class="card-lite" id="generation-prompt-conditioning-card" style="margin-top:14px; padding:12px; border:1px solid rgba(59,130,246,0.18); background:rgba(15,23,42,0.20);">
+<div class="row-between" style="gap:12px; flex-wrap:wrap; align-items:flex-start;">
+<div>
+<div class="stat-title">Prompt conditioning</div>
+<div class="mini-note" id="generation-prompt-conditioning-note">Shape how Neo interprets prompt weights and optional CLIP skip before the prompt is encoded.</div>
+</div>
+<div class="badge" id="generation-prompt-conditioning-badge">Baseline</div>
+</div>
+<div class="grid grid-3" style="margin-top:12px; gap:12px; align-items:end;">
+<div>
+<label for="generation-prompt-conditioning-mode">Weight handling</label>
+<select id="generation-prompt-conditioning-mode">
+<option value="raw">Raw</option>
+<option value="soft_clamp">Soft clamp</option>
+<option value="balanced">Balanced</option>
+</select>
+</div>
+<div>
+<label for="generation-clip-skip">Clip skip</label>
+<select id="generation-clip-skip">
+<option value="1">Off</option>
+<option value="2">2</option>
+<option value="3">3</option>
+<option value="4">4</option>
+</select>
+</div>
+<div>
+<label for="generation-prompt-conditioning-health">Prompt health</label>
+<input id="generation-prompt-conditioning-health" readonly type="text" value="Baseline"/>
+</div>
+</div>
+<div id="generation-prompt-conditioning-strip" style="margin-top:10px; display:flex; flex-wrap:wrap; gap:8px;"></div>
+<div class="mini-note" id="generation-prompt-conditioning-warning" style="margin-top:8px;">Prompt conditioning is idle. Neo will encode the prompt as written.</div>
+</div>
+<details class="accordion-block generation-inline-accordion" data-accordion-id="generation-tagassist" data-default-open="false" style="margin-top:14px;">
+<summary class="accordion-summary">
+<div>
+<div class="accordion-title">Tag Assist</div>
+<div class="accordion-hint">Run Deepbooru suggestions from a helper image, then send the useful tags into the prompt from Assets / Reuse instead of typing them all manually.</div>
+</div>
+<div class="generation-inline-badge-rail" style="display:flex; align-items:center; gap:8px;">
+<span class="badge">Deepbooru</span>
+<span aria-hidden="true" class="accordion-chevron">▾</span>
+</div>
+</summary>
+<div class="accordion-body">
+<div class="grid grid-2" style="gap:14px; align-items:end;">
+<div>
+<label for="generation-tagassist-image">Helper image</label>
+<input accept="image/*" id="generation-tagassist-image" type="file"/>
+<div class="mini-note" id="generation-tagassist-note" style="margin-top:8px;">Uses the helper image first, otherwise Neo falls back to the current source image.</div>
+</div>
+<div class="grid grid-2" style="gap:14px;">
+<div>
+<label for="generation-tagassist-threshold">Threshold</label>
+<div class="slider-input-pair">
+<input id="generation-tagassist-threshold" max="1" min="0" step="0.01" type="number" value="0.35"/>
+<input id="generation-tagassist-threshold-range" max="1" min="0" step="0.01" type="range" value="0.35"/>
+</div>
+</div>
+<div>
+<label for="generation-tagassist-filter">Filter tags</label>
+<input id="generation-tagassist-filter" placeholder="lowres, blurry, watermark" type="text"/>
+</div>
+</div>
+</div>
+<div class="row" style="margin-top:12px; gap:8px; flex-wrap:wrap;">
+<button class="btn btn-small" id="btn-generation-tagassist-run" type="button">🏷️ Analyze image</button>
+<button class="btn btn-small" id="btn-generation-tagassist-positive" type="button">➕ Selected → Positive</button>
+<button class="btn btn-small" id="btn-generation-tagassist-negative" type="button">➖ Selected → Negative</button>
+<button class="btn btn-small" id="btn-generation-tagassist-copy" type="button">📋 Copy tags</button>
+</div>
+<div class="mini-note" id="generation-tagassist-status" style="margin-top:10px;">No Tag Assist run yet.</div>
+<div class="row" id="generation-tagassist-results" style="margin-top:10px; gap:8px; flex-wrap:wrap;"></div>
+</div>
+</details>
+<div class="generation-preview-panel" style="margin-top:14px;">
+<div class="mini-note" style="margin-bottom:8px;">Latest preview</div>
+<div class="generation-preview-layout">
+<div class="grid grid-1 generation-output-settings">
+<div>
+<label for="generation-output-root">Output root folder</label>
+<div class="row">
+<input id="generation-output-root" placeholder="Choose where Neo should save finished images..." type="text"/>
+<button class="btn btn-small" id="btn-generation-output-root-browse" type="button">Browse</button>
+<button class="btn btn-small" id="btn-generation-output-root-open" type="button">Open</button>
+</div>
+</div>
+<div class="grid grid-2" style="margin-top:10px;">
+<div>
+<label for="generation-output-category">Category</label>
+<select id="generation-output-category">
+<option value="Uncategorized">Uncategorized</option>
+</select>
+</div>
+<div>
+<label for="generation-output-category-new">Add category</label>
+<div class="row">
+<input id="generation-output-category-new" placeholder="Asian Men" type="text"/>
+<button class="btn btn-small" id="btn-generation-output-category-add" type="button">＋ Add</button>
+</div>
+</div>
+</div>
+<div class="mini-note generation-save-path" id="generation-output-destination" style="margin-top:8px;">Save path will appear here once output settings load.</div>
+<div class="generation-output-details" id="generation-output-details" style="margin-top:10px;"></div>
+<div class="generation-result-list generation-result-inline" id="generation-result-list" style="margin-top:10px;"></div>
+</div>
+<div class="generation-preview-card">
+<div class="generation-preview-empty generation-preview-compact" id="generation-preview-state">No generation job has been queued from Neo Studio yet. Connect an image backend, pick a checkpoint, and queue from here.</div>
+<div class="generation-preview-media" style="margin-top:10px;">
+<img alt="Live generation preview" class="generation-preview-thumb" id="generation-live-preview" style="display:none;"/>
+<div class="generation-preview-actions" id="generation-preview-actions">
+<div class="generation-preview-action-group" data-preview-action-group="source">
+<span class="generation-preview-action-group-label">Source</span>
+<div class="generation-preview-action-cluster">
+<button class="btn btn-small generation-preview-action" id="btn-generation-preview-img2img" title="Send this image to Img2img" type="button">🖼️</button>
+<button class="btn btn-small generation-preview-action" id="btn-generation-preview-inpaint" title="Send this image to Inpaint" type="button">🩹</button>
+<button class="btn btn-small generation-preview-action" id="btn-generation-preview-outpaint" title="Send this image to Outpaint" type="button">↔️</button>
+</div>
+</div>
+<div class="generation-preview-action-group" data-preview-action-group="reference">
+<span class="generation-preview-action-group-label">Reference</span>
+<div class="generation-preview-action-cluster">
+<button class="btn btn-small generation-preview-action" id="btn-generation-preview-controlnet" title="Send this image to ControlNet reference" type="button">🎯</button>
+<button class="btn btn-small generation-preview-action" id="btn-generation-preview-ipadapter" title="Send this image to IP-Adapter reference" type="button">👤</button>
+</div>
+</div>
+<div class="generation-preview-action-group" data-preview-action-group="finish">
+<span class="generation-preview-action-group-label">Finish</span>
+<div class="generation-preview-action-cluster">
+<button class="btn btn-small generation-preview-action" id="btn-generation-preview-hires" title="Run Upscale Lab on this image" type="button">✨</button>
+<button class="btn btn-small generation-preview-action" id="btn-generation-preview-detailer" title="Run Selective Repair on this image" type="button">🩹+</button>
+<button class="btn btn-small generation-preview-action" id="btn-generation-preview-identity" title="Run Identity Rescue / FaceID on this image" type="button">🧬</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<label for="generation-negative" style="margin-top:16px;">Negative prompt</label>
+<textarea id="generation-negative" placeholder="Optional negative prompt..."></textarea>
+<div class="counter" id="generation-negative-counter">0 chars</div>
+<div class="generation-prompt-tool-row" style="margin-top:12px;">
+<div class="mini-note generation-prompt-tool-label">Prompt tools</div>
+<div aria-label="Prompt tools" class="generation-prompt-tool-buttons">
+<button class="btn btn-small generation-toolbar-icon-btn" id="btn-generation-open-character-tool" title="Character Creator" type="button">🧍</button>
+<button class="btn btn-small generation-toolbar-icon-btn" id="btn-generation-open-keyword-tool" title="Keyword Browser" type="button">🏷️</button>
+<button class="btn btn-small generation-toolbar-icon-btn" id="btn-generation-open-caption-tool" title="Caption Browser" type="button">🖼️</button>
+</div>
+</div>
+<div id="generation-output-inspector-host" style="margin-top:14px;"></div>
+<div id="generation-caption-browser-host" style="display:none;"></div>
+<details class="accordion-block generation-inline-accordion" data-accordion-id="generation-character-creator" data-default-open="false" style="margin-top:14px;">
+<summary class="accordion-summary">
+<div>
+<div class="accordion-title">Character Builder</div>
+<div class="accordion-hint">Build a character slot from Library data, save or load it, then append it directly into the main generation prompt.</div>
+</div>
+<span aria-hidden="true" class="accordion-chevron">▾</span>
+</summary>
+<div class="accordion-body">
+<div class="card-lite">
+<div class="row-between" style="gap:12px; align-items:flex-start;">
+<div>
+<div class="stat-title">Character Builder</div>
+<div class="mini-note">Use the character builder here, then append the finished slot directly into the main generation prompt.</div>
+</div>
+<div class="row" style="flex-wrap:wrap; justify-content:flex-end;">
+<button class="btn" id="btn-neo-library-composer-character-refresh" type="button">Refresh</button>
+<button class="btn btn-secondary" id="btn-neo-library-composer-character-link" type="button">Link to bundle</button>
+</div>
+</div>
+<div class="grid grid-4" style="margin-top:14px;">
+<div>
+<label for="neo-library-composer-character-slot">Character slot</label>
+<select id="neo-library-composer-character-slot">
+<option value="chr1">chr1</option>
+<option value="chr2">chr2</option>
+<option value="chr3">chr3</option>
+<option value="chr4">chr4</option>
+</select>
+</div>
+<div>
+<label for="neo-library-composer-character-gender">Gender</label>
+<select id="neo-library-composer-character-gender">
+<option value="male">male</option>
+<option value="female">female</option>
+<option value="unisex">unisex</option>
+</select>
+</div>
+<div>
+<label for="neo-library-composer-character-era">Era</label>
+<select id="neo-library-composer-character-era">
+<option value="any">any</option>
+<option value="modern">modern</option>
+<option value="fantasy">fantasy</option>
+<option value="futuristic">futuristic</option>
+</select>
+</div>
+<div style="display:flex; align-items:end;">
+<label><input id="neo-library-composer-character-show-restricted" type="checkbox"/> Show restricted libraries</label>
+</div>
+</div>
+<div class="grid grid-2" style="margin-top:14px;">
+<div>
+<label for="neo-library-composer-character-pick-mode">Pick behavior</label>
+<select id="neo-library-composer-character-pick-mode">
+<option value="add">Add</option>
+<option value="replace">Replace</option>
+</select>
+</div>
+<div>
+<label for="neo-library-composer-character-insert-mode">Insert into Main Prompt</label>
+<select id="neo-library-composer-character-insert-mode">
+<option value="chrblock">Inside ((chrX)) block</option>
+<option value="after_first_break">After first BREAK</option>
+<option value="after_last_break">After last BREAK</option>
+<option value="append_end">Append at end</option>
+</select>
+</div>
+</div>
+<label for="neo-library-composer-character-content" style="margin-top:14px;">Character text (current slot)</label>
+<textarea id="neo-library-composer-character-content" placeholder="Build the active character slot here..."></textarea>
+<div class="grid grid-2" style="margin-top:14px;">
+<div>
+<label for="neo-library-composer-character-section">Section</label>
+<select id="neo-library-composer-character-section"></select>
+</div>
+<div>
+<label for="neo-library-composer-character-library">Subcategory</label>
+<select id="neo-library-composer-character-library"></select>
+</div>
+</div>
+<div class="grid grid-2" style="margin-top:14px;">
+<div>
+<label for="neo-library-composer-character-search">Search in selected library</label>
+<input id="neo-library-composer-character-search" placeholder="type to filter…" type="text"/>
+</div>
+<div>
+<label for="neo-library-composer-character-item">Pick item</label>
+<select id="neo-library-composer-character-item"></select>
+</div>
+</div>
+<div class="mini-note" id="neo-library-composer-character-item-preview" style="margin-top:10px;"></div>
+<div class="row" style="margin-top:12px;">
+<label><input checked="" id="neo-library-composer-character-include-desc" type="checkbox"/> Include description after keyword</label>
+</div>
+<div class="row" style="margin-top:14px; flex-wrap:wrap;">
+<button class="btn" id="btn-neo-library-composer-character-add" type="button">Add to character</button>
+<button class="btn" id="btn-neo-library-composer-character-clear" type="button">Clear slot</button>
+<button class="btn" id="btn-neo-library-composer-character-use" onclick="return window.useNeoLibraryComposerCharacterInPositive ? (window.useNeoLibraryComposerCharacterInPositive(), false) : false;" type="button">Append to Main Prompt</button>
+</div>
+<div class="grid grid-2" style="margin-top:14px;">
+<div>
+<label for="neo-library-composer-character-name">Save character name</label>
+<input id="neo-library-composer-character-name" placeholder="e.g. Hero_Male_01" type="text"/>
+</div>
+<div>
+<label for="neo-library-composer-character-select">Saved characters</label>
+<select id="neo-library-composer-character-select"></select>
+</div>
+</div>
+<div class="row" style="margin-top:14px; flex-wrap:wrap;">
+<button class="btn" id="btn-neo-library-composer-character-save" type="button">Save current slot</button>
+<button class="btn" id="btn-neo-library-composer-character-load" type="button">Load selected</button>
+<button class="btn btn-danger" id="btn-neo-library-composer-character-delete" type="button">Delete selected</button>
+</div>
+<div class="status" id="neo-library-composer-character-status" style="margin-top:12px;"></div>
+</div>
+</div>
+</details>
+<details class="accordion-block generation-inline-accordion" data-accordion-id="generation-keyword-insert" data-default-open="false" style="margin-top:14px;">
+<summary class="accordion-summary">
+<div>
+<div class="accordion-title">Keyword Browser</div>
+<div class="accordion-hint">Browse Library keywords, preview the text, and insert it directly into the main generation prompt or negative prompt.</div>
+</div>
+<span aria-hidden="true" class="accordion-chevron">▾</span>
+</summary>
+<div class="accordion-body">
+<div class="card-lite" style="margin-top:14px;">
+<div class="row-between" style="gap:12px; align-items:flex-start;">
+<div>
+<div class="stat-title">Keyword Browser</div>
+<div class="mini-note">Preview saved keyword snippets here, then drop them straight into the main generation prompt or negative prompt.</div>
+</div>
+<div class="row" style="flex-wrap:wrap; justify-content:flex-end;">
+<button class="btn" id="btn-neo-library-keyword-refresh" type="button">Refresh keywords</button>
+<button class="btn" id="btn-generation-keyword-manager-open" type="button">Manage keywords</button>
+<button class="btn" id="btn-neo-library-keyword-insert" onclick="return window.insertNeoLibraryKeyword ? (window.insertNeoLibraryKeyword(), false) : false;" type="button">Insert keyword</button>
+</div>
+</div>
+<div class="grid grid-4" style="margin-top:14px;">
+<div>
+<label for="neo-library-keyword-category">Category</label>
+<select id="neo-library-keyword-category"></select>
+</div>
+<div>
+<label for="neo-library-keyword-subcategory">Subcategory</label>
+<select id="neo-library-keyword-subcategory"></select>
+</div>
+<div>
+<label for="neo-library-keyword-search">Search keywords</label>
+<input id="neo-library-keyword-search" placeholder="piggyback / hoodie / smirk…" type="text"/>
+</div>
+<div>
+<label for="neo-library-keyword-target">Insert target</label>
+<select id="neo-library-keyword-target">
+<option value="positive">Positive prompt</option>
+<option value="negative">Negative prompt</option>
+</select>
+</div>
+</div>
+<div class="grid grid-2" style="margin-top:14px;">
+<div>
+<label for="neo-library-keyword-item">Saved keyword</label>
+<select id="neo-library-keyword-item"></select>
+</div>
+<div style="display:flex; align-items:end;">
+<label><input checked="" id="neo-library-keyword-include-desc" type="checkbox"/> Include description after keyword</label>
+</div>
+</div>
+<label for="neo-library-keyword-preview" style="margin-top:14px;">Keyword preview</label>
+<textarea id="neo-library-keyword-preview" placeholder="Pick a keyword to preview the inserted text..." readonly=""></textarea>
+<div class="status" id="neo-library-keyword-status" style="margin-top:12px;"></div>
+<details class="accordion-block generation-inline-accordion" data-default-open="false" id="generation-keyword-manager-inline" style="margin-top:14px;">
+<summary class="accordion-summary">
+<div>
+<div class="accordion-title">Keyword manager</div>
+<div class="accordion-hint">Add, edit, delete, export, and import keyword records without opening another popup.</div>
+</div>
+<span aria-hidden="true" class="accordion-chevron">▾</span>
+</summary>
+<div class="accordion-body">
+<div id="generation-keyword-manager-inline-host"></div>
+</div>
+</details>
+<details class="mini-advanced" style="margin-top:14px;">
+<summary class="mini-note" style="cursor:pointer;">Advanced: Prompt Suite library snippets</summary>
+<div class="grid grid-3" style="margin-top:14px;">
+<div>
+<label for="neo-library-composer-library">Library file</label>
+<select id="neo-library-composer-library"></select>
+</div>
+<div>
+<label for="neo-library-composer-library-search">Search snippets</label>
+<input id="neo-library-composer-library-search" placeholder="Search library items..." type="text"/>
+</div>
+<div>
+<label for="neo-library-composer-library-item">Library item</label>
+<select id="neo-library-composer-library-item"></select>
+</div>
+</div>
+<div class="row" style="margin-top:12px; justify-content:flex-end; flex-wrap:wrap;">
+<button class="btn" id="btn-refresh-neo-library-composer-library" type="button">Refresh libraries</button>
+<button class="btn" id="btn-neo-library-composer-insert" onclick="return window.insertNeoLibraryComposerSnippet ? (window.insertNeoLibraryComposerSnippet(), false) : false;" type="button">Insert selected snippet</button>
+</div>
+<label for="neo-library-composer-library-preview" style="margin-top:14px;">Selected snippet preview</label>
+<textarea id="neo-library-composer-library-preview" placeholder="Choose a library item to preview it here..." readonly=""></textarea>
+</details>
+<div class="status" id="neo-library-composer-status" style="margin-top:12px;"></div>
+</div>
+</div>
+</details>
+<details class="accordion-block generation-inline-accordion" data-accordion-id="generation-style-addons" data-default-open="false" style="margin-top:14px;">
+<summary class="accordion-summary">
+<div>
+<div class="accordion-title generation-title-with-state">Style Stack</div>
+<div class="accordion-hint">Stack more than one saved style, remove them as chips, or load a style into the fields for editing.</div>
+</div>
+<span aria-hidden="true" class="accordion-chevron">▾</span>
+</summary>
+<div class="accordion-body">
+<div class="row u-mt-0 u-mb-10 u-wrap u-gap-10 u-align-center generation-pass-target-row">
+<label><input checked="" id="generation-style-enabled" type="checkbox"/> Enable for generation</label>
+<div class="generation-pass-target-field">
+<label for="generation-style-pass-target">Apply style stack to</label>
+<select id="generation-style-pass-target">
+<option value="both">Both passes</option>
+<option value="base">Base pass only</option>
+<option value="finish">Finish / redraw only</option>
+</select>
+</div>
+</div>
+<div class="grid grid-2 style-library-bar">
+<div>
+<label for="generation-style-search">Search styles</label>
+<input id="generation-style-search" placeholder="Type to filter the style library…" type="text"/>
+<div class="mini-note" id="generation-style-search-meta" style="margin-top:6px;">Showing all styles.</div>
+</div>
+<div>
+<label for="generation-style-name">Style name</label>
+<input id="generation-style-name" placeholder="Photography | Cinematic Portrait" type="text"/>
+</div>
+</div>
+<div class="grid grid-1 style-library-bar" style="margin-top:10px;">
+<div>
+<label for="generation-style-select">Style library</label>
+<select id="generation-style-select">
+<option value="">Load styles…</option>
+</select>
+</div>
+</div>
+<div class="row style-library-actions" style="margin-top:10px; flex-wrap:wrap; gap:8px;">
+<button class="btn btn-small" id="btn-generation-style-apply" type="button">Edit Selected</button>
+<button class="btn btn-small" id="btn-generation-style-add-selected" type="button">Add Style</button>
+<button class="btn btn-small" id="btn-generation-style-save" type="button">Save New</button>
+<button class="btn btn-small" id="btn-generation-style-update" type="button">Update</button>
+<button class="btn btn-small" id="btn-generation-style-duplicate" type="button">Duplicate</button>
+<button class="btn btn-small" id="btn-generation-style-delete" type="button">Delete</button>
+<button class="btn btn-small" id="btn-generation-style-import" type="button">Import CSV</button>
+<button class="btn btn-small" id="btn-generation-style-export" type="button">Export CSV</button>
+<input accept=".csv,text/csv" class="hidden" id="generation-style-import-file" type="file"/>
+</div>
+<div class="mini-note" id="generation-style-editing-state" style="margin-top:10px;">No style loaded for editing.</div>
+<div class="generation-style-chip-wrap" id="generation-style-active-list" style="margin-top:10px;"></div>
+<div class="grid grid-1" style="margin-top:12px;">
+<div>
+<label for="generation-style-positive">Style positive</label>
+<input id="generation-style-positive" placeholder="cinematic lighting, moody grade, soft film grain..." type="text"/>
+</div>
+<div style="margin-top:12px;">
+<label for="generation-style-negative">Style negative</label>
+<input id="generation-style-negative" placeholder="oversharpened, flat lighting, plastic skin..." type="text"/>
+</div>
+</div>
+</div>
+</details>
+<details class="accordion-block generation-inline-accordion" data-accordion-id="generation-wildcards" data-default-open="false" style="margin-top:14px;">
+<summary class="accordion-summary">
+<div>
+<div class="accordion-title generation-title-with-state">Wildcards</div>
+<div class="accordion-hint">App-side prompt variation tokens for inline choices like {red|blue|green} and file-based tokens like __lighting/mood__.</div>
+</div>
+<span aria-hidden="true" class="accordion-chevron">▾</span>
+</summary>
+<div class="accordion-body">
+<div class="row u-mt-0 u-mb-10 u-wrap u-gap-10 u-align-center">
+<label><input checked="" id="generation-wildcard-enabled" type="checkbox"/> Enable for generation</label>
+</div>
+<div class="mini-note" style="margin-top:0;">Use this to randomize prompt fragments before queueing. It expands in Neo Studio first, then sends the resolved prompt to ComfyUI.</div>
+<div class="grid grid-2" style="margin-top:14px; gap:12px;">
+<div>
+<label for="generation-wildcard-root">Wildcard folder</label>
+<input id="generation-wildcard-root" placeholder="LibraryRoot/wildcards" type="text"/>
+</div>
+<div>
+<label for="generation-wildcard-file">Wildcard file</label>
+<select id="generation-wildcard-file"><option value="">Load wildcard files…</option></select>
+</div>
+</div>
+<div class="row" style="margin-top:10px; flex-wrap:wrap; gap:8px; align-items:center;">
+<button class="btn btn-small" id="btn-generation-wildcard-refresh" type="button">Refresh</button>
+<select id="generation-wildcard-target" style="max-width:180px;">
+<option value="positive">Insert into Positive</option>
+<option value="negative">Insert into Negative</option>
+</select>
+<button class="btn btn-small" id="btn-generation-wildcard-insert" type="button">Insert Token</button>
+<label><input checked="" id="generation-wildcard-auto-resolve" type="checkbox"/> Auto-resolve on queue</label>
+<label><input checked="" id="generation-wildcard-use-seed" type="checkbox"/> Use generation seed</label>
+</div>
+<div class="grid grid-2" style="margin-top:14px; gap:12px;">
+<div>
+<label for="generation-wildcard-file-preview">Wildcard values preview</label>
+<textarea id="generation-wildcard-file-preview" placeholder="Pick a wildcard file to preview its values..." readonly=""></textarea>
+</div>
+<div>
+<label for="generation-wildcard-resolved-preview">Resolved prompt preview</label>
+<textarea id="generation-wildcard-resolved-preview" placeholder="Preview random resolved prompts here..." readonly=""></textarea>
+</div>
+</div>
+<div class="row" style="margin-top:10px; flex-wrap:wrap; gap:8px; align-items:center;">
+<label for="generation-wildcard-preview-count">Preview count</label>
+<input id="generation-wildcard-preview-count" min="1" style="max-width:90px;" type="number" value="3"/>
+<button class="btn btn-small" id="btn-generation-wildcard-preview" type="button">Preview Resolve</button>
+<button class="btn btn-small" id="btn-generation-wildcard-apply-first" type="button">Apply First Result</button>
+<label for="generation-wildcard-queue-count" style="margin-left:10px;">Queue variants</label>
+<input id="generation-wildcard-queue-count" min="1" style="max-width:90px;" type="number" value="3"/>
+<button class="btn btn-small" id="btn-generation-wildcard-queue-variants" type="button">Queue Variants</button>
+</div>
+<div class="mini-note" style="margin-top:10px;">Inline choices: <code>{soft|dramatic|cinematic}</code> · File token: <code>__lighting/mood__</code> · Queue Variants submits each resolved wildcard prompt as its own job.</div>
+<div class="status" id="generation-wildcard-status" style="margin-top:12px;"></div>
+</div>
+</details>
+</div>
+</div>
+</div>
+</section>

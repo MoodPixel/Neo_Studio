@@ -1,0 +1,130 @@
+<section class="section" id="tab-audio">
+<div class="panel">
+  <div class="row-between" style="gap:12px; align-items:flex-start; flex-wrap:wrap;">
+    <div>
+      <div class="row" style="gap:8px; align-items:center; flex-wrap:wrap;">
+        <h2 style="margin:0;">Music / SFX</h2><span class="badge">Skeleton</span>
+      </div>
+      <div class="muted small">Future text-to-audio and sound-design planning lane. Lock the backend family and workflow shape first.</div>
+    </div>
+    <div class="mini-note" id="audio-surface-summary">Plan audio generation now so the real build lands on a stable surface later.</div>
+  </div>
+
+  <div class="surface-setup-shell-panel" id="audio-setup-shell-panel" style="margin-top:16px;">
+    <button aria-controls="audio-setup-shell-content" aria-expanded="true" class="surface-setup-shell-header" id="audio-setup-shell-header" type="button">
+      <div>
+        <div class="row" style="gap:8px; align-items:center; flex-wrap:wrap;">
+          <span class="stat-title">Audio setup</span>
+          <span class="badge">Setup shell</span>
+        </div>
+        <div class="mini-note">Set the backend, output lane, and job type here, then collapse the shell so the music / SFX brief can take over.</div>
+      </div>
+      <div class="surface-setup-shell-header-actions">
+        <span class="surface-setup-shell-toggle-copy" id="audio-setup-shell-toggle-copy">Collapse setup</span>
+        <span aria-hidden="true" class="surface-setup-shell-chevron" id="audio-setup-shell-chevron">⌄</span>
+      </div>
+    </button>
+
+    <div class="surface-setup-shell-summary-strip hidden" id="audio-setup-shell-summary-strip"></div>
+
+    <div id="audio-setup-shell-content">
+      <div class="surface-setup-shell-grid">
+        <section class="surface-setup-shell-slot" data-ui-state="idle" data-ui-tone="neutral" id="audio-setup-shell-backend-card">
+          <div class="surface-setup-shell-slot-head">
+            <div>
+              <div class="stat-title">Audio backend</div>
+              <div class="generation-summary-title">Runtime readiness</div>
+            </div>
+            <span class="badge">1 · Backend</span>
+          </div>
+          <div class="surface-backend-strip compact" data-backend-role="audio" data-surface-backend="audio" style="margin-top:14px;">
+            <div class="row" style="gap:10px; align-items:center; flex-wrap:wrap;">
+              <span class="backend-chip state-offline" id="surface-backend-audio-state">Offline</span>
+              <strong id="surface-backend-audio-name">No active music / SFX backend</strong>
+              <span class="mini-note" id="surface-backend-audio-meta">Choose the future audio backend now so later generation work stays pointed at the right target.</span>
+            </div>
+            <div class="row" style="gap:8px; flex-wrap:wrap; align-items:center;">
+              <button class="btn btn-small" id="btn-surface-backend-audio-launch" type="button">Launch Backend</button>
+              <button class="btn btn-small" id="btn-surface-backend-audio-connect" type="button">Connect Music / SFX Backend</button>
+              <button class="btn btn-small" id="btn-surface-backend-audio-disconnect" type="button">Disconnect</button>
+              <button class="btn btn-small" id="btn-surface-backend-audio-manage" type="button">Manage in Admin</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="surface-setup-shell-slot" data-ui-state="ready" data-ui-tone="primary" id="audio-setup-shell-format-card">
+          <div class="surface-setup-shell-slot-head">
+            <div>
+              <div class="stat-title">Audio engine</div>
+              <div class="generation-summary-title">Output / delivery lane</div>
+            </div>
+            <span class="badge" id="audio-format-active-badge">WAV</span>
+          </div>
+          <label for="audio-format" style="margin-top:14px; display:block;">Output mode</label>
+          <select id="audio-format">
+            <option value="wav">WAV</option>
+            <option value="flac">FLAC</option>
+            <option value="mp3">MP3</option>
+          </select>
+          <div class="mini-note" style="margin-top:12px;">Until true backend-specific music / SFX engine catalogs exist, the shell uses output mode as the most honest proxy for the audio-engine lane.</div>
+        </section>
+
+        <section class="surface-setup-shell-slot" data-ui-state="ready" data-ui-tone="primary" id="audio-setup-shell-job-card">
+          <div class="surface-setup-shell-slot-head">
+            <div>
+              <div class="stat-title">Job lane</div>
+              <div class="generation-summary-title">Workspace lane</div>
+            </div>
+            <span class="badge" id="audio-job-active-badge">Music</span>
+          </div>
+          <label for="audio-job-type" style="margin-top:14px; display:block;">Lane</label>
+          <select id="audio-job-type">
+            <option value="music">Music</option>
+            <option value="sfx">SFX</option>
+            <option value="ambience">Ambience</option>
+          </select>
+          <div class="mini-note" style="margin-top:12px;">This lane decides whether the brief is building a music cue, a designed effect, or a longer ambience bed.</div>
+        </section>
+      </div>
+      <div class="surface-setup-shell-grid">
+        <section class="surface-setup-shell-slot surface-setup-shell-slot--span-full" data-ui-state="neutral" data-ui-tone="neutral" id="audio-setup-shell-preset-card">
+          <div class="surface-setup-shell-slot-head">
+            <div><div class="stat-title">Workspace preset</div><div class="generation-summary-title">Built-in starters + saved UI setup</div></div>
+            <span class="badge">4 · Preset</span>
+          </div>
+          <div class="row u-gap-8 u-wrap surface-setup-shell-preset-row" style="margin-top:12px;">
+            <select class="u-shell-select-width" id="audio-shell-preset-select"><option value="">Workspace presets…</option></select>
+            <button class="btn btn-small" id="btn-audio-load-preset" type="button">Load</button>
+            <button class="btn btn-small" id="btn-audio-save-preset" type="button">Save preset</button>
+            <button class="btn btn-small" id="btn-audio-update-preset" type="button">Update preset</button>
+            <button class="btn btn-small btn-danger" id="btn-audio-delete-preset" type="button">Delete</button>
+            <button class="btn btn-small" id="btn-audio-set-default-preset" type="button">Set default</button>
+            <button class="btn btn-small" id="btn-audio-clear-default-preset" type="button">Clear default</button>
+            <div class="badge" id="audio-preset-active-badge">Manual setup</div>
+          </div>
+          <div class="mini-note" style="margin-top:12px;">Workspace presets here are browser-local UI presets. Save the current shell + brief inputs when you want to reopen the same music or SFX setup later. Use <strong>Save local draft</strong> below when you only want the working brief draft in this browser.</div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <div class="surface-workspace-shell surface-coming-soon-shell">
+    <div class="surface-workspace-shell-header">
+      <div class="surface-workspace-shell-copy">
+        <div class="stat-title">Workspace lane</div>
+        <div class="generation-summary-title">Music / SFX workspace</div>
+        <div class="muted small">Coming soon. Music / SFX generation is not implemented yet. This tab is reserved for the future audio workflow, backend wiring, preview, and export tools.</div>
+      </div>
+      <div class="badge">Not yet implemented</div>
+    </div>
+    <div class="card-lite surface-coming-soon-card">
+      <div class="accordion-title">Coming soon</div>
+      <div class="mini-note" style="margin-top:12px;">This workspace is intentionally parked for now so the UI does not imply live runtime support that is not finished yet.</div>
+      <ul class="video-checklist" style="margin-top:14px;">
+        <li>Setup shell can remain available for future planning.</li>
+        <li>Runtime generation, preview, export, and draft tools are not active yet.</li>
+        <li>Implementation will land in a later dedicated workflow pass.</li>
+      </ul>
+    </div>
+  </div>
+</section>

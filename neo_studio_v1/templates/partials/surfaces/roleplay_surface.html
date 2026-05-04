@@ -1,0 +1,1617 @@
+<!-- Legacy Roleplay V1 surface retained for migration/reference only. Not included in templates/index.html. New roleplay UI work belongs in roleplay_v2_surface.html. -->
+<section class="section" id="tab-roleplay">
+<div class="panel roleplay-hero-panel">
+<div class="row-between roleplay-hero-head">
+<div>
+<h2>Roleplay</h2>
+<div class="muted small">Chat-first scene play built for the Text Backend. Keep it easy up front, then open the advanced knobs only when you actually need them.</div>
+</div>
+<div class="badge">Text surface</div>
+</div>
+<div class="surface-setup-shell-panel" id="roleplay-setup-shell-panel" style="margin-top:16px;">
+  <button aria-controls="roleplay-setup-shell-content" aria-expanded="true" class="surface-setup-shell-header" id="roleplay-setup-shell-header" type="button">
+    <div>
+      <div class="row" style="gap:8px; align-items:center; flex-wrap:wrap;">
+        <span class="stat-title">Roleplay setup</span>
+        <span class="badge">Setup shell</span>
+      </div>
+      <div class="mini-note">Set the backend, active model capability, and session mode here, then collapse the shell so the actual scene can stay front and center.</div>
+    </div>
+    <div class="surface-setup-shell-header-actions">
+      <span class="surface-setup-shell-toggle-copy" id="roleplay-setup-shell-toggle-copy">Collapse setup</span>
+      <span aria-hidden="true" class="surface-setup-shell-chevron" id="roleplay-setup-shell-chevron">⌄</span>
+    </div>
+  </button>
+
+  <div class="surface-setup-shell-summary-strip hidden" id="roleplay-setup-shell-summary-strip"></div>
+
+  <div id="roleplay-setup-shell-content">
+    <div class="surface-setup-shell-grid">
+      <section class="surface-setup-shell-slot" data-ui-state="idle" data-ui-tone="neutral" id="roleplay-setup-shell-backend-card">
+        <div class="surface-setup-shell-slot-head">
+          <div>
+            <div class="stat-title">Text backend</div>
+            <div class="generation-summary-title">Runtime readiness</div>
+          </div>
+          <span class="badge">1 · Backend</span>
+        </div>
+        <div class="backend-required-hint offline" id="roleplay-text-backend-note" style="margin-top:14px;">
+          <div class="backend-required-copy">
+            <div class="backend-required-row">
+              <div class="backend-required-title">Text backend needed for live roleplay turns</div>
+              <span class="backend-chip state-offline" id="surface-backend-roleplay-state">Offline</span>
+            </div>
+            <div class="mini-note" id="surface-backend-roleplay-name" style="margin-top:6px;">No active text backend</div>
+            <div class="backend-required-body" id="roleplay-text-backend-note-body">Connect a Text Backend to start scenes, continue turns, and run in-character replies. Setup notes and transcript drafting still work offline.</div>
+          </div>
+          <div class="row" style="gap:8px; flex-wrap:wrap; align-items:center;">
+            <button class="btn btn-small" id="btn-surface-backend-roleplay-launch" type="button">Launch Backend</button>
+            <button class="btn btn-small btn-primary" id="btn-surface-backend-roleplay-connect" type="button">Connect Text Backend</button>
+            <button class="btn btn-small" id="btn-surface-backend-roleplay-disconnect" type="button">Disconnect</button>
+            <button class="btn btn-small" id="btn-roleplay-note-manage-backend" type="button">Manage in Admin</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="surface-setup-shell-slot" data-ui-state="ready" data-ui-tone="primary" id="roleplay-setup-shell-model-card">
+        <div class="surface-setup-shell-slot-head">
+          <div>
+            <div class="stat-title">Model capability</div>
+            <div class="generation-summary-title">Active text lane</div>
+          </div>
+          <span class="badge" id="roleplay-model-capability-badge">Text-only</span>
+        </div>
+        <div class="mini-note" id="roleplay-model-current-label" style="margin-top:14px;">Current model · default</div>
+        <div class="help" id="roleplay-model-capability-note" style="margin-top:10px;">Capability is inferred from the active text model name until the backend exposes a direct role contract.</div>
+        <div class="row" style="margin-top:12px; gap:8px; flex-wrap:wrap;">
+          <button class="btn btn-small" id="btn-roleplay-open-model-manager" type="button">Open Prompt &amp; Caption</button>
+        </div>
+      </section>
+
+      <section class="surface-setup-shell-slot" data-ui-state="ready" data-ui-tone="primary" id="roleplay-setup-shell-mode-card">
+        <div class="surface-setup-shell-slot-head">
+          <div>
+            <div class="stat-title">Scene mode</div>
+            <div class="generation-summary-title">Choose your session goal</div>
+          </div>
+          <span class="badge" id="roleplay-mode-active-badge">Roleplay</span>
+        </div>
+        <div class="grid grid-2" style="margin-top:14px; gap:14px; align-items:start;">
+          <div>
+            <label for="roleplay-output-preset">Story output preset</label>
+            <select id="roleplay-output-preset">
+              <option selected="" value="roleplay">Roleplay</option>
+              <option value="short_story">Short Story</option>
+              <option value="novel">Novel Mode</option>
+              <option value="cinematic">Cinematic Mode</option>
+            </select>
+          </div>
+          <div>
+            <label for="roleplay-interaction-mode">Interaction mode</label>
+            <select id="roleplay-interaction-mode">
+              <option selected="" value="roleplay">Roleplay</option>
+              <option value="authoring">Authoring</option>
+            </select>
+          </div>
+        </div>
+        <div class="mini-note" id="roleplay-mode-meta" style="margin-top:12px;">Use output preset for the kind of prose you want, and interaction mode for whether the session behaves like scene play or author guidance.</div>
+      </section>
+    </div>
+    <div class="surface-setup-shell-grid">
+      <section class="surface-setup-shell-slot surface-setup-shell-slot--span-full" data-ui-state="neutral" data-ui-tone="neutral" id="roleplay-setup-shell-preset-card">
+        <div class="surface-setup-shell-slot-head">
+          <div><div class="stat-title">Workspace preset</div><div class="generation-summary-title">Quick start + saved</div></div>
+          <span class="badge">4 · Preset</span>
+        </div>
+        <div class="row u-gap-8 u-wrap surface-setup-shell-preset-row" style="margin-top:12px;">
+          <select class="u-shell-select-width" id="roleplay-shell-preset-select"><option value="">Roleplay presets…</option></select>
+          <button class="btn btn-small" id="btn-roleplay-load-preset" type="button">Load</button>
+          <button class="btn btn-small" id="btn-roleplay-set-default-preset" type="button">⭐ Default</button>
+          <button class="btn btn-small" id="btn-roleplay-clear-default-preset" type="button">Clear default</button>
+          <div class="badge" id="roleplay-preset-active-badge">Manual setup</div>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+<div class="surface-workspace-shell">
+  <div class="surface-workspace-shell-header">
+    <div class="surface-workspace-shell-copy">
+      <div class="stat-title">Workspace lane</div>
+      <div class="generation-summary-title">Roleplay workspace</div>
+      <div class="muted small">Build the active scene below. Backend, model capability, workspace, and presets stay in the setup shell above.</div>
+    </div>
+    <div class="badge">Active workspace</div>
+  </div>
+<div class="grid grid-2 roleplay-layout" style="align-items:start; gap:18px;">
+<div class="panel roleplay-setup-panel">
+<div class="row-between">
+<div>
+<h3 style="margin:0;">Scene setup</h3>
+<div class="muted small">Set the premise once, then stay in the flow.</div>
+</div>
+<div class="badge">Setup</div>
+</div>
+<label for="roleplay-scenario" style="margin-top:14px;">Scenario / premise</label>
+<textarea id="roleplay-scenario" placeholder="Late-night reunion in a rain-soaked station... or whatever scene you want to drop into." rows="5"></textarea>
+<div class="hidden" id="roleplay-primary-cast-legacy">
+<input id="roleplay-user-name" placeholder="Sparky" type="text"/>
+<input id="roleplay-partner-name" placeholder="Kai" type="text"/>
+<select id="roleplay-user-character-id"><option value="">None</option></select>
+<select id="roleplay-partner-character-id"><option value="">None</option></select>
+</div>
+<div class="grid grid-2" style="margin-top:14px; gap:14px; align-items:start;">
+<div>
+<label for="roleplay-tone">Tone</label>
+<select id="roleplay-tone">
+<option value="Warm tension">Warm tension</option>
+<option value="Slow-burn romance">Slow-burn romance</option>
+<option value="Sharp banter">Sharp banter</option>
+<option value="Dark and dramatic">Dark and dramatic</option>
+<option value="Soft comfort">Soft comfort</option>
+<option value="Custom">Custom</option>
+</select>
+</div>
+<div>
+<label for="roleplay-style">Reply style</label>
+<select id="roleplay-style">
+<option value="Immersive dialogue">Immersive dialogue</option>
+<option value="Dialogue with light narration">Dialogue with light narration</option>
+<option value="Cinematic narration">Cinematic narration</option>
+<option value="Novel-like prose">Novel-like prose</option>
+</select>
+</div>
+</div>
+<div class="roleplay-custom-tone-wrap hidden" id="roleplay-custom-tone-wrap" style="margin-top:14px;">
+<label for="roleplay-custom-tone">Custom tone</label>
+<input id="roleplay-custom-tone" placeholder="Write your own tone, like bruised longing with quiet restraint" type="text"/>
+</div>
+<div class="grid grid-2" style="margin-top:14px; gap:14px; align-items:start;">
+<div>
+<label for="roleplay-canon-mode">Canon guidance</label>
+<select id="roleplay-canon-mode">
+<option value="follow_exact">Follow canon exactly</option>
+<option value="follow_until_divergence">Follow canon until divergence</option>
+<option value="self_insert">Insert yourself into canon</option>
+<option selected="" value="what_if">Alternate take / what-if</option>
+</select>
+</div>
+<div>
+<label for="roleplay-input-intent">Input intent</label>
+<select id="roleplay-input-intent">
+<option selected="" value="auto">Auto</option>
+<option value="in_scene_turn">In-scene turn</option>
+<option value="author_direction">Author direction</option>
+<option value="canon_update">Canon update</option>
+<option value="rewrite_instruction">Rewrite instruction</option>
+<option value="story_text">Story text</option>
+</select>
+</div>
+<div>
+<label for="roleplay-continuous-scene-mode">Continuous scene mode</label>
+<select id="roleplay-continuous-scene-mode">
+<option selected="" value="false">Off</option>
+<option value="true">On — stay in the moment</option>
+</select>
+</div>
+<div class="mini-note" style="grid-column:1 / -1; margin-top:-2px;">Continuous scene mode is for direct scene continuation inside the Roleplay tab. It tells Neo to stay on the current beat, avoid summary jumps or off-screen skips, and keep cause-and-effect visible in sequence. Best paired with Roleplay mode, In-scene / Story-text intent, and higher max tokens.</div>
+<div>
+<label for="roleplay-story-mode">Story mode</label>
+<select id="roleplay-story-mode">
+<option selected="" value="linear">Linear</option>
+<option value="branching">Branching</option>
+</select>
+</div>
+<div>
+<label for="roleplay-branch-option-count">Choice count</label>
+<input id="roleplay-branch-option-count" max="6" min="2" step="1" type="number" value="3"/>
+</div>
+<div>
+<label for="roleplay-branch-allow-custom">Custom choice</label>
+<select id="roleplay-branch-allow-custom">
+<option selected="" value="true">Allowed</option>
+<option value="false">Disabled</option>
+</select>
+</div>
+<div>
+<label for="roleplay-world-id">World preset</label>
+<select id="roleplay-world-id"><option value="">None</option></select>
+</div>
+<div>
+<label for="roleplay-scenario-id">Scenario preset</label>
+<select id="roleplay-scenario-id"><option value="">None</option></select>
+</div>
+</div>
+<div class="panel" style="margin-top:14px; padding:14px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.08);">
+<div class="row-between" style="align-items:center; gap:10px;">
+<div>
+<label style="margin:0;">Scene cast</label>
+<div class="mini-note">Use this for extra active, supporting, or off-screen characters beyond the main two.</div>
+</div>
+<button class="btn btn-small" id="btn-roleplay-scene-cast-add" type="button">＋ Add character</button>
+</div>
+<div id="roleplay-scene-cast-list" style="margin-top:12px; display:grid; gap:10px;"></div>
+</div>
+<div class="row" style="margin-top:12px; gap:10px; flex-wrap:wrap;">
+<button class="btn btn-small" id="btn-roleplay-apply-preset" type="button">Apply preset defaults</button>
+<div class="mini-note" id="roleplay-preset-meta">Roleplay keeps turns tighter and dialogue-first.</div>
+</div>
+<label for="roleplay-scene-notes" style="margin-top:14px;">Scene notes</label>
+<textarea id="roleplay-scene-notes" placeholder="Setting, relationship, visual details, or hard rules the scene should respect." rows="4"></textarea>
+<div class="card-lite roleplay-helper-panel" style="margin-top:16px;">
+<div class="row-between" style="gap:10px; align-items:flex-start;">
+<div>
+<div class="stat-title">Workspace helper</div>
+<h4 style="margin:6px 0 0;">Roleplay helper</h4>
+<div class="mini-note" style="margin-top:6px;">Package the current Roleplay context into Assistant so it knows what a character, world, or scenario should actually cover.</div>
+</div>
+<div class="badge">V1.5</div>
+</div>
+<div class="grid grid-3" style="margin-top:14px; gap:14px;">
+<div>
+<label for="roleplay-helper-target">Helper target</label>
+<select id="roleplay-helper-target">
+<option value="character">Character</option>
+<option value="world">World</option>
+<option value="scenario">Scenario</option>
+</select>
+</div>
+<div>
+<label for="roleplay-helper-action">Helper action</label>
+<select id="roleplay-helper-action">
+<option value="brainstorm">Brainstorm</option>
+<option value="draft">Build draft</option>
+<option value="improve">Improve</option>
+<option value="missing">What is missing?</option>
+</select>
+</div>
+<div>
+<label for="roleplay-helper-format">Response template</label>
+<select id="roleplay-helper-format">
+<option value="field_list">Field list</option>
+<option value="natural">Natural draft</option>
+<option value="json_block">JSON block</option>
+</select>
+</div>
+</div>
+<label for="roleplay-helper-prompt" style="margin-top:14px;">What do you want help with?</label>
+<textarea id="roleplay-helper-prompt" placeholder="Example: help me design a morally grey prince who sounds seductive but dangerous." rows="4"></textarea>
+<div class="mini-note roleplay-helper-contract-note" id="roleplay-helper-contract-note" style="margin-top:10px;"></div>
+<div class="roleplay-helper-fields" id="roleplay-helper-fields" style="margin-top:10px;"></div>
+<label for="roleplay-helper-context-preview" style="margin-top:14px;">Context preview</label>
+<textarea id="roleplay-helper-context-preview" readonly="" rows="8"></textarea>
+<div class="row" style="margin-top:12px; gap:10px; flex-wrap:wrap;">
+<button class="btn" id="btn-roleplay-helper-refresh" type="button">Refresh context</button>
+<button class="btn btn-primary" id="btn-roleplay-helper-open-assistant" type="button">Open in Assistant</button>
+<button class="btn" id="btn-roleplay-helper-apply-last" type="button">Apply last Assistant draft</button>
+</div>
+<div class="status" id="roleplay-helper-status" style="margin-top:12px;"></div>
+</div>
+<details class="accordion-block roleplay-advanced-block" data-accordion-id="roleplay-story-scope-settings" data-default-open="false" style="margin-top:16px;">
+<summary>Story / chapter / part scope</summary>
+<div class="roleplay-advanced-grid" style="margin-top:14px; display:grid; gap:14px;">
+<div class="grid grid-3" style="gap:12px; align-items:end;">
+<div><label for="roleplay-chapter-index">Chapter index</label><input id="roleplay-chapter-index" min="1" step="1" type="number" value="1"/></div>
+<div><label for="roleplay-chapter-label">Chapter label</label><input id="roleplay-chapter-label" placeholder="Bookstore reunion" type="text"/></div>
+<div><label for="roleplay-part-index">Part index</label><input id="roleplay-part-index" min="1" step="1" type="number" value="1"/></div>
+<div><label for="roleplay-beat-focus">Beat focus</label><input id="roleplay-beat-focus" placeholder="Awkward re-entry" type="text"/></div>
+<div><label for="roleplay-active-pov">Active POV</label><input id="roleplay-active-pov" placeholder="Kai" type="text"/></div>
+<div><label for="roleplay-active-location">Active location</label><input id="roleplay-active-location" placeholder="Front counter / rain-streaked window" type="text"/></div>
+<div><label for="roleplay-active-cast-focus">Active cast focus</label><input id="roleplay-active-cast-focus" placeholder="Kai, Lak" type="text"/></div>
+<div><label for="roleplay-part-objective">Part objective</label><input id="roleplay-part-objective" placeholder="Hold the tension, no fast forgiveness" type="text"/></div>
+<div><label for="roleplay-tension-level">Tension target</label><select id="roleplay-tension-level"><option value="low">Low</option><option value="simmering">Simmering</option><option selected="" value="medium">Medium</option><option value="high">High</option><option value="climax">Climax</option></select></div>
+<div><label for="roleplay-pacing-target">Pacing target</label><select id="roleplay-pacing-target"><option value="slow_burn">Slow burn</option><option selected="" value="steady">Steady</option><option value="urgent">Urgent</option><option value="lull">Lull</option><option value="aftermath">Aftermath</option></select></div>
+</div>
+<div class="mini-note">Use this to scope the current chapter and beat. Continue Scene will keep writing the active part using this metadata until you deliberately roll into the next one.</div>
+<label for="roleplay-story-scope-notes">Story scope notes</label>
+<textarea id="roleplay-story-scope-notes" placeholder="Whole-story canon, recurring themes, active library context, or long-range intent." rows="3"></textarea>
+<label for="roleplay-chapter-scope-notes">Chapter scope notes</label>
+<textarea id="roleplay-chapter-scope-notes" placeholder="What this chapter is trying to do, who is active, and what tension should stay in focus." rows="3"></textarea>
+<label for="roleplay-part-scope-notes">Part / beat scope notes</label>
+<textarea id="roleplay-part-scope-notes" placeholder="What matters right now in this beat: POV, location, active cast, and immediate direction." rows="3"></textarea>
+</div>
+</details>
+<details class="accordion-block roleplay-advanced-block" data-accordion-id="roleplay-advanced-settings" data-default-open="false" style="margin-top:16px;">
+<summary>Advanced controls</summary>
+<div class="roleplay-advanced-grid" style="margin-top:14px; display:grid; gap:14px;">
+<label for="roleplay-memory-notes">Memory / canon notes</label>
+<textarea id="roleplay-memory-notes" placeholder="Facts that should stay true across turns." rows="4"></textarea>
+<label for="roleplay-author-note">Author note</label>
+<textarea id="roleplay-author-note" placeholder="Optional steering note for pacing, subtext, limits, or formatting." rows="3"></textarea>
+<div class="grid grid-4 roleplay-advanced-controls" style="gap:12px; align-items:end;">
+<div>
+<label for="roleplay-max-tokens">Max tokens</label>
+<input id="roleplay-max-tokens" min="96" step="8" type="number" value="320"/>
+</div>
+<div>
+<label for="roleplay-temperature">Temperature</label>
+<input id="roleplay-temperature" max="1.5" min="0" step="0.05" type="number" value="0.82"/>
+</div>
+<div>
+<label for="roleplay-top-p">Top P</label>
+<input id="roleplay-top-p" max="1" min="0" step="0.05" type="number" value="0.92"/>
+</div>
+<div>
+<label for="roleplay-top-k">Top K</label>
+<input id="roleplay-top-k" min="0" step="1" type="number" value="60"/>
+</div>
+</div>
+</div>
+</details>
+<details class="accordion-block roleplay-advanced-block" data-accordion-id="roleplay-continuity-inspector" data-default-open="false" style="margin-top:16px;">
+<summary>Continuity inspector</summary>
+<div class="roleplay-advanced-grid" style="margin-top:14px; display:grid; gap:14px;">
+<div class="mini-note">Preview the continuity memory Neo would inject for the active story / part, then repair or reset it when continuity starts drifting.</div>
+<div class="mini-note" id="roleplay-continuity-backend-note" style="margin-top:6px;">Embedding backend details will appear here.</div>
+<label for="roleplay-continuity-chunk-type-filter" style="margin-top:12px;">Forget filter</label>
+<select id="roleplay-continuity-chunk-type-filter">
+<option value="all">All chunk types</option>
+<option value="relationship_shift">Relationship shift</option>
+<option value="unresolved_thread">Unresolved thread</option>
+<option value="event">Event</option>
+<option value="world_fact">World fact</option>
+<option value="character_fact">Character fact</option>
+<option value="callback">Callback</option>
+<option value="summary">Summary</option>
+</select>
+<label for="roleplay-continuity-preview">Continuity retrieval preview</label>
+<textarea id="roleplay-continuity-preview" placeholder="Preview continuity memory for the active story / part." readonly="" rows="8"></textarea>
+<div class="assistant-context-list" id="roleplay-continuity-item-list"></div>
+<div class="row" style="margin-top:10px; gap:10px; flex-wrap:wrap;">
+<button class="btn btn-small" id="btn-roleplay-preview-continuity" type="button">Preview continuity</button>
+<button class="btn btn-small" id="btn-roleplay-repair-continuity" type="button">Repair continuity</button>
+<button class="btn btn-small" id="btn-roleplay-reset-part-continuity" type="button">Reset part continuity</button>
+<button class="btn btn-small" id="btn-roleplay-reset-story-continuity" type="button">Reset story continuity</button>
+</div>
+<div class="status" id="roleplay-continuity-status" style="margin-top:12px;"></div>
+</div>
+</details>
+<div class="row roleplay-setup-actions" style="margin-top:16px; flex-wrap:wrap; gap:10px;">
+<button class="btn btn-primary" id="btn-roleplay-start-scene" type="button">Start scene</button>
+<button class="btn" id="btn-roleplay-continue-scene" type="button">Continue scene</button>
+<button class="btn" id="btn-roleplay-close-part" type="button">Close current part</button>
+<button class="btn" id="btn-roleplay-next-part" type="button">Start next part</button>
+<button class="btn" id="btn-roleplay-clear-scene" type="button">Clear transcript</button>
+</div>
+<div class="status" id="roleplay-setup-status" style="margin-top:12px;"></div>
+</div>
+<div class="panel roleplay-chat-panel">
+<div class="row-between">
+<div>
+<h3 style="margin:0;">Scene chat</h3>
+<div class="muted small">Transcript stays local in this browser until you clear it.</div>
+</div>
+<div class="badge" id="roleplay-transcript-count">0 turns</div>
+</div>
+<div class="roleplay-transcript" id="roleplay-transcript" style="margin-top:14px;"></div>
+<label for="roleplay-user-input" id="roleplay-user-input-label" style="margin-top:14px;">Your next turn</label>
+<textarea id="roleplay-user-input" placeholder="Type your reply here, then send it into the scene." rows="4"></textarea>
+<div class="mini-note" id="roleplay-user-input-hint" style="margin-top:8px;">In Roleplay mode, your text is treated as the next in-scene turn.</div>
+<div class="row roleplay-chat-actions" style="margin-top:14px; flex-wrap:wrap; gap:10px;">
+<button class="btn btn-primary" id="btn-roleplay-send" type="button">Send reply</button>
+<button class="btn" id="btn-roleplay-regenerate" type="button">Regenerate last reply</button>
+<button class="btn btn-warn" disabled="" id="btn-roleplay-stop" type="button">Stop</button>
+<button class="btn" disabled="" id="btn-roleplay-continue-cutoff" type="button">Continue cut-off</button>
+<button class="btn" id="btn-roleplay-copy-transcript" type="button">Copy transcript</button>
+</div>
+<div class="mini-note" id="roleplay-stream-note" style="margin-top:8px;">Streaming shows the partner reply live when the backend supports it. If streaming is unavailable, Neo falls back to the normal one-shot reply path automatically.</div>
+<div class="panel" id="roleplay-branching-panel" style="margin-top:12px; padding:12px; display:none;">
+<div class="row-between" style="align-items:center; gap:10px;">
+<div><strong>Branch choices</strong><div class="mini-note" id="roleplay-branching-meta">Branching mode generates clickable next-step choices after the latest reply.</div></div>
+<button class="btn btn-small" id="btn-roleplay-refresh-choices" type="button">Refresh choices</button>
+</div>
+<div id="roleplay-branch-options" style="display:grid; gap:10px; margin-top:12px;"></div>
+<div class="row" id="roleplay-branch-custom-wrap" style="margin-top:12px; gap:10px; flex-wrap:wrap; align-items:end;">
+<div style="flex:1 1 320px;"><label for="roleplay-branch-custom-input">Custom choice</label><input id="roleplay-branch-custom-input" placeholder="Write your own branch choice and send it into the next beat." type="text"/></div>
+<button class="btn" id="btn-roleplay-branch-send-custom" type="button">Use custom choice</button>
+</div>
+</div>
+<div class="status" id="roleplay-chat-status" style="margin-top:12px;"></div>
+</div>
+</div>
+<details class="panel roleplay-story-manager-panel roleplay-collapsible-panel" id="roleplay-story-panel" open="">
+<summary class="roleplay-collapsible-summary">
+<div>
+<h3 style="margin:0;">Saved stories</h3>
+<div class="muted small">Story cards live under Roleplay and keep title, summary, world, universe, and cast together.</div>
+</div>
+<div class="badge">Story manager</div>
+</summary>
+<div class="roleplay-collapsible-body">
+<div class="row" style="margin-top:14px; gap:10px; flex-wrap:wrap; align-items:center;">
+<button class="btn btn-small btn-primary" id="btn-roleplay-story-mode-edit" type="button">Edit mode</button>
+<button class="btn btn-small" id="btn-roleplay-story-open-reader" type="button">Reader mode</button>
+<div class="mini-note" id="roleplay-story-mode-hint">Edit mode keeps story cards, form fields, and save actions visible. Reader mode opens a cleaner scroll reading view for the selected story.</div>
+</div>
+<div id="roleplay-story-edit-pane">
+<div class="grid grid-2" style="margin-top:14px; gap:14px; align-items:start;">
+<div>
+<label for="roleplay-story-title">Story title</label>
+<input id="roleplay-story-title" placeholder="The Night the Bookstore Stayed Lit" type="text"/>
+</div>
+<div>
+<label for="roleplay-story-status">Status</label>
+<select id="roleplay-story-status">
+<option value="draft">Draft</option>
+<option value="active">Active</option>
+<option value="paused">Paused</option>
+<option value="complete">Complete</option>
+</select>
+</div>
+<div>
+<label for="roleplay-story-universe">Universe</label>
+<input id="roleplay-story-universe" placeholder="Optional universe label" type="text"/>
+</div>
+<div>
+<label for="roleplay-story-world">World</label>
+<input id="roleplay-story-world" placeholder="Optional world label" type="text"/>
+</div>
+</div>
+<div class="grid grid-3" style="margin-top:14px; gap:14px; align-items:end;">
+<div><label for="roleplay-story-form-mode">Story mode</label><select id="roleplay-story-form-mode"><option selected="" value="linear">Linear</option><option value="branching">Branching</option></select></div>
+<div><label for="roleplay-story-form-option-count">Choice count</label><input id="roleplay-story-form-option-count" max="6" min="2" step="1" type="number" value="3"/></div>
+<div><label for="roleplay-story-form-allow-custom">Custom choice</label><select id="roleplay-story-form-allow-custom"><option selected="" value="true">Allowed</option><option value="false">Disabled</option></select></div>
+</div>
+<div class="mini-note" style="margin-top:10px;">Use Branching mode when you want Neo to generate clickable choice options after each reply. Linear keeps the normal freeform flow.</div>
+<label for="roleplay-story-summary" style="margin-top:14px;">Story summary</label>
+<textarea id="roleplay-story-summary" placeholder="One short summary for the story card." rows="3"></textarea>
+<label for="roleplay-story-leads" style="margin-top:14px;">Lead characters</label>
+<input id="roleplay-story-leads" placeholder="Lak, Kai" type="text"/>
+<details class="accordion-block roleplay-advanced-block" data-accordion-id="roleplay-story-linked-context" data-default-open="false" style="margin-top:16px;">
+<summary>Linked story context</summary>
+<div class="mini-note" style="margin-top:10px;">These links act as the story-wide canon layer for Roleplay, Story, and Novel modes.</div>
+<div style="display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:12px; align-items:start;"><div><label for="roleplay-story-link-legends">Legends</label><select id="roleplay-story-link-legends" multiple="" size="4"></select></div><div><label for="roleplay-story-link-universes">Universes</label><select id="roleplay-story-link-universes" multiple="" size="4"></select></div><div><label for="roleplay-story-link-worlds">Worlds</label><select id="roleplay-story-link-worlds" multiple="" size="4"></select></div><div><label for="roleplay-story-link-regions">Kingdoms / Regions</label><select id="roleplay-story-link-regions" multiple="" size="4"></select></div><div><label for="roleplay-story-link-cities">Cities / Settlements</label><select id="roleplay-story-link-cities" multiple="" size="4"></select></div><div><label for="roleplay-story-link-locations">Locations</label><select id="roleplay-story-link-locations" multiple="" size="4"></select></div><div><label for="roleplay-story-link-organizations">Organizations / Factions</label><select id="roleplay-story-link-organizations" multiple="" size="4"></select></div><div><label for="roleplay-story-link-characters">Characters</label><select id="roleplay-story-link-characters" multiple="" size="4"></select></div><div><label for="roleplay-story-link-artifacts">Weapons / Artifacts</label><select id="roleplay-story-link-artifacts" multiple="" size="4"></select></div><div><label for="roleplay-story-link-rituals">Spells / Rituals / Techniques</label><select id="roleplay-story-link-rituals" multiple="" size="4"></select></div><div><label for="roleplay-story-link-cycles">Cycles / Conditions / Systems</label><select id="roleplay-story-link-cycles" multiple="" size="4"></select></div><div><label for="roleplay-story-link-creatures">Creatures / Animals / Fauna</label><select id="roleplay-story-link-creatures" multiple="" size="4"></select></div><div><label for="roleplay-story-link-packs">Packs</label><select id="roleplay-story-link-packs" multiple="" size="4"></select></div><div><label for="roleplay-story-link-scenarios">Scenarios</label><select id="roleplay-story-link-scenarios" multiple="" size="4"></select></div></div>
+</details>
+<div class="grid grid-2" style="margin-top:14px; gap:14px; align-items:start;">
+<div>
+<label for="roleplay-story-cover-file">Story cover</label>
+<input accept="image/*" id="roleplay-story-cover-file" type="file"/>
+<div class="row" style="margin-top:10px; gap:8px; flex-wrap:wrap;">
+<button class="btn btn-small" id="btn-roleplay-story-cover-upload" type="button">Upload cover</button>
+</div>
+</div>
+<div class="roleplay-asset-preview" id="roleplay-story-cover-preview-wrap">
+<img alt="Story cover preview" class="hidden" id="roleplay-story-cover-preview"/>
+<div class="mini-note" id="roleplay-story-cover-empty">No cover uploaded yet.</div>
+</div>
+</div>
+<div class="grid grid-2" style="margin-top:14px; gap:14px; align-items:end;">
+<div>
+<label for="roleplay-part-title">Part title</label>
+<input id="roleplay-part-title" placeholder="Part 1 · Bookstore during the storm" type="text"/>
+</div>
+<div class="mini-note">Save the story card once, then save the current live scene into parts underneath it.</div>
+</div>
+<input id="roleplay-story-id" type="hidden"/>
+<input id="roleplay-part-id" type="hidden"/>
+<div class="row" style="margin-top:14px; gap:10px; flex-wrap:wrap;">
+<button class="btn btn-primary" id="btn-roleplay-story-save" type="button">Save story card</button>
+<button class="btn" id="btn-roleplay-story-save-part" type="button">Save current scene to part</button>
+<button class="btn" id="btn-roleplay-story-recover" type="button">Recover last draft</button>
+<button class="btn" id="btn-roleplay-story-clear" type="button">Clear form</button>
+<button class="btn" id="btn-roleplay-story-refresh" type="button">Refresh stories</button>
+</div>
+<div class="grid grid-3" style="margin-top:14px; gap:12px; align-items:end;">
+<div>
+<label for="roleplay-story-export-format">Export format</label>
+<select id="roleplay-story-export-format">
+<option value="md">Markdown (.md)</option>
+<option value="html">HTML (.html)</option>
+<option value="txt">Plain text (.txt)</option>
+<option value="json">JSON (.json)</option>
+<option value="jsonl">JSONL (.jsonl)</option>
+</select>
+</div>
+<div>
+<label for="roleplay-story-export-mode">Export mode</label>
+<select id="roleplay-story-export-mode">
+<option value="readable">Readable</option>
+<option value="archive">Archive / raw</option>
+<option value="reimportable">Re-importable</option>
+</select>
+</div>
+<div class="row" style="gap:8px; flex-wrap:wrap;">
+<button class="btn" id="btn-roleplay-story-export-current" type="button">Export current story</button>
+<button class="btn btn-small" id="btn-roleplay-story-export-save-copy" type="button">Export + save copy</button>
+</div>
+</div>
+<div class="mini-note" style="margin-top:10px;">Story exports work separately from library-record export and use the currently loaded story card or the story you export from a card action.</div>
+<div class="panel" style="margin-top:14px; padding:14px; border:1px solid rgba(255,255,255,0.08); border-radius:16px; background:rgba(255,255,255,0.02);">
+<div class="row-between" style="gap:12px; align-items:flex-start;">
+<div>
+<h4 style="margin:0;">Import to story blueprint</h4>
+<div class="muted small">Turn pasted text, transcripts, screenplay text, subtitles, or notes into a saved story card with scoped parts.</div>
+</div>
+<div class="badge">Blueprint</div>
+</div>
+<div class="grid grid-3" style="margin-top:14px; gap:12px; align-items:end;">
+<div>
+<label for="roleplay-blueprint-source-kind">Source kind</label>
+<select id="roleplay-blueprint-source-kind">
+<option value="auto">Auto-detect</option>
+<option value="prose">Prose / novel text</option>
+<option value="transcript">Transcript / dialogue</option>
+<option value="screenplay">Screenplay / scene text</option>
+<option value="subtitle">Subtitle-like text</option>
+<option value="notes">Notes / mixed text</option>
+</select>
+</div>
+<div>
+<label for="roleplay-blueprint-title">Title override</label>
+<input id="roleplay-blueprint-title" placeholder="Optional imported story title" type="text"/>
+</div>
+<div>
+<label for="roleplay-blueprint-file">Import file</label>
+<input accept=".txt,.md,.markdown,.srt,.vtt" id="roleplay-blueprint-file" type="file"/>
+</div>
+</div>
+<label for="roleplay-blueprint-text" style="margin-top:14px;">Source text</label>
+<textarea id="roleplay-blueprint-text" placeholder="Paste transcript text, screenplay pages, chapter text, notes, or subtitle-like text here." rows="8"></textarea>
+<div class="row" style="margin-top:12px; gap:10px; flex-wrap:wrap;">
+<button class="btn" id="btn-roleplay-blueprint-import" type="button">Import to story</button>
+</div>
+<div class="mini-note" style="margin-top:10px;">Neo will create a new saved story card and split the import into manageable parts instead of one giant chapter blob.</div>
+</div>
+<div class="status" id="roleplay-story-status-msg" style="margin-top:12px;"></div>
+<div class="roleplay-story-cards" id="roleplay-story-cards" style="margin-top:16px;"></div>
+</div>
+<div class="panel hidden" id="roleplay-story-reader-pane" style="margin-top:18px; padding:16px; border:1px solid rgba(255,255,255,0.08); border-radius:18px; background:rgba(255,255,255,0.03);">
+<div class="row-between" style="gap:12px; align-items:flex-start;">
+<div>
+<h4 style="margin:0;">Reader mode</h4>
+<div class="muted small">Book-like scroll reading for saved stories and parts. This stays separate from the live roleplay chat.</div>
+</div>
+<div class="badge" id="roleplay-story-reader-badge">No story loaded</div>
+</div>
+<div class="row" style="margin-top:14px; gap:10px; flex-wrap:wrap; align-items:end;">
+<button class="btn btn-small" id="btn-roleplay-story-reader-prev" type="button">← Previous part</button>
+<div>
+<label for="roleplay-story-reader-part-select">Jump to part</label>
+<select id="roleplay-story-reader-part-select"><option value="">No parts</option></select>
+</div>
+<button class="btn btn-small" id="btn-roleplay-story-reader-next" type="button">Next part →</button>
+<button class="btn btn-small" id="btn-roleplay-story-reader-replay-start" type="button">Replay from start</button>
+<button class="btn btn-small" id="btn-roleplay-story-reader-replay-current" type="button">Replay current checkpoint</button>
+<button class="btn btn-small" id="btn-roleplay-story-reader-edit-current" type="button">Open current part in editor</button>
+<button class="btn btn-small" id="btn-roleplay-story-reader-close" type="button">Back to edit mode</button>
+</div>
+<div id="roleplay-story-reader-header" style="margin-top:16px;"></div>
+<div id="roleplay-story-reader-toc" style="margin-top:16px;"></div>
+<div id="roleplay-story-reader-scroll" style="margin-top:16px; max-height:72vh; overflow:auto; border:1px solid rgba(255,255,255,0.08); border-radius:16px; padding:18px; background:rgba(0,0,0,0.16);"></div>
+<div class="status" id="roleplay-story-reader-status" style="margin-top:12px;"></div>
+</div>
+</div>
+</details>
+<details class="panel roleplay-library-panel roleplay-collapsible-panel" id="roleplay-library-panel" open="">
+<summary class="roleplay-collapsible-summary">
+<div>
+<h3 style="margin:0;">Roleplay libraries</h3>
+<div class="muted small">Save reusable characters, worlds, and scenarios. Gender and canon details get compiled into the model packet so the scene does not drift to the wrong default.</div>
+</div>
+<div class="badge">Libraries</div>
+</summary>
+<div class="roleplay-collapsible-body">
+<details class="accordion-block" open="" style="margin-top:14px;">
+<summary>Import / export</summary>
+<div class="grid grid-2" style="margin-top:14px; gap:14px; align-items:end;">
+<div>
+<label for="roleplay-library-import-kind">Target library</label>
+<select id="roleplay-library-import-kind">
+<option value="">Auto-detect from JSON</option>
+<option value="legend">Legends</option>
+<option value="universe">Universes</option>
+<option value="world">Worlds</option>
+<option value="region">Kingdoms / Regions</option>
+<option value="city">Cities / Settlements</option>
+<option value="location">Locations</option>
+<option value="organization">Organizations / Factions</option>
+<option value="character">Characters</option>
+<option value="artifact">Weapons / Artifacts</option>
+<option value="ritual">Spells / Rituals / Techniques</option>
+<option value="cycle">Cycles / Conditions / Systems</option>
+<option value="creature">Creatures / Animals / Fauna</option>
+<option value="pack">Packs</option>
+<option value="scenario">Scenarios</option>
+</select>
+</div>
+<div>
+<label for="roleplay-library-import-file">Import file</label>
+<input accept=".json,.md,.markdown,.txt" id="roleplay-library-import-file" type="file"/>
+</div>
+<div style="grid-column:1 / -1;">
+<label for="roleplay-library-ai-brief">AI draft brief</label>
+<textarea id="roleplay-library-ai-brief" placeholder="Write a brief for the library record you want Neo to draft as JSON." rows="4"></textarea>
+</div>
+<div>
+<label for="roleplay-library-ai-mode">AI draft mode</label>
+<select id="roleplay-library-ai-mode">
+<option value="draft_scratch">Draft from scratch</option>
+<option value="fill_missing">Fill missing using current JSON editor</option>
+<option value="rewrite_current">Rewrite current JSON editor</option>
+</select>
+</div>
+<div>
+<label for="roleplay-library-ai-style">AI drafting style</label>
+<select id="roleplay-library-ai-style">
+<option value="strict">Strict</option>
+<option selected="" value="balanced">Balanced</option>
+<option value="generative">Generative</option>
+</select>
+</div>
+<div class="row" style="gap:8px; flex-wrap:wrap; justify-content:flex-start; align-items:flex-end; grid-column:1 / -1;">
+<button class="btn btn-small" id="btn-roleplay-library-ai-draft" type="button">Draft JSON with AI</button>
+<button class="btn btn-small" id="btn-roleplay-library-json-preview" type="button">Preview JSON editor</button>
+</div>
+<div class="panel" style="grid-column:1 / -1; padding:12px; border:1px solid rgba(255,255,255,.08); border-radius:12px; background:rgba(255,255,255,.02);">
+<div class="row-between" style="align-items:center; gap:10px;">
+<div>
+<label style="margin:0;">AI context</label>
+<div class="mini-note">Optional linked context for smarter drafting. Leave blank for freer generation, or set world/place/org/species cues so the AI fills missing details to match your current canon.</div>
+</div>
+<div class="badge">Context-aware drafting</div>
+</div>
+<div class="grid grid-3" style="margin-top:12px; gap:12px; align-items:end;">
+<div>
+<label for="roleplay-library-ai-universe-id">Universe context</label>
+<select id="roleplay-library-ai-universe-id"><option value="">None</option></select>
+</div>
+<div>
+<label for="roleplay-library-ai-world-id">World context</label>
+<select id="roleplay-library-ai-world-id"><option value="">None</option></select>
+</div>
+<div>
+<label for="roleplay-library-ai-region-id">Kingdom / region context</label>
+<select id="roleplay-library-ai-region-id"><option value="">None</option></select>
+</div>
+<div>
+<label for="roleplay-library-ai-city-id">City / settlement context</label>
+<select id="roleplay-library-ai-city-id"><option value="">None</option></select>
+</div>
+<div>
+<label for="roleplay-library-ai-location-id">Location context</label>
+<select id="roleplay-library-ai-location-id"><option value="">None</option></select>
+</div>
+<div>
+<label for="roleplay-library-ai-scenario-id">Scenario context</label>
+<select id="roleplay-library-ai-scenario-id"><option value="">None</option></select>
+</div>
+<div>
+<label for="roleplay-library-ai-species-hint">Species / identity hint</label>
+<input id="roleplay-library-ai-species-hint" placeholder="Human, mage, elf, vampire, etc." type="text"/>
+</div>
+<div style="grid-column: span 2;">
+<label for="roleplay-library-ai-organizations">Organizations / factions context</label>
+<select id="roleplay-library-ai-organizations" multiple="" size="5"></select>
+</div>
+</div>
+</div>
+<div class="row" style="gap:8px; flex-wrap:wrap; grid-column:1 / -1;">
+<button class="btn btn-small" id="btn-roleplay-library-import-preview" type="button">Preview import</button>
+<button class="btn btn-small" id="btn-roleplay-library-import-apply" type="button">Apply preview to builder</button>
+<button class="btn btn-small" id="btn-roleplay-library-import-save" type="button">Commit import</button>
+<button class="btn btn-small" id="btn-roleplay-library-template-download" type="button">Download JSON template</button>
+<button class="btn btn-small" id="btn-roleplay-library-record-export" type="button">Export selected record</button>
+</div>
+<div class="mini-note" style="grid-column:1 / -1;">This is now the central JSON-first ingest lane. Upload files, draft schema JSON with AI, edit JSON in the editor, preview it, then commit it into the library. Download JSON template gives you the exact schema shape for the selected kind.</div>
+<div style="grid-column:1 / -1;">
+<label for="roleplay-library-json-editor">Raw JSON editor</label>
+<textarea id="roleplay-library-json-editor" placeholder="Paste JSON here, generate it with AI, then preview before commit." rows="16"></textarea>
+</div>
+<div id="roleplay-library-import-summary" style="grid-column:1 / -1; border:1px solid rgba(255,255,255,.08); border-radius:12px; padding:12px; background:rgba(255,255,255,.03); min-height:72px;">
+<div class="muted small">No import preview yet.</div>
+</div>
+<pre id="roleplay-library-import-preview-json" style="grid-column:1 / -1; margin:0; max-height:280px; overflow:auto; border:1px solid rgba(255,255,255,.08); border-radius:12px; padding:12px; background:rgba(0,0,0,.22); white-space:pre-wrap; word-break:break-word;">No preview loaded.</pre>
+<div class="status" id="roleplay-library-import-status" style="grid-column:1 / -1;"></div>
+</div>
+</details>
+<details class="accordion-block" open="" style="margin-top:14px;">
+<summary>Characters</summary>
+<div class="grid grid-2" style="margin-top:14px; gap:14px; align-items:end;">
+<div>
+<label for="roleplay-library-character-select">Saved characters</label>
+<select id="roleplay-library-character-select"><option value="">Select a character</option></select>
+</div>
+<div class="row" style="gap:8px; flex-wrap:wrap;">
+<button class="btn btn-small" id="btn-roleplay-character-load" type="button">Load</button>
+<button class="btn btn-small" id="btn-roleplay-character-save" type="button">Save</button>
+<button class="btn btn-small btn-danger" id="btn-roleplay-character-delete" type="button">Delete</button>
+</div>
+<div>
+<label for="roleplay-library-character-name">Name</label>
+<input id="roleplay-library-character-name" placeholder="Lak" type="text"/>
+</div>
+<div>
+<label for="roleplay-library-character-display-name">Display name</label>
+<input id="roleplay-library-character-display-name" placeholder="Lak" type="text"/>
+</div>
+<div>
+<label for="roleplay-library-character-gender">Gender</label>
+<select id="roleplay-library-character-gender"><option value="">Unspecified</option><option value="Male">Male</option><option value="Female">Female</option><option value="Nonbinary">Nonbinary</option><option value="Other">Other</option></select>
+</div>
+<div>
+<label for="roleplay-library-character-pronouns">Pronouns</label>
+<input id="roleplay-library-character-pronouns" placeholder="he/him" type="text"/>
+</div>
+<div>
+<label for="roleplay-library-character-role-tier">Story role</label>
+<select id="roleplay-library-character-role-tier"><option value="main">Main character</option><option value="secondary">Secondary / side character</option><option value="npc">NPC</option></select>
+</div>
+<div>
+<label for="roleplay-library-character-species">Species / race</label>
+<input id="roleplay-library-character-species" placeholder="Human" type="text"/>
+</div>
+<div>
+<label for="roleplay-library-character-designation">Designation</label>
+<input id="roleplay-library-character-designation" placeholder="Normal, Alpha, Omega, Enigma..." type="text"/>
+</div>
+<div>
+<label for="roleplay-library-character-occupation">Occupation / job</label>
+<input id="roleplay-library-character-occupation" placeholder="Bookseller, prince, student..." type="text"/>
+</div>
+<div>
+<label for="roleplay-library-character-origin-world-id">Origin world</label>
+<select id="roleplay-library-character-origin-world-id"><option value="">None</option></select>
+</div>
+<div>
+<label for="roleplay-library-character-current-world-id">Current world</label>
+<select id="roleplay-library-character-current-world-id"><option value="">None</option></select>
+</div>
+<div>
+<label for="roleplay-library-character-origin-region-id">Origin kingdom / region</label>
+<select id="roleplay-library-character-origin-region-id"><option value="">None</option></select>
+</div>
+<div>
+<label for="roleplay-library-character-current-region-id">Current kingdom / region</label>
+<select id="roleplay-library-character-current-region-id"><option value="">None</option></select>
+</div>
+<div>
+<label for="roleplay-library-character-origin-city-id">Origin city / settlement</label>
+<select id="roleplay-library-character-origin-city-id"><option value="">None</option></select>
+</div>
+<div>
+<label for="roleplay-library-character-current-city-id">Current city / settlement</label>
+<select id="roleplay-library-character-current-city-id"><option value="">None</option></select>
+</div>
+<div>
+<label for="roleplay-library-character-origin-location-id">Origin location</label>
+<select id="roleplay-library-character-origin-location-id"><option value="">None</option></select>
+</div>
+<div>
+<label for="roleplay-library-character-current-location-id">Current location</label>
+<select id="roleplay-library-character-current-location-id"><option value="">None</option></select>
+</div>
+</div>
+<div class="grid grid-2" style="margin-top:14px; gap:14px; align-items:start;">
+<div>
+<label for="roleplay-library-character-avatar-file">Character image</label>
+<input accept="image/*" id="roleplay-library-character-avatar-file" type="file"/>
+<div class="row" style="margin-top:10px; gap:8px; flex-wrap:wrap;">
+<button class="btn btn-small" id="btn-roleplay-character-avatar-upload" type="button">Upload image</button>
+</div>
+</div>
+<div class="roleplay-asset-preview" id="roleplay-library-character-avatar-preview-wrap">
+<img alt="Character avatar preview" class="hidden" id="roleplay-library-character-avatar-preview"/>
+<div class="mini-note" id="roleplay-library-character-avatar-empty">No image uploaded yet.</div>
+</div>
+</div>
+<label for="roleplay-library-character-summary" style="margin-top:14px;">Summary</label>
+<textarea id="roleplay-library-character-summary" placeholder="Short read on who this character is." rows="2"></textarea>
+<div class="grid grid-2" style="margin-top:14px; gap:14px; align-items:start;">
+<div>
+<label for="roleplay-library-character-appearance">Appearance</label>
+<textarea id="roleplay-library-character-appearance" rows="3"></textarea>
+</div>
+<div>
+<label for="roleplay-library-character-personality">Personality</label>
+<textarea id="roleplay-library-character-personality" rows="3"></textarea>
+</div>
+<div>
+<label for="roleplay-library-character-speech-style">Speech style</label>
+<textarea id="roleplay-library-character-speech-style" rows="3"></textarea>
+</div>
+<div>
+<label for="roleplay-library-character-relationship-notes">Relationship notes</label>
+<textarea id="roleplay-library-character-relationship-notes" rows="3"></textarea>
+</div>
+<div>
+<label for="roleplay-library-character-affiliations">Affiliations / factions</label>
+<textarea id="roleplay-library-character-affiliations" rows="3"></textarea>
+</div>
+<div>
+<label for="roleplay-library-character-organizations">Linked organizations / factions</label>
+<select id="roleplay-library-character-organizations" multiple="" size="5"></select>
+</div>
+<div>
+<label for="roleplay-library-character-hobbies">Hobbies / pursuits</label>
+<textarea id="roleplay-library-character-hobbies" rows="3"></textarea>
+</div>
+<div>
+<label for="roleplay-library-character-student-details">Student details</label>
+<textarea id="roleplay-library-character-student-details" rows="3"></textarea>
+</div>
+<div>
+<label for="roleplay-library-character-current-location-label">Location label fallback</label>
+<input id="roleplay-library-character-current-location-label" placeholder="Optional manual location label if you are not linking a saved location" type="text"/>
+</div>
+</div>
+<div class="panel" style="margin-top:14px; padding:14px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.08);">
+<div class="row-between"><label style="margin:0;">Relationships</label><button class="btn btn-small" id="btn-roleplay-character-relationship-add" type="button">＋ Add link</button></div>
+<div id="roleplay-library-character-relationships" style="margin-top:12px; display:grid; gap:10px;"></div>
+</div>
+<div class="panel" style="margin-top:14px; padding:14px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.08);">
+<div class="row-between"><label style="margin:0;">Abilities</label><button class="btn btn-small" id="btn-roleplay-character-ability-add" type="button">＋ Add ability</button></div>
+<div id="roleplay-library-character-abilities" style="margin-top:12px; display:grid; gap:10px;"></div>
+</div>
+<div class="panel" style="margin-top:14px; padding:14px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.08);">
+<div class="row-between"><label style="margin:0;">Wardrobe</label><button class="btn btn-small" id="btn-roleplay-character-wardrobe-add" type="button">＋ Add look</button></div>
+<div id="roleplay-library-character-wardrobes" style="margin-top:12px; display:grid; gap:10px;"></div>
+</div>
+<div class="panel" style="margin-top:14px; padding:14px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.08);">
+<div class="row-between"><label style="margin:0;">Story hooks</label><button class="btn btn-small" id="btn-roleplay-character-hook-add" type="button">＋ Add hook</button></div>
+<div class="mini-note" style="margin-top:6px;">Use this for recurring dreams, visions, omens, secrets, past-life echoes, or anything story-relevant.</div>
+<div id="roleplay-library-character-hooks" style="margin-top:12px; display:grid; gap:10px;"></div>
+</div>
+<label for="roleplay-library-character-canon-notes" style="margin-top:14px;">Canon notes</label>
+<textarea id="roleplay-library-character-canon-notes" rows="3"></textarea>
+<div class="grid grid-3" style="margin-top:14px; gap:14px; align-items:start;">
+<div>
+<label for="roleplay-library-character-artifacts">Weapons / artifacts</label>
+<select id="roleplay-library-character-artifacts" multiple="" size="5"></select>
+</div>
+<div>
+<label for="roleplay-library-character-rituals">Spells / rituals / techniques</label>
+<select id="roleplay-library-character-rituals" multiple="" size="5"></select>
+</div>
+<div>
+<label for="roleplay-library-character-cycles">Cycles / conditions</label>
+<select id="roleplay-library-character-cycles" multiple="" size="5"></select>
+</div>
+</div>
+<div class="status" id="roleplay-library-character-status" style="margin-top:12px;"></div>
+</details>
+<details class="accordion-block" style="margin-top:14px;">
+<summary>Worlds</summary>
+<div class="grid grid-2" style="margin-top:14px; gap:14px; align-items:end;">
+<div>
+<label for="roleplay-library-world-select">Saved worlds</label>
+<select id="roleplay-library-world-select"><option value="">Select a world</option></select>
+</div>
+<div class="row" style="gap:8px; flex-wrap:wrap;">
+<button class="btn btn-small" id="btn-roleplay-world-load" type="button">Load</button>
+<button class="btn btn-small" id="btn-roleplay-world-save" type="button">Save</button>
+<button class="btn btn-small btn-danger" id="btn-roleplay-world-delete" type="button">Delete</button>
+</div>
+<div>
+<label for="roleplay-library-world-name">World name</label>
+<input id="roleplay-library-world-name" placeholder="Valaris" type="text"/>
+</div>
+<div>
+<label for="roleplay-library-world-summary">Summary</label>
+<input id="roleplay-library-world-summary" placeholder="World-scale one-line summary." type="text"/>
+</div>
+<div>
+<label for="roleplay-library-world-realm-type">Realm type</label>
+<input id="roleplay-library-world-realm-type" placeholder="Kingdom world, shattered realm, moon-tide continent..." type="text"/>
+</div>
+<div>
+<label for="roleplay-library-world-calendar-notes">Calendar notes</label>
+<input id="roleplay-library-world-calendar-notes" placeholder="Moons, bells, week names, seasons..." type="text"/>
+</div>
+</div>
+<label for="roleplay-library-world-lore" style="margin-top:14px;">Lore</label>
+<textarea id="roleplay-library-world-lore" rows="3"></textarea>
+<label for="roleplay-library-world-rules" style="margin-top:14px;">Rules</label>
+<textarea id="roleplay-library-world-rules" rows="3"></textarea>
+<label for="roleplay-library-world-geography-notes" style="margin-top:14px;">Macro geography</label>
+<textarea id="roleplay-library-world-geography-notes" rows="3"></textarea>
+<label for="roleplay-library-world-society-notes" style="margin-top:14px;">Society / power notes</label>
+<textarea id="roleplay-library-world-society-notes" rows="3"></textarea>
+<label for="roleplay-library-world-faith-notes" style="margin-top:14px;">Faith / law / magic notes</label>
+<textarea id="roleplay-library-world-faith-notes" rows="3"></textarea>
+<label for="roleplay-library-world-people-notes" style="margin-top:14px;">Peoples / creatures / hidden</label>
+<textarea id="roleplay-library-world-people-notes" rows="3"></textarea>
+<div class="grid grid-2" style="margin-top:14px; gap:14px; align-items:start;">
+<div>
+<label for="roleplay-library-world-inhabitant-species">Inhabitant species</label>
+<select id="roleplay-library-world-inhabitant-species" multiple="" size="6"></select>
+<div class="mini-note">Pick from saved creature/species records.</div>
+</div>
+<div>
+<label for="roleplay-library-world-creature-fauna">Creatures / animals / fauna</label>
+<select id="roleplay-library-world-creature-fauna" multiple="" size="6"></select>
+<div class="mini-note">Use this for dragons, fauna, animals, hidden beings, and world creatures.</div>
+</div>
+</div>
+<label for="roleplay-library-world-canon-notes" style="margin-top:14px;">Canon notes</label>
+<textarea id="roleplay-library-world-canon-notes" rows="3"></textarea>
+<label for="roleplay-library-world-cycles" style="margin-top:14px;">World cycles / systems</label>
+<select id="roleplay-library-world-cycles" multiple="" size="6"></select>
+<label for="roleplay-library-world-organizations" style="margin-top:14px;">Major organizations / factions</label>
+<select id="roleplay-library-world-organizations" multiple="" size="6"></select>
+<div class="status" id="roleplay-library-world-status" style="margin-top:12px;"></div>
+</details>
+<details class="accordion-block" style="margin-top:14px;">
+<summary>Kingdoms / Regions</summary>
+<div class="grid grid-2" style="margin-top:14px; gap:14px; align-items:end;">
+<div>
+<label for="roleplay-library-region-select">Saved kingdoms / regions</label>
+<select id="roleplay-library-region-select"><option value="">Select a region</option></select>
+</div>
+<div class="row" style="gap:8px; flex-wrap:wrap;">
+<button class="btn btn-small" id="btn-roleplay-region-load" type="button">Load</button>
+<button class="btn btn-small" id="btn-roleplay-region-save" type="button">Save</button>
+<button class="btn btn-small btn-danger" id="btn-roleplay-region-delete" type="button">Delete</button>
+</div>
+<div>
+<label for="roleplay-library-region-name">Name</label>
+<input id="roleplay-library-region-name" placeholder="Valaris" type="text"/>
+</div>
+<div>
+<label for="roleplay-library-region-type">Type</label>
+<select id="roleplay-library-region-type"><option value="kingdom">Kingdom</option><option value="region">Region</option><option value="province">Province</option><option value="district">District</option><option value="other">Other</option></select>
+</div>
+<div>
+<label for="roleplay-library-region-world-id">World</label>
+<select id="roleplay-library-region-world-id"><option value="">None</option></select>
+</div>
+<div>
+<label for="roleplay-library-region-parent-id">Parent region</label>
+<select id="roleplay-library-region-parent-id"><option value="">None</option></select>
+</div>
+</div>
+<label for="roleplay-library-region-summary" style="margin-top:14px;">Summary</label>
+<textarea id="roleplay-library-region-summary" rows="2"></textarea>
+<label for="roleplay-library-region-organizations" style="margin-top:14px;">Regional organizations / factions</label>
+<select id="roleplay-library-region-organizations" multiple="" size="6"></select>
+<label for="roleplay-library-region-canon-notes" style="margin-top:14px;">Canon notes</label>
+<textarea id="roleplay-library-region-canon-notes" rows="3"></textarea>
+<div class="status" id="roleplay-library-region-status" style="margin-top:12px;"></div>
+</details>
+<details class="accordion-block" style="margin-top:14px;">
+<summary>Cities / Settlements</summary>
+<div class="grid grid-2" style="margin-top:14px; gap:14px; align-items:end;">
+<div>
+<label for="roleplay-library-city-select">Saved cities / settlements</label>
+<select id="roleplay-library-city-select"><option value="">Select a city</option></select>
+</div>
+<div class="row" style="gap:8px; flex-wrap:wrap;">
+<button class="btn btn-small" id="btn-roleplay-city-load" type="button">Load</button>
+<button class="btn btn-small" id="btn-roleplay-city-save" type="button">Save</button>
+<button class="btn btn-small btn-danger" id="btn-roleplay-city-delete" type="button">Delete</button>
+</div>
+<div>
+<label for="roleplay-library-city-name">Name</label>
+<input id="roleplay-library-city-name" placeholder="North Quarter" type="text"/>
+</div>
+<div>
+<label for="roleplay-library-city-type">Type</label>
+<select id="roleplay-library-city-type"><option value="city">City</option><option value="town">Town</option><option value="village">Village</option><option value="settlement">Settlement</option><option value="district">District</option><option value="ward">Ward</option><option value="port">Port</option><option value="capital">Capital</option><option value="other">Other</option></select>
+</div>
+<div>
+<label for="roleplay-library-city-world-id">World</label>
+<select id="roleplay-library-city-world-id"><option value="">None</option></select>
+</div>
+<div>
+<label for="roleplay-library-city-region-id">Kingdom / region</label>
+<select id="roleplay-library-city-region-id"><option value="">None</option></select>
+</div>
+</div>
+<label for="roleplay-library-city-summary" style="margin-top:14px;">Summary</label>
+<textarea id="roleplay-library-city-summary" rows="2"></textarea>
+<label for="roleplay-library-city-access-notes" style="margin-top:14px;">Access / travel notes</label>
+<textarea id="roleplay-library-city-access-notes" rows="2"></textarea>
+<label for="roleplay-library-city-organizations" style="margin-top:14px;">City organizations / factions</label>
+<select id="roleplay-library-city-organizations" multiple="" size="6"></select>
+<label for="roleplay-library-city-canon-notes" style="margin-top:14px;">Canon notes</label>
+<textarea id="roleplay-library-city-canon-notes" rows="3"></textarea>
+<div class="status" id="roleplay-library-city-status" style="margin-top:12px;"></div>
+</details>
+<details class="accordion-block" style="margin-top:14px;">
+<summary>Organizations / Factions</summary>
+<div class="grid grid-2" style="margin-top:14px; gap:14px; align-items:end;">
+<div>
+<label for="roleplay-library-organization-select">Saved organizations / factions</label>
+<select id="roleplay-library-organization-select"><option value="">Select an organization</option></select>
+</div>
+<div class="row" style="gap:8px; flex-wrap:wrap;">
+<button class="btn btn-small" id="btn-roleplay-organization-load" type="button">Load</button>
+<button class="btn btn-small" id="btn-roleplay-organization-save" type="button">Save</button>
+<button class="btn btn-small btn-danger" id="btn-roleplay-organization-delete" type="button">Delete</button>
+</div>
+<div>
+<label for="roleplay-library-organization-name">Name</label>
+<input id="roleplay-library-organization-name" placeholder="Silver Lantern Circle" type="text"/>
+</div>
+<div>
+<label for="roleplay-library-organization-display-name">Display name</label>
+<input id="roleplay-library-organization-display-name" placeholder="Silver Lantern Circle" type="text"/>
+</div>
+<div>
+<label for="roleplay-library-organization-group-type">Group type</label>
+<select id="roleplay-library-organization-group-type"><option value="organization">Organization</option><option value="faction">Faction</option><option value="guild">Guild</option><option value="cult">Cult</option><option value="circle">Circle</option><option value="house">House</option><option value="order">Order</option><option value="institution">Institution</option><option value="club">Club</option><option value="company">Company</option><option value="government">Government</option><option value="other">Other</option></select>
+</div>
+<div>
+<label for="roleplay-library-organization-universe-id">Universe</label>
+<select id="roleplay-library-organization-universe-id"><option value="">None</option></select>
+</div>
+<div>
+<label for="roleplay-library-organization-world-id">World</label>
+<select id="roleplay-library-organization-world-id"><option value="">None</option></select>
+</div>
+<div>
+<label for="roleplay-library-organization-region-id">Kingdom / region</label>
+<select id="roleplay-library-organization-region-id"><option value="">None</option></select>
+</div>
+<div>
+<label for="roleplay-library-organization-city-id">City / settlement</label>
+<select id="roleplay-library-organization-city-id"><option value="">None</option></select>
+</div>
+<div>
+<label for="roleplay-library-organization-base-location-id">Base location</label>
+<select id="roleplay-library-organization-base-location-id"><option value="">None</option></select>
+</div>
+<div>
+<label for="roleplay-library-organization-parent-id">Parent organization</label>
+<select id="roleplay-library-organization-parent-id"><option value="">None</option></select>
+</div>
+</div>
+<label for="roleplay-library-organization-summary" style="margin-top:14px;">Summary</label>
+<textarea id="roleplay-library-organization-summary" rows="2"></textarea>
+<div class="grid grid-2" style="margin-top:14px; gap:14px; align-items:start;">
+<div>
+<label for="roleplay-library-organization-leadership">Leadership</label>
+<textarea id="roleplay-library-organization-leadership" rows="3"></textarea>
+</div>
+<div>
+<label for="roleplay-library-organization-beliefs">Beliefs / doctrine</label>
+<textarea id="roleplay-library-organization-beliefs" rows="3"></textarea>
+</div>
+<div>
+<label for="roleplay-library-organization-goals">Goals</label>
+<textarea id="roleplay-library-organization-goals" rows="3"></textarea>
+</div>
+<div>
+<label for="roleplay-library-organization-reputation">Reputation</label>
+<textarea id="roleplay-library-organization-reputation" rows="3"></textarea>
+</div>
+<div>
+<label for="roleplay-library-organization-resources">Resources / leverage</label>
+<textarea id="roleplay-library-organization-resources" rows="3"></textarea>
+</div>
+<div>
+<label for="roleplay-library-organization-membership-rules">Membership rules</label>
+<textarea id="roleplay-library-organization-membership-rules" rows="3"></textarea>
+</div>
+<div>
+<label for="roleplay-library-organization-public-face">Public face</label>
+<textarea id="roleplay-library-organization-public-face" rows="3"></textarea>
+</div>
+<div>
+<label for="roleplay-library-organization-hidden-truth">Hidden truth</label>
+<textarea id="roleplay-library-organization-hidden-truth" rows="3"></textarea>
+</div>
+</div>
+<div class="grid grid-2" style="margin-top:14px; gap:14px; align-items:start;">
+<div>
+<label for="roleplay-library-organization-allies">Allied organizations</label>
+<select id="roleplay-library-organization-allies" multiple="" size="6"></select>
+</div>
+<div>
+<label for="roleplay-library-organization-rivals">Rival organizations</label>
+<select id="roleplay-library-organization-rivals" multiple="" size="6"></select>
+</div>
+</div>
+<label for="roleplay-library-organization-canon-notes" style="margin-top:14px;">Canon notes</label>
+<textarea id="roleplay-library-organization-canon-notes" rows="3"></textarea>
+<div class="status" id="roleplay-library-organization-status" style="margin-top:12px;"></div>
+</details>
+<details class="accordion-block" style="margin-top:14px;">
+<summary>Locations</summary>
+<div class="grid grid-2" style="margin-top:14px; gap:14px; align-items:end;">
+<div>
+<label for="roleplay-library-location-select">Saved locations</label>
+<select id="roleplay-library-location-select"><option value="">Select a location</option></select>
+</div>
+<div class="row" style="gap:8px; flex-wrap:wrap;">
+<button class="btn btn-small" id="btn-roleplay-location-load" type="button">Load</button>
+<button class="btn btn-small" id="btn-roleplay-location-save" type="button">Save</button>
+<button class="btn btn-small btn-danger" id="btn-roleplay-location-delete" type="button">Delete</button>
+</div>
+<div>
+<label for="roleplay-library-location-name">Name</label>
+<input id="roleplay-library-location-name" placeholder="Lantern Ward Healer-House" type="text"/>
+</div>
+<div>
+<label for="roleplay-library-location-display-name">Display / public name</label>
+<input id="roleplay-library-location-display-name" placeholder="Lantern Ward Healer-House" type="text"/>
+</div>
+<div>
+<label for="roleplay-library-location-function-label">Function-first label</label>
+<input id="roleplay-library-location-function-label" placeholder="healer-house" type="text"/>
+</div>
+<div>
+<label for="roleplay-library-location-type">Location type</label>
+<select id="roleplay-library-location-type"><option value="building">Building</option><option value="district">District</option><option value="road">Road</option><option value="gate">Gate</option><option value="market">Market</option><option value="school">School</option><option value="archive">Archive</option><option value="hospital">Hospital / healer-house</option><option value="forest">Forest</option><option value="ruin">Ruin</option><option value="shrine">Shrine</option><option value="harbor">Harbor</option><option value="temple">Temple</option><option value="other">Other</option></select>
+</div>
+<div>
+<label for="roleplay-library-location-anchor-type">Anchor type</label>
+<select id="roleplay-library-location-anchor-type"><option value="city">Inside a city / settlement</option><option value="region">Inside a kingdom / region</option><option value="world">Inside a world</option><option value="universe">Universe / mythic / outside mapped world</option><option value="location">Inside another location</option></select>
+</div>
+<div>
+<label for="roleplay-library-location-universe-id">Universe</label>
+<select id="roleplay-library-location-universe-id"><option value="">None</option></select>
+</div>
+<div>
+<label for="roleplay-library-location-world-id">World</label>
+<select id="roleplay-library-location-world-id"><option value="">None</option></select>
+</div>
+<div>
+<label for="roleplay-library-location-region-id">Kingdom / region</label>
+<select id="roleplay-library-location-region-id"><option value="">None</option></select>
+</div>
+<div>
+<label for="roleplay-library-location-city-id">City / settlement</label>
+<select id="roleplay-library-location-city-id"><option value="">None</option></select>
+</div>
+<div>
+<label for="roleplay-library-location-parent-id">Parent location</label>
+<select id="roleplay-library-location-parent-id"><option value="">None</option></select>
+</div>
+</div>
+<label for="roleplay-library-location-summary" style="margin-top:14px;">Summary</label>
+<textarea id="roleplay-library-location-summary" rows="2"></textarea>
+<div class="grid grid-2" style="margin-top:14px; gap:14px; align-items:start;">
+<div>
+<label for="roleplay-library-location-atmosphere">Atmosphere</label>
+<textarea id="roleplay-library-location-atmosphere" rows="2"></textarea>
+</div>
+<div>
+<label for="roleplay-library-location-scene-uses">Scene uses</label>
+<select id="roleplay-library-location-scene-uses" multiple="" size="6"><option value="refuge">Refuge</option><option value="confrontation">Confrontation</option><option value="trade">Trade</option><option value="healing">Healing</option><option value="study">Study</option><option value="ritual">Ritual</option><option value="travel_node">Travel node</option><option value="danger_zone">Danger zone</option><option value="memory_site">Memory site</option><option value="other">Other</option></select>
+</div>
+</div>
+<label for="roleplay-library-location-access-notes" style="margin-top:14px;">Access notes</label>
+<textarea id="roleplay-library-location-access-notes" rows="2"></textarea>
+<label for="roleplay-library-location-hazards" style="margin-top:14px;">Hazards</label>
+<textarea id="roleplay-library-location-hazards" rows="2"></textarea>
+<label for="roleplay-library-location-rules" style="margin-top:14px;">Rules / taboos</label>
+<textarea id="roleplay-library-location-rules" rows="2"></textarea>
+<label for="roleplay-library-location-public-notes" style="margin-top:14px;">Public notes</label>
+<textarea id="roleplay-library-location-public-notes" rows="2"></textarea>
+<label for="roleplay-library-location-hidden-truth" style="margin-top:14px;">Hidden / under-veil truth</label>
+<textarea id="roleplay-library-location-hidden-truth" rows="2"></textarea>
+<label for="roleplay-library-location-organizations" style="margin-top:14px;">Organizations / factions tied here</label>
+<select id="roleplay-library-location-organizations" multiple="" size="6"></select>
+<div class="grid grid-3" style="margin-top:14px; gap:14px; align-items:start;">
+<div>
+<label for="roleplay-library-location-artifacts">Stored / linked artifacts</label>
+<select id="roleplay-library-location-artifacts" multiple="" size="5"></select>
+</div>
+<div>
+<label for="roleplay-library-location-rituals">Rituals / techniques tied here</label>
+<select id="roleplay-library-location-rituals" multiple="" size="5"></select>
+</div>
+<div>
+<label for="roleplay-library-location-cycles">Cycles / conditions tied here</label>
+<select id="roleplay-library-location-cycles" multiple="" size="5"></select>
+</div>
+</div>
+<label for="roleplay-library-location-canon-notes" style="margin-top:14px;">Canon notes</label>
+<textarea id="roleplay-library-location-canon-notes" rows="3"></textarea>
+<div class="status" id="roleplay-library-location-status" style="margin-top:12px;"></div>
+</details>
+<details class="accordion-block" style="margin-top:14px;">
+<summary>Weapons / Artifacts</summary>
+<div class="grid grid-2" style="margin-top:14px; gap:14px; align-items:end;">
+<div>
+<label for="roleplay-library-artifact-select">Saved weapons / artifacts</label>
+<select id="roleplay-library-artifact-select"><option value="">Select an artifact</option></select>
+</div>
+<div class="row" style="gap:8px; flex-wrap:wrap;">
+<button class="btn btn-small" id="btn-roleplay-artifact-load" type="button">Load</button>
+<button class="btn btn-small" id="btn-roleplay-artifact-save" type="button">Save</button>
+<button class="btn btn-small btn-danger" id="btn-roleplay-artifact-delete" type="button">Delete</button>
+</div>
+<div>
+<label for="roleplay-library-artifact-name">Name</label>
+<input id="roleplay-library-artifact-name" placeholder="Night Oath" type="text"/>
+</div>
+<div>
+<label for="roleplay-library-artifact-type">Type</label>
+<select id="roleplay-library-artifact-type"><option value="weapon">Weapon</option><option value="relic">Relic</option><option value="artifact">Artifact</option><option value="seal_item">Seal item</option><option value="charm">Charm</option><option value="book">Book / codex</option><option value="other">Other</option></select>
+</div>
+<div>
+<label for="roleplay-library-artifact-rarity">Rarity / tier</label>
+<select id="roleplay-library-artifact-rarity"><option value="normal">Normal</option><option value="crafted">Crafted</option><option value="enchanted">Enchanted</option><option value="rare">Rare</option><option value="epic">Epic</option><option value="legendary">Legendary</option><option value="relic">Relic</option><option value="cursed">Cursed</option><option value="custom">Custom</option></select>
+</div>
+<div>
+<label for="roleplay-library-artifact-state">State</label>
+<select id="roleplay-library-artifact-state"><option value="active">Active</option><option value="dormant">Dormant</option><option value="sealed">Sealed</option><option value="broken">Broken</option><option value="lost">Lost</option><option value="hidden">Hidden</option><option value="destroyed">Destroyed</option><option value="custom">Custom</option></select>
+</div>
+<div>
+<label for="roleplay-library-artifact-world-id">World</label>
+<select id="roleplay-library-artifact-world-id"><option value="">None</option></select>
+</div>
+<div>
+<label for="roleplay-library-artifact-region-id">Region</label>
+<select id="roleplay-library-artifact-region-id"><option value="">None</option></select>
+</div>
+<div>
+<label for="roleplay-library-artifact-city-id">City / settlement</label>
+<select id="roleplay-library-artifact-city-id"><option value="">None</option></select>
+</div>
+<div>
+<label for="roleplay-library-artifact-location-id">Location</label>
+<select id="roleplay-library-artifact-location-id"><option value="">None</option></select>
+</div>
+<div>
+<label for="roleplay-library-artifact-holder-id">Current holder</label>
+<select id="roleplay-library-artifact-holder-id"><option value="">None</option></select>
+</div>
+<div>
+<label for="roleplay-library-artifact-source">Source / tradition</label>
+<input id="roleplay-library-artifact-source" placeholder="Temple forge, oath-line, dragon craft..." type="text"/>
+</div>
+</div>
+<label for="roleplay-library-artifact-summary" style="margin-top:14px;">Summary</label>
+<textarea id="roleplay-library-artifact-summary" rows="2"></textarea>
+<label for="roleplay-library-artifact-effects" style="margin-top:14px;">Effects / abilities</label>
+<textarea id="roleplay-library-artifact-effects" rows="2"></textarea>
+<label for="roleplay-library-artifact-costs" style="margin-top:14px;">Costs / drawbacks</label>
+<textarea id="roleplay-library-artifact-costs" rows="2"></textarea>
+<label for="roleplay-library-artifact-activation" style="margin-top:14px;">Activation / trigger</label>
+<textarea id="roleplay-library-artifact-activation" rows="2"></textarea>
+<label for="roleplay-library-artifact-lawful-status" style="margin-top:14px;">Lawful status</label>
+<input id="roleplay-library-artifact-lawful-status" placeholder="legal, licensed, restricted, forbidden..." type="text"/>
+<label for="roleplay-library-artifact-canon-notes" style="margin-top:14px;">Canon notes</label>
+<textarea id="roleplay-library-artifact-canon-notes" rows="3"></textarea>
+<div class="status" id="roleplay-library-artifact-status" style="margin-top:12px;"></div>
+</details>
+<details class="accordion-block" style="margin-top:14px;">
+<summary>Spells / Rituals / Techniques</summary>
+<div class="grid grid-2" style="margin-top:14px; gap:14px; align-items:end;">
+<div>
+<label for="roleplay-library-ritual-select">Saved spells / rituals</label>
+<select id="roleplay-library-ritual-select"><option value="">Select a ritual</option></select>
+</div>
+<div class="row" style="gap:8px; flex-wrap:wrap;">
+<button class="btn btn-small" id="btn-roleplay-ritual-load" type="button">Load</button>
+<button class="btn btn-small" id="btn-roleplay-ritual-save" type="button">Save</button>
+<button class="btn btn-small btn-danger" id="btn-roleplay-ritual-delete" type="button">Delete</button>
+</div>
+<div>
+<label for="roleplay-library-ritual-name">Name</label>
+<input id="roleplay-library-ritual-name" placeholder="Blue Bell Invocation" type="text"/>
+</div>
+<div>
+<label for="roleplay-library-ritual-type">Type</label>
+<select id="roleplay-library-ritual-type"><option value="ritual">Ritual</option><option value="spell">Spell</option><option value="oath">Oath</option><option value="blessing">Blessing</option><option value="curse">Curse</option><option value="technique">Technique</option><option value="ward">Ward</option><option value="contract">Contract</option><option value="healing">Healing</option><option value="other">Other</option></select>
+</div>
+<div>
+<label for="roleplay-library-ritual-school">School / tradition</label>
+<input id="roleplay-library-ritual-school" placeholder="Moon temple, bloodcraft, warding school..." type="text"/>
+</div>
+<div>
+<label for="roleplay-library-ritual-state">State</label>
+<select id="roleplay-library-ritual-state"><option value="known">Known</option><option value="hidden">Hidden</option><option value="sealed">Sealed</option><option value="forbidden">Forbidden</option><option value="lost">Lost</option><option value="dormant">Dormant</option><option value="unstable">Unstable</option><option value="custom">Custom</option></select>
+</div>
+<div>
+<label for="roleplay-library-ritual-world-id">World</label>
+<select id="roleplay-library-ritual-world-id"><option value="">None</option></select>
+</div>
+<div>
+<label for="roleplay-library-ritual-region-id">Region</label>
+<select id="roleplay-library-ritual-region-id"><option value="">None</option></select>
+</div>
+<div>
+<label for="roleplay-library-ritual-location-id">Location</label>
+<select id="roleplay-library-ritual-location-id"><option value="">None</option></select>
+</div>
+</div>
+<label for="roleplay-library-ritual-effect-summary" style="margin-top:14px;">Effect summary</label>
+<textarea id="roleplay-library-ritual-effect-summary" rows="2"></textarea>
+<label for="roleplay-library-ritual-requirements" style="margin-top:14px;">Requirements</label>
+<textarea id="roleplay-library-ritual-requirements" rows="2"></textarea>
+<label for="roleplay-library-ritual-risks" style="margin-top:14px;">Risks / costs</label>
+<textarea id="roleplay-library-ritual-risks" rows="2"></textarea>
+<label for="roleplay-library-ritual-lawful-status" style="margin-top:14px;">Lawful status</label>
+<input id="roleplay-library-ritual-lawful-status" placeholder="allowed, watched, licensed, forbidden..." type="text"/>
+<label for="roleplay-library-ritual-canon-notes" style="margin-top:14px;">Canon notes</label>
+<textarea id="roleplay-library-ritual-canon-notes" rows="3"></textarea>
+<div class="status" id="roleplay-library-ritual-status" style="margin-top:12px;"></div>
+</details>
+<details class="accordion-block" style="margin-top:14px;">
+<summary>Cycles / Conditions / Systems</summary>
+<div class="grid grid-2" style="margin-top:14px; gap:14px; align-items:end;">
+<div>
+<label for="roleplay-library-cycle-select">Saved cycles / conditions</label>
+<select id="roleplay-library-cycle-select"><option value="">Select a cycle</option></select>
+</div>
+<div class="row" style="gap:8px; flex-wrap:wrap;">
+<button class="btn btn-small" id="btn-roleplay-cycle-load" type="button">Load</button>
+<button class="btn btn-small" id="btn-roleplay-cycle-save" type="button">Save</button>
+<button class="btn btn-small btn-danger" id="btn-roleplay-cycle-delete" type="button">Delete</button>
+</div>
+<div>
+<label for="roleplay-library-cycle-name">Name</label>
+<input id="roleplay-library-cycle-name" placeholder="Blue Moon Cycle" type="text"/>
+</div>
+<div>
+<label for="roleplay-library-cycle-type">Cycle type</label>
+<select id="roleplay-library-cycle-type"><option value="celestial">Celestial</option><option value="calendar">Calendar</option><option value="biological">Biological</option><option value="magical">Magical</option><option value="social_law">Social / law</option><option value="prophecy">Prophecy</option><option value="bonded">Bonded</option><option value="physiological">Physiological</option><option value="custom">Custom</option></select>
+</div>
+<div>
+<label for="roleplay-library-cycle-scope-type">Scope</label>
+<select id="roleplay-library-cycle-scope-type"><option value="world">World</option><option value="universe">Universe</option><option value="region">Region</option><option value="location">Location</option><option value="species">Species</option><option value="designation">Designation</option><option value="character">Character</option></select>
+</div>
+<div>
+<label for="roleplay-library-cycle-universe-id">Universe</label>
+<select id="roleplay-library-cycle-universe-id"><option value="">None</option></select>
+</div>
+<div>
+<label for="roleplay-library-cycle-world-id">World</label>
+<select id="roleplay-library-cycle-world-id"><option value="">None</option></select>
+</div>
+<div>
+<label for="roleplay-library-cycle-region-id">Region</label>
+<select id="roleplay-library-cycle-region-id"><option value="">None</option></select>
+</div>
+<div>
+<label for="roleplay-library-cycle-location-id">Location</label>
+<select id="roleplay-library-cycle-location-id"><option value="">None</option></select>
+</div>
+<div>
+<label for="roleplay-library-cycle-affected-species">Affected species</label>
+<input id="roleplay-library-cycle-affected-species" placeholder="Human, Dragon, Orc..." type="text"/>
+</div>
+<div>
+<label for="roleplay-library-cycle-affected-designation">Affected designation</label>
+<input id="roleplay-library-cycle-affected-designation" placeholder="Omega, Alpha, Enigma..." type="text"/>
+</div>
+</div>
+<label for="roleplay-library-cycle-cadence" style="margin-top:14px;">Cadence / frequency</label>
+<input id="roleplay-library-cycle-cadence" placeholder="every blue moon, seasonal, once per century..." type="text"/>
+<label for="roleplay-library-cycle-trigger" style="margin-top:14px;">Trigger</label>
+<textarea id="roleplay-library-cycle-trigger" rows="2"></textarea>
+<label for="roleplay-library-cycle-stages" style="margin-top:14px;">Stages / phases</label>
+<textarea id="roleplay-library-cycle-stages" rows="2"></textarea>
+<label for="roleplay-library-cycle-effects" style="margin-top:14px;">Effects</label>
+<textarea id="roleplay-library-cycle-effects" rows="2"></textarea>
+<label for="roleplay-library-cycle-safeguards" style="margin-top:14px;">Safeguards / remedies</label>
+<textarea id="roleplay-library-cycle-safeguards" rows="2"></textarea>
+<label for="roleplay-library-cycle-canon-notes" style="margin-top:14px;">Canon notes</label>
+<textarea id="roleplay-library-cycle-canon-notes" rows="3"></textarea>
+<div class="status" id="roleplay-library-cycle-status" style="margin-top:12px;"></div>
+</details>
+<details class="accordion-block" style="margin-top:14px;">
+<summary>Creatures / Animals / Fauna</summary>
+<div class="grid grid-2" style="margin-top:14px; gap:14px; align-items:end;">
+<div>
+<label for="roleplay-library-creature-select">Saved creatures</label>
+<select id="roleplay-library-creature-select"><option value="">Select a creature</option></select>
+</div>
+<div class="row" style="gap:8px; flex-wrap:wrap;">
+<button class="btn btn-small" id="btn-roleplay-creature-load" type="button">Load</button>
+<button class="btn btn-small" id="btn-roleplay-creature-save" type="button">Save</button>
+<button class="btn btn-small btn-danger" id="btn-roleplay-creature-delete" type="button">Delete</button>
+</div>
+<div>
+<label for="roleplay-library-creature-name">Name</label>
+<input id="roleplay-library-creature-name" placeholder="Moon Spine Dragon" type="text"/>
+</div>
+<div>
+<label for="roleplay-library-creature-category">Category</label>
+<select id="roleplay-library-creature-category"><option value="species">Species</option><option value="creature">Creature</option><option value="animal">Animal</option><option value="fauna">Fauna</option><option value="dragon">Dragon</option><option value="other">Other</option></select>
+</div>
+<div>
+<label for="roleplay-library-creature-world-id">World</label>
+<select id="roleplay-library-creature-world-id"><option value="">None</option></select>
+</div>
+<div>
+<label for="roleplay-library-creature-sentience">Sentience</label>
+<select id="roleplay-library-creature-sentience"><option value="unknown">Unknown</option><option value="sapient">Sapient</option><option value="semi_sapient">Semi-sapient</option><option value="beast">Beast</option></select>
+</div>
+</div>
+<label for="roleplay-library-creature-summary" style="margin-top:14px;">Summary</label>
+<textarea id="roleplay-library-creature-summary" rows="2"></textarea>
+<label for="roleplay-library-creature-canon-notes" style="margin-top:14px;">Canon notes</label>
+<textarea id="roleplay-library-creature-canon-notes" rows="3"></textarea>
+<div class="status" id="roleplay-library-creature-status" style="margin-top:12px;"></div>
+</details>
+<details class="accordion-block" style="margin-top:14px;">
+<summary>Universes</summary>
+<div class="grid grid-2" style="margin-top:14px; gap:14px; align-items:end;">
+<div>
+<label for="roleplay-library-universe-select">Saved universes</label>
+<select id="roleplay-library-universe-select"><option value="">Select a universe</option></select>
+</div>
+<div class="row" style="gap:8px; flex-wrap:wrap;">
+<button class="btn btn-small" id="btn-roleplay-universe-load" type="button">Load</button>
+<button class="btn btn-small" id="btn-roleplay-universe-save" type="button">Save</button>
+<button class="btn btn-small btn-danger" id="btn-roleplay-universe-delete" type="button">Delete</button>
+</div>
+<div>
+<label for="roleplay-library-universe-name">Universe name</label>
+<input id="roleplay-library-universe-name" placeholder="Mood Pixel Universe" type="text"/>
+</div>
+<div>
+<label for="roleplay-library-universe-summary">Summary</label>
+<input id="roleplay-library-universe-summary" placeholder="Multiverse-level umbrella summary" type="text"/>
+</div>
+</div>
+<label for="roleplay-library-universe-canon-notes" style="margin-top:14px;">Canon notes</label>
+<textarea id="roleplay-library-universe-canon-notes" rows="3"></textarea>
+<div class="status" id="roleplay-library-universe-status" style="margin-top:12px;"></div>
+</details>
+<details class="accordion-block" style="margin-top:14px;">
+<summary>Legends</summary>
+<div class="grid grid-2" style="margin-top:14px; gap:14px; align-items:end;">
+<div>
+<label for="roleplay-library-legend-select">Saved legends</label>
+<select id="roleplay-library-legend-select"><option value="">Select a legend</option></select>
+</div>
+<div class="row" style="gap:8px; flex-wrap:wrap;">
+<button class="btn btn-small" id="btn-roleplay-legend-load" type="button">Load</button>
+<button class="btn btn-small" id="btn-roleplay-legend-save" type="button">Save</button>
+<button class="btn btn-small btn-danger" id="btn-roleplay-legend-delete" type="button">Delete</button>
+</div>
+<div>
+<label for="roleplay-library-legend-title">Legend title</label>
+<input id="roleplay-library-legend-title" placeholder="The Bell Beneath the Tide" type="text"/>
+</div>
+<div>
+<label for="roleplay-library-legend-scope">Scope</label>
+<select id="roleplay-library-legend-scope"><option value="universe">Universe</option><option value="world">World</option><option value="kingdom">Kingdom</option><option value="local">Local</option></select>
+</div>
+<div>
+<label for="roleplay-library-legend-type">Legend type</label>
+<select id="roleplay-library-legend-type"><option value="myth">Myth</option><option value="prophecy">Prophecy</option><option value="oral_tale">Oral tale</option><option value="saint_story">Saint story</option><option value="dragon_legend">Dragon legend</option><option value="other">Other</option></select>
+</div>
+<div>
+<label for="roleplay-library-legend-truth">Truth status</label>
+<select id="roleplay-library-legend-truth"><option value="trusted">Trusted</option><option value="disputed">Disputed</option><option value="apocryphal">Apocryphal</option><option value="suppressed">Suppressed</option></select>
+</div>
+<div>
+<label for="roleplay-library-legend-universe-id">Universe</label>
+<select id="roleplay-library-legend-universe-id"><option value="">None</option></select>
+</div>
+<div>
+<label for="roleplay-library-legend-world-id">World</label>
+<select id="roleplay-library-legend-world-id"><option value="">None</option></select>
+</div>
+</div>
+<label for="roleplay-library-legend-public-version" style="margin-top:14px;">Public version</label>
+<textarea id="roleplay-library-legend-public-version" rows="3"></textarea>
+<label for="roleplay-library-legend-hidden-version" style="margin-top:14px;">Hidden / under-veil version</label>
+<textarea id="roleplay-library-legend-hidden-version" rows="3"></textarea>
+<label for="roleplay-library-legend-canon-notes" style="margin-top:14px;">Canon notes</label>
+<textarea id="roleplay-library-legend-canon-notes" rows="3"></textarea>
+<div class="status" id="roleplay-library-legend-status" style="margin-top:12px;"></div>
+</details>
+<details class="accordion-block" style="margin-top:14px;">
+<summary>Packs</summary>
+<div class="grid grid-2" style="margin-top:14px; gap:14px; align-items:end;">
+<div>
+<label for="roleplay-library-pack-select">Saved packs</label>
+<select id="roleplay-library-pack-select"><option value="">Select a pack</option></select>
+</div>
+<div class="row" style="gap:8px; flex-wrap:wrap;">
+<button class="btn btn-small" id="btn-roleplay-pack-load" type="button">Load</button>
+<button class="btn btn-small" id="btn-roleplay-pack-save" type="button">Save</button>
+<button class="btn btn-small btn-danger" id="btn-roleplay-pack-delete" type="button">Delete</button>
+</div>
+<div>
+<label for="roleplay-library-pack-title">Pack title</label>
+<input id="roleplay-library-pack-title" placeholder="Author Rules" type="text"/>
+</div>
+<div>
+<label for="roleplay-library-pack-type">Pack type</label>
+<select id="roleplay-library-pack-type"><option value="rule">Rule pack</option><option value="style">Style pack</option><option value="resolver">Resolver pack</option><option value="continuity">Continuity pack</option></select>
+</div>
+<div>
+<label for="roleplay-library-pack-summary">Summary</label>
+<input id="roleplay-library-pack-summary" placeholder="What this pack controls" type="text"/>
+</div>
+</div>
+<label for="roleplay-library-pack-content" style="margin-top:14px;">Content</label>
+<textarea id="roleplay-library-pack-content" rows="6"></textarea>
+<label for="roleplay-library-pack-canon-notes" style="margin-top:14px;">Canon notes</label>
+<textarea id="roleplay-library-pack-canon-notes" rows="3"></textarea>
+<div class="status" id="roleplay-library-pack-status" style="margin-top:12px;"></div>
+</details>
+<details class="accordion-block" style="margin-top:14px;">
+<summary>Scenarios</summary>
+<div class="grid grid-2" style="margin-top:14px; gap:14px; align-items:end;">
+<div>
+<label for="roleplay-library-scenario-select">Saved scenarios</label>
+<select id="roleplay-library-scenario-select"><option value="">Select a scenario</option></select>
+</div>
+<div class="row" style="gap:8px; flex-wrap:wrap;">
+<button class="btn btn-small" id="btn-roleplay-scenario-load" type="button">Load</button>
+<button class="btn btn-small" id="btn-roleplay-scenario-save" type="button">Save</button>
+<button class="btn btn-small btn-danger" id="btn-roleplay-scenario-delete" type="button">Delete</button>
+</div>
+<div>
+<label for="roleplay-library-scenario-title">Scenario title</label>
+<input id="roleplay-library-scenario-title" placeholder="Storm reunion in the bookstore" type="text"/>
+</div>
+<div>
+<label for="roleplay-library-scenario-tone">Scenario tone</label>
+<input id="roleplay-library-scenario-tone" placeholder="Slow-burn romance" type="text"/>
+</div>
+<div>
+<label for="roleplay-library-scenario-location-region-id">Linked kingdom / region</label>
+<select id="roleplay-library-scenario-location-region-id"><option value="">None</option></select>
+</div>
+<div>
+<label for="roleplay-library-scenario-location-city-id">Linked city / settlement</label>
+<select id="roleplay-library-scenario-location-city-id"><option value="">None</option></select>
+</div>
+<div>
+<label for="roleplay-library-scenario-location-id">Linked location</label>
+<select id="roleplay-library-scenario-location-id"><option value="">None</option></select>
+</div>
+<div>
+<label for="roleplay-library-scenario-location-label">Location label fallback</label>
+<input id="roleplay-library-scenario-location-label" placeholder="Old bookstore · waterfront district" type="text"/>
+</div>
+<div>
+<label for="roleplay-library-scenario-objective">Objective / tension</label>
+<input id="roleplay-library-scenario-objective" placeholder="What pushes the scene forward?" type="text"/>
+</div>
+</div>
+<label for="roleplay-library-scenario-premise" style="margin-top:14px;">Premise</label>
+<textarea id="roleplay-library-scenario-premise" rows="3"></textarea>
+<label for="roleplay-library-scenario-opening-beat" style="margin-top:14px;">Opening beat</label>
+<textarea id="roleplay-library-scenario-opening-beat" rows="3"></textarea>
+<label for="roleplay-library-scenario-organizations" style="margin-top:14px;">Relevant organizations / factions</label>
+<select id="roleplay-library-scenario-organizations" multiple="" size="6"></select>
+<label for="roleplay-library-scenario-scene-notes" style="margin-top:14px;">Scene notes</label>
+<textarea id="roleplay-library-scenario-scene-notes" rows="3"></textarea>
+<div class="panel" style="margin-top:14px; padding:14px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.08);">
+<div class="row-between"><label style="margin:0;">Scenario cast</label><button class="btn btn-small" id="btn-roleplay-scenario-cast-add" type="button">＋ Add character</button></div>
+<div id="roleplay-library-scenario-cast" style="margin-top:12px; display:grid; gap:10px;"></div>
+</div>
+<div class="status" id="roleplay-library-scenario-status" style="margin-top:12px;"></div>
+</details>
+</div>
+<div class="roleplay-part-editor hidden" id="roleplay-part-editor" style="margin-top:18px;">
+<div class="row-between">
+<div>
+<h4 style="margin:0;">Part editor</h4>
+<div class="muted small">Edit the saved part text, summary, notes, and create a branch copy.</div>
+</div>
+<div class="badge" id="roleplay-part-editor-badge">No part loaded</div>
+</div>
+<div class="grid grid-2" style="margin-top:14px; gap:14px; align-items:end;">
+<div>
+<label for="roleplay-part-editor-title">Part title</label>
+<input id="roleplay-part-editor-title" placeholder="Part title" type="text"/>
+</div>
+<div>
+<label for="roleplay-part-branch-label">Branch label</label>
+<input id="roleplay-part-branch-label" placeholder="Alternate route" type="text"/>
+</div>
+</div>
+<label for="roleplay-part-editor-summary" style="margin-top:14px;">Summary</label>
+<textarea id="roleplay-part-editor-summary" placeholder="Short summary for this part." rows="2"></textarea>
+<label for="roleplay-part-editor-scene-notes" style="margin-top:14px;">Scene notes</label>
+<textarea id="roleplay-part-editor-scene-notes" placeholder="Scene notes, pacing notes, or stage directions." rows="3"></textarea>
+<label for="roleplay-part-editor-canon" style="margin-top:14px;">Pinned canon</label>
+<textarea id="roleplay-part-editor-canon" placeholder="Facts that must stay true in this part." rows="3"></textarea>
+<details class="accordion-block roleplay-advanced-block" data-accordion-id="roleplay-part-linked-context" data-default-open="false" style="margin-top:16px;">
+<summary>Linked part context</summary>
+<div class="mini-note" style="margin-top:10px;">Use this for the active local scope of the current part or beat.</div>
+<div style="display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:12px; align-items:start;"><div><label for="roleplay-part-link-legends">Legends</label><select id="roleplay-part-link-legends" multiple="" size="4"></select></div><div><label for="roleplay-part-link-universes">Universes</label><select id="roleplay-part-link-universes" multiple="" size="4"></select></div><div><label for="roleplay-part-link-worlds">Worlds</label><select id="roleplay-part-link-worlds" multiple="" size="4"></select></div><div><label for="roleplay-part-link-regions">Kingdoms / Regions</label><select id="roleplay-part-link-regions" multiple="" size="4"></select></div><div><label for="roleplay-part-link-cities">Cities / Settlements</label><select id="roleplay-part-link-cities" multiple="" size="4"></select></div><div><label for="roleplay-part-link-locations">Locations</label><select id="roleplay-part-link-locations" multiple="" size="4"></select></div><div><label for="roleplay-part-link-organizations">Organizations / Factions</label><select id="roleplay-part-link-organizations" multiple="" size="4"></select></div><div><label for="roleplay-part-link-characters">Characters</label><select id="roleplay-part-link-characters" multiple="" size="4"></select></div><div><label for="roleplay-part-link-artifacts">Weapons / Artifacts</label><select id="roleplay-part-link-artifacts" multiple="" size="4"></select></div><div><label for="roleplay-part-link-rituals">Spells / Rituals / Techniques</label><select id="roleplay-part-link-rituals" multiple="" size="4"></select></div><div><label for="roleplay-part-link-cycles">Cycles / Conditions / Systems</label><select id="roleplay-part-link-cycles" multiple="" size="4"></select></div><div><label for="roleplay-part-link-creatures">Creatures / Animals / Fauna</label><select id="roleplay-part-link-creatures" multiple="" size="4"></select></div><div><label for="roleplay-part-link-packs">Packs</label><select id="roleplay-part-link-packs" multiple="" size="4"></select></div><div><label for="roleplay-part-link-scenarios">Scenarios</label><select id="roleplay-part-link-scenarios" multiple="" size="4"></select></div></div>
+</details>
+<label for="roleplay-part-editor-text" style="margin-top:14px;">Scene text</label>
+<textarea id="roleplay-part-editor-text" placeholder="Editable scene text. Keep the speaker labels if you want load-back into Roleplay to track turns cleanly." rows="10"></textarea>
+<div class="row" style="margin-top:14px; gap:10px; flex-wrap:wrap;">
+<button class="btn btn-primary" id="btn-roleplay-part-save" type="button">Save part edits</button>
+<button class="btn" id="btn-roleplay-part-branch" type="button">Create branch copy</button>
+<button class="btn" id="btn-roleplay-part-close" type="button">Close editor</button>
+</div>
+<div class="status" id="roleplay-part-editor-status" style="margin-top:12px;"></div>
+</div>
+
+</details></section></div>

@@ -1,0 +1,64 @@
+<section class="section" id="tab-board">
+  <div class="panel board-shell" id="board-surface-root" data-board-phase="14">
+    <div class="board-top-strip" aria-label="Board controls">
+      <div class="board-title-cluster">
+        <div class="row" style="gap:8px; align-items:center; flex-wrap:wrap;">
+          <h2 class="board-surface-title">Board</h2>
+          <span class="badge">Local-first</span>
+          <span class="badge" id="board-surface-state-badge">Loading</span>
+        </div>
+        <div class="muted small">Plan ideas, references, and working notes in one visual space.</div>
+      </div>
+
+      <div class="board-control-cluster">
+        <label class="board-field-label" for="board-picker">Board</label>
+        <select class="input board-picker" id="board-picker" aria-label="Switch board">
+          <option value="">Loading boards…</option>
+        </select>
+        <button class="btn btn-small" id="board-new-btn" type="button">New board</button>
+        <button class="btn btn-small" id="board-duplicate-btn" type="button" disabled>Duplicate</button>
+        <button class="btn btn-small danger" id="board-delete-btn" type="button" disabled>Delete</button>
+      </div>
+    </div>
+
+    <div class="board-title-strip">
+      <input class="input board-name-input" id="board-name-input" type="text" maxlength="120" placeholder="Untitled Board" disabled aria-label="Board title">
+      <div class="mini-note" id="board-save-status">Choose or create a board</div>
+    </div>
+
+    <div class="board-tool-strip" aria-label="Board item tools">
+      <button class="btn btn-small" type="button" id="board-add-sticky" disabled>Add Sticky</button>
+      <button class="btn btn-small" type="button" id="board-add-checklist" disabled>Add Checklist</button>
+      <button class="btn btn-small" type="button" id="board-add-text" disabled>Add Text</button>
+      <button class="btn btn-small" type="button" id="board-add-image" disabled>Add Image</button>
+      <input id="board-image-file-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+      <button class="btn btn-small" type="button" id="board-add-audio" disabled>Add Audio</button>
+      <input id="board-audio-file-input" type="file" accept="audio/mpeg,audio/wav,audio/ogg,audio/mp4,audio/aac,audio/flac,audio/webm,.mp3,.wav,.ogg,.m4a,.aac,.flac,.webm" hidden>
+      <button class="btn btn-small board-record-audio-btn" type="button" id="board-record-audio" disabled>Record Audio</button>
+      <button class="btn btn-small" type="button" id="board-add-video" disabled>Add Video</button>
+      <input id="board-video-file-input" type="file" accept="video/mp4,video/webm,video/quicktime,video/ogg,.mp4,.webm,.mov,.m4v,.ogv" hidden>
+      <span class="muted small board-tool-note">Sticky notes, checklist cards, text layers, image cards, audio cards, recorded voice notes, and video cards can now be selected, layered, moved, resized, and saved locally.</span>
+    </div>
+
+    <div class="board-view-strip" aria-label="Board view controls">
+      <button class="btn btn-small" type="button" id="board-zoom-out" title="Zoom out">−</button>
+      <span class="board-zoom-label" id="board-zoom-label">100%</span>
+      <button class="btn btn-small" type="button" id="board-zoom-in" title="Zoom in">+</button>
+      <button class="btn btn-small" type="button" id="board-zoom-reset">Reset view</button>
+      <button class="btn btn-small" type="button" id="board-fit-content">Fit content</button>
+      <button class="btn btn-small" type="button" id="board-grid-toggle" data-active="1">Grid On</button>
+      <span class="muted small board-view-note">Drag empty canvas to pan · Ctrl/⌘ + wheel to zoom · Space + drag also pans.</span>
+    </div>
+
+    <div class="board-canvas-shell" aria-label="Board canvas workspace">
+      <div class="board-canvas" id="board-canvas">
+        <div class="board-empty-state" id="board-empty-state">
+          <div class="badge">Phase 14</div>
+          <h3>Board shell is ready.</h3>
+          <p class="muted small">Create or select a board above. Sticky notes, checklist cards, text layers, image cards, audio cards, recorded voice notes, and video cards are enabled with freeform drag, resizing, pan/zoom view controls, and local saving.</p>
+          <button class="btn" id="board-empty-create-btn" type="button">Create first board</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>

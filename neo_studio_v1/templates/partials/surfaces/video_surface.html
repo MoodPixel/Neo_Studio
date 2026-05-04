@@ -1,0 +1,509 @@
+<section class="section" id="tab-video">
+<div class="panel">
+<div class="row-between" style="gap:12px; align-items:flex-start; flex-wrap:wrap;">
+<div>
+<div class="row" style="gap:8px; align-items:center; flex-wrap:wrap;">
+<h2 style="margin:0;">Video</h2>
+<span class="badge">Rollout hardened</span>
+</div>
+<div class="muted small">Video now ships as a real pipeline: generation, post lanes, queue controls, saved presets, manifests, and guardrails. This pass tightens copy, states, and rollout confidence without changing the frozen contract.</div>
+</div>
+<div class="mini-note" id="video-surface-summary">Text to Video · Balanced / Low VRAM · 5s · 832 × 480</div>
+</div>
+<div class="surface-setup-shell-panel" id="video-setup-shell-panel" style="margin-top:16px;">
+<button aria-controls="video-setup-shell-content" aria-expanded="true" class="surface-setup-shell-header" id="video-setup-shell-header" type="button">
+<div>
+<div class="row" style="gap:8px; align-items:center; flex-wrap:wrap;">
+<span class="stat-title">Video setup</span>
+<span class="badge">Launch shell</span>
+</div>
+<div class="mini-note">Pick the lane, quality, backend, and starter once here. Then stay in the production workspace below.</div>
+</div>
+<div class="surface-setup-shell-header-actions">
+<span class="surface-setup-shell-toggle-copy" id="video-setup-shell-toggle-copy">Collapse setup</span>
+<span aria-hidden="true" class="surface-setup-shell-chevron" id="video-setup-shell-chevron">⌄</span>
+</div>
+</button>
+<div class="surface-setup-shell-summary-strip hidden" id="video-setup-shell-summary-strip"></div>
+<div id="video-setup-shell-content">
+<div class="surface-setup-shell-grid">
+<section class="surface-setup-shell-slot" data-ui-state="idle" data-ui-tone="neutral" id="video-setup-shell-backend-card">
+<div class="surface-setup-shell-slot-head">
+<div>
+<div class="stat-title">Video backend</div>
+<div class="generation-summary-title">Runtime readiness</div>
+</div>
+<span class="badge">1 · Backend</span>
+</div>
+<div class="surface-backend-strip compact" data-backend-role="video" data-surface-backend="video" style="margin-top:14px;">
+<div class="row" style="gap:10px; align-items:center; flex-wrap:wrap;">
+<span class="backend-chip state-offline" id="surface-backend-video-state">Offline</span>
+<strong id="surface-backend-video-name">No active video backend</strong>
+<span class="mini-note" id="surface-backend-video-meta">Video keeps its own backend contract even when it shares adapter infrastructure with Image.</span>
+</div>
+<div class="row" style="gap:8px; flex-wrap:wrap; align-items:center;">
+<button class="btn btn-small" id="btn-surface-backend-video-launch" type="button">Launch Backend</button>
+              <button class="btn btn-small" id="btn-surface-backend-video-connect" type="button">Connect Video Backend</button>
+<button class="btn btn-small" id="btn-surface-backend-video-disconnect" type="button">Disconnect</button>
+<button class="btn btn-small" id="btn-surface-backend-video-manage" type="button">Manage in Admin</button>
+</div>
+</div>
+</section>
+<section class="surface-setup-shell-slot" data-ui-state="ready" data-ui-tone="primary" id="video-setup-shell-profile-card">
+<div class="surface-setup-shell-slot-head">
+<div>
+<div class="stat-title">Quality profile</div>
+<div class="generation-summary-title">User-facing quality switch</div>
+</div>
+<span class="badge" id="video-profile-active-badge">Balanced / Low VRAM</span>
+</div>
+<label for="video-profile" style="margin-top:14px; display:block;">Quality</label>
+<select id="video-profile"></select>
+<div class="mini-note" id="video-profile-contract-note" style="margin-top:12px;">Balanced stays simple, High Quality stays guided, and Raw / Free lets the manual engine + asset picks drive the lane when you need full control.</div>
+</section>
+<section class="surface-setup-shell-slot" data-ui-state="ready" data-ui-tone="primary" id="video-setup-shell-lane-card">
+<div class="surface-setup-shell-slot-head">
+<div>
+<div class="stat-title">Workflow lane</div>
+<div class="generation-summary-title">What are you making?</div>
+</div>
+<span class="badge" id="video-mode-active-badge">Text to Video</span>
+</div>
+<label for="video-mode" style="margin-top:14px; display:block;">Mode</label>
+<select id="video-mode"></select>
+<div class="mini-note" style="margin-top:12px;">Start with Text to Video for prompt-first clips. Switch to Image to Video when you want motion anchored to a still frame.</div>
+</section>
+</div>
+<div class="surface-setup-shell-grid">
+<section class="surface-setup-shell-slot surface-setup-shell-slot--span-full" data-ui-state="neutral" data-ui-tone="neutral" id="video-setup-shell-preset-card">
+<div class="surface-setup-shell-slot-head">
+<div>
+<div class="stat-title">Workspace preset</div>
+<div class="generation-summary-title">Built-in starters + saved UI setup</div>
+</div>
+<span class="badge">4 · Preset</span>
+</div>
+<div class="row u-gap-8 u-wrap surface-setup-shell-preset-row" id="video-workspace-preset-lane" style="margin-top:12px;">
+<select class="u-shell-select-width" id="video-shell-preset-select"><option value="">Workspace presets…</option></select>
+<button class="btn btn-small" id="btn-video-load-preset" type="button">Load</button>
+<button class="btn btn-small" id="btn-video-save-preset" type="button">Save preset</button>
+<button class="btn btn-small" id="btn-video-update-preset" type="button">Update preset</button>
+<button class="btn btn-small btn-danger" id="btn-video-delete-preset" type="button">Delete</button>
+<button class="btn btn-small" id="btn-video-set-default-preset" type="button">Set default</button>
+<button class="btn btn-small" id="btn-video-clear-default-preset" type="button">Clear default</button>
+<div class="badge" id="video-preset-active-badge">Manual setup</div>
+</div>
+<div class="mini-note" style="margin-top:12px;">Workspace presets are browser-local shell starters. Save the shell state you reuse often without turning the whole tab into raw backend config soup.</div>
+</section>
+</div>
+</div>
+</div>
+<div class="surface-workspace-shell video-workspace-shell video-workspace-compact">
+<div class="surface-workspace-shell-header">
+<div class="surface-workspace-shell-copy">
+<div class="stat-title">Production workspace</div>
+<div class="generation-summary-title">Video workspace</div>
+<div class="muted small">The workspace below stays human-readable: prompt, optional image input, output settings, runtime guardrails, and post lanes without leaking backend jargon into the user surface.</div>
+</div>
+<div class="badge">Production workspace</div>
+</div>
+
+
+
+<div class="video-workspace-grid"><div class="video-workspace-main"><div class="video-action-bar" id="video-action-bar">
+<div class="video-action-bar-main">
+<div class="video-action-bar-status">
+<span class="backend-chip state-connected" id="video-action-state-chip">Ready</span>
+<div class="video-action-bar-copy">
+<div class="video-action-bar-title" id="video-action-title">Ready to generate</div>
+<div class="mini-note" id="video-action-copy">Generate stays the main CTA here. Stop only appears while Neo is queueing or running an active video job.</div>
+</div>
+</div>
+<div class="video-action-bar-actions">
+<button class="btn btn-primary" id="btn-video-run" type="button">Generate</button>
+<button class="btn btn-warn hidden" id="btn-video-cancel" type="button">Stop</button>
+<button class="btn btn-small" id="btn-video-retry" type="button">Retry last</button>
+<button class="btn btn-small" id="btn-video-refresh-history" type="button">Refresh history</button>
+<button class="btn btn-small" id="btn-video-action-save" type="button">Save draft</button>
+<button class="btn btn-small" id="btn-video-action-clear" type="button">Clear</button>
+</div>
+</div>
+<div class="video-action-bar-meta">
+<span class="badge" id="video-action-mode-badge">Text to Video</span>
+<span class="badge" id="video-action-profile-badge">Balanced / Low VRAM</span>
+<span class="badge" id="video-action-pipeline-badge">Generate only</span>
+</div>
+</div><div class="card-lite" id="video-prompt-card">
+<div class="accordion-title">Prompt</div>
+<div class="mini-note" id="video-shell-explainer" style="margin-top:12px;">Describe the motion, framing, vibe, and subject clearly. Keep the shell simple here so later runtime work has a clean surface to land on.</div>
+<label for="video-prompt" style="margin-top:14px; display:block;">Prompt brief</label>
+<textarea id="video-prompt" placeholder="Slow cinematic push-in, drifting fog, subtle cloth motion, moody evening light..." style="min-height:140px;"></textarea>
+<label for="video-negative" style="margin-top:14px; display:block;">Negative prompt / avoid</label>
+<textarea id="video-negative" placeholder="warping, flicker, extra limbs, camera jitter, duplicate subjects..." style="min-height:96px;"></textarea>
+<div id="video-quality-prompt-section" style="display:none; margin-top:16px; padding-top:16px; border-top:1px solid rgba(148,163,184,.12);">
+<div class="accordion-title" style="font-size:13px;">Advanced prompt direction</div>
+<div class="mini-note" id="video-quality-prompt-note" style="margin-top:10px;">High Quality can take more precise cinematic direction. Keep it intentional — this is not a dump box for random tags.</div>
+<label for="video-quality-style" style="margin-top:14px; display:block;">Style / aesthetic direction</label>
+<textarea id="video-quality-style" placeholder="cinematic contrast, moody rim light, controlled color palette, premium detail..." style="min-height:84px;"></textarea>
+<label for="video-quality-camera" style="margin-top:14px; display:block;">Camera / motion direction</label>
+<textarea id="video-quality-camera" placeholder="slow dolly-in, restrained orbit, stable subject framing, no sudden whip motion..." style="min-height:84px;"></textarea>
+</div>
+<div class="row" style="margin-top:14px; gap:8px; flex-wrap:wrap;">
+<button class="btn btn-primary" id="btn-video-save-brief" type="button">Save local draft</button>
+<button class="btn" id="btn-video-build-summary" type="button">Refresh summary</button>
+<button class="btn" id="btn-video-clear-brief" type="button">Clear draft</button>
+</div>
+<div class="status" id="video-status" style="margin-top:12px;"></div>
+</div><div class="card-lite" id="video-preview-card" style="margin-top:14px; display:none;">
+<div class="accordion-title">Preview</div>
+<div class="video-empty-card-copy" id="video-preview-empty-copy" style="margin-top:12px;">No preview yet. Finish a generation or a post lane, then preview the latest clip here without leaving the Video tab.</div>
+<div class="row" id="video-preview-toolbar" style="margin-top:14px; gap:8px; flex-wrap:wrap; display:none;">
+<button class="btn btn-small" id="btn-video-preview-open" type="button">Open current preview</button>
+<button class="btn btn-small" id="btn-video-preview-loop" type="button">Loop on</button>
+<button class="btn btn-small" id="btn-video-preview-clear" type="button">Clear preview</button>
+</div>
+<div class="mini-note" id="video-preview-meta" style="margin-top:12px; display:none;"></div>
+<div class="video-preview-frame" id="video-preview-frame" style="margin-top:14px; display:none;">
+<video controls="" id="video-preview-player" loop="" muted="" playsinline="" preload="metadata"></video>
+</div>
+<div class="mini-note" id="video-preview-note" style="margin-top:12px; display:none;">This preview uses the browser’s native player. If the current codec does not play cleanly here, open the file directly.</div>
+</div><div class="card-lite" id="video-input-card" style="display:none;">
+<div class="accordion-title">Input image</div>
+<div class="mini-note" id="video-input-note" style="margin-top:12px;">Image to Video uses a starting image as the motion anchor.</div>
+<label for="video-source-image-file" style="margin-top:14px; display:block;">Source image file</label>
+<input accept="image/*" id="video-source-image-file" type="file"/>
+<label for="video-source-image" style="margin-top:14px; display:block;">Selected image</label>
+<input id="video-source-image" placeholder="No file selected yet" readonly="" type="text"/>
+<div class="help" id="video-source-image-help" style="margin-top:14px;">Select a real source image here. Presets only remember the label — you still need to reselect the image before running.</div>
+<div class="mini-note" id="video-source-image-meta" style="margin-top:10px; display:none;"></div>
+</div></div><div class="video-workspace-side"><div class="video-support-tabs-shell" id="video-support-tabs-shell"><div aria-label="Video side workspaces" class="video-support-tabbar" role="tablist"><button aria-selected="true" class="active" data-video-support-tab="generate_setup" role="tab" type="button">Generate setup</button><button aria-selected="false" class="" data-video-support-tab="repair" role="tab" type="button">Repair lane</button><button aria-selected="false" class="" data-video-support-tab="upscale" role="tab" type="button">Upscale lane</button><button aria-selected="false" class="" data-video-support-tab="interpolate" role="tab" type="button">Interpolate lane</button></div><div class="video-support-tabpanel" data-video-support-panel="generate_setup" role="tabpanel"><div class="card-lite" id="video-output-card">
+<div class="accordion-title">Output settings</div>
+<div class="mini-note" style="margin-top:12px;">Clip length, frame rate, size preset, and seed live here for both Balanced and High Quality.</div>
+<div style="margin-top:14px; display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:14px;">
+<div><label for="video-duration">Duration (sec)</label><input id="video-duration" max="18" min="1" step="1" type="number" value="5"/></div>
+<div><label for="video-fps">FPS target</label><input id="video-fps" max="24" min="8" step="1" type="number" value="16"/></div>
+<div><label for="video-size">Resolution profile</label><select id="video-size"><option value="832x480">832 × 480</option><option value="1024x576">1024 × 576</option><option value="576x1024">576 × 1024</option><option value="auto_source_fit">Auto best fit from source</option><option value="source_match">Match source image</option><option value="custom">Custom manual size</option></select></div>
+<div><label for="video-seed">Seed</label><input id="video-seed" placeholder="Blank = random" type="text" value=""/></div>
+</div>
+<div id="video-custom-size-row" style="margin-top:14px; display:none; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:14px;">
+<div><label for="video-width">Manual width</label><input id="video-width" max="2048" min="256" step="16" type="number" value="832"/></div>
+<div><label for="video-height">Manual height</label><input id="video-height" max="2048" min="256" step="16" type="number" value="480"/></div>
+</div>
+<div class="mini-note" id="video-size-help" style="margin-top:12px;">Preset sizes stay safest. Match source image is best for I2V when the starting image already has the framing you want.</div>
+<div class="mini-note" id="video-output-settings-note" style="margin-top:14px;">Balanced keeps the defaults conservative for low / medium VRAM. High Quality uses the dedicated Wan 2.2 14B paths and needs more patience — and usually more GPU headroom.</div>
+</div><div class="card-lite" id="video-backend-assets-card">
+<div class="accordion-title">Advanced backend assets</div>
+<div class="mini-note" id="video-backend-assets-note" style="margin-top:12px;">Presets can suggest a stack, but this section is where manual video users keep control of the real Wan model, text encoder, VAE, and LoRA path.</div>
+<div class="row u-gap-8 u-wrap" style="margin-top:14px; align-items:center;">
+<button class="btn btn-small" id="btn-video-refresh-assets" type="button">Refresh asset catalog</button>
+<div class="badge" id="video-backend-assets-active-badge">Using defaults</div>
+</div>
+<div style="margin-top:14px; display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:14px;">
+<div>
+<label style="display:flex; gap:10px; align-items:center; margin:0;">
+<input id="video-free-assets-mode" type="checkbox"/>
+<span>Free asset mode</span>
+</label>
+<div class="mini-note" style="margin-top:8px;">Raw / Free uses the merged live asset pool and manual engine routing instead of the old preset-locked path. Flexible, yes. Foolproof, no.</div>
+</div>
+<div>
+<label for="video-backend-engine-override">Backend engine</label>
+<select id="video-backend-engine-override">
+<option value="auto">Auto detect</option>
+<option value="wan_native">Wan Native</option>
+<option value="kijai_wrapper">Kijai Wrapper</option>
+</select>
+<div class="mini-note" style="margin-top:8px;">Pick the backend lane manually when auto-detect is getting clever in all the wrong ways.</div>
+</div>
+</div>
+<div class="mini-note" id="video-backend-assets-status" style="margin-top:12px;">Load the video backend catalog to pick real native Wan assets. Neo now validates the Wan-native encoder loader path too, so outdated CLIPLoader builds fail early instead of silently routing through the wrong text encoder stack.</div>
+<div id="video-balanced-assets-group" style="margin-top:14px; display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:14px;">
+<div>
+<label for="video-balanced-unet">Balanced model / UNet</label>
+<select id="video-balanced-unet"><option value="wan2.2_ti2v_5B_fp16.safetensors">wan2.2_ti2v_5B_fp16.safetensors</option></select>
+</div>
+<div>
+<label for="video-balanced-encoder">Balanced text encoder</label>
+<select id="video-balanced-encoder"><option value="umt5_xxl_fp8_e4m3fn_scaled.safetensors">umt5_xxl_fp8_e4m3fn_scaled.safetensors</option></select>
+</div>
+<div>
+<label for="video-balanced-vae">Balanced VAE</label>
+<select id="video-balanced-vae"><option value="wan2.2_vae.safetensors">wan2.2_vae.safetensors</option></select>
+</div>
+</div>
+<div id="video-quality-assets-group" style="display:none; margin-top:14px;">
+<div style="display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:14px;">
+<div>
+<label for="video-quality-high-noise-unet">High-noise model</label>
+<select id="video-quality-high-noise-unet"><option value="wan2.2_t2v_high_noise_14B_fp8_scaled.safetensors">wan2.2_t2v_high_noise_14B_fp8_scaled.safetensors</option></select>
+</div>
+<div>
+<label for="video-quality-low-noise-unet">Low-noise model</label>
+<select id="video-quality-low-noise-unet"><option value="wan2.2_t2v_low_noise_14B_fp8_scaled.safetensors">wan2.2_t2v_low_noise_14B_fp8_scaled.safetensors</option></select>
+</div>
+</div>
+<div style="margin-top:14px; display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:14px;">
+<div>
+<label for="video-quality-encoder">Quality text encoder</label>
+<select id="video-quality-encoder"><option value="umt5_xxl_fp8_e4m3fn_scaled.safetensors">umt5_xxl_fp8_e4m3fn_scaled.safetensors</option></select>
+</div>
+<div>
+<label for="video-quality-vae">Quality VAE</label>
+<select id="video-quality-vae"><option value="wan_2.1_vae.safetensors">wan_2.1_vae.safetensors</option></select>
+</div>
+</div>
+</div>
+<div class="mini-note" id="video-backend-assets-gguf-note" style="margin-top:12px;">Wan GGUF UNET choices can be selected here when the backend exposes them. Encoders and VAEs still follow the native Wan path.</div>
+<div class="card-lite" id="video-adapter-card" style="margin-top:14px;">
+<div class="accordion-title">LoRAs / adapters</div>
+<div class="mini-note" id="video-adapter-note" style="margin-top:12px;">Balanced can run a direct first-pass LoRA / adapter load. High Quality keeps the paired high-noise / low-noise path when you need the heavier expert split.</div>
+<label style="margin-top:14px; display:flex; gap:10px; align-items:center;">
+<input id="video-adapters-enabled" type="checkbox"/>
+<span>Enable LoRAs / adapters</span>
+</label>
+<div class="row u-gap-8 u-wrap" style="margin-top:14px; align-items:center;">
+<select class="u-shell-select-width" id="video-adapter-preset-select"><option value="">Adapter pair presets…</option></select>
+<button class="btn btn-small" id="btn-video-load-adapter-preset" type="button">Load pair</button>
+<button class="btn btn-small" id="btn-video-save-adapter-preset" type="button">Save pair</button>
+<button class="btn btn-small" id="btn-video-update-adapter-preset" type="button">Update pair</button>
+<button class="btn btn-small btn-danger" id="btn-video-delete-adapter-preset" type="button">Delete pair</button>
+<button class="btn btn-small" id="btn-video-refresh-adapters" type="button">Refresh catalog</button>
+<div class="badge" id="video-adapter-active-badge">No adapter</div>
+</div>
+<div id="video-single-adapters-group" style="margin-top:14px; display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:14px;">
+<div>
+<label for="video-adapter-single">Balanced LoRA / adapter</label>
+<select id="video-adapter-single"><option value="">Select adapter…</option></select>
+</div>
+<div>
+<label for="video-adapter-strength">Adapter strength</label>
+<input id="video-adapter-strength" max="2" min="0" step="0.05" type="number" value="0.8"/>
+</div>
+</div>
+<div id="video-paired-adapters-group" style="margin-top:14px; display:none; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:14px;">
+<div>
+<label for="video-adapter-high-noise">High-noise adapter</label>
+<select id="video-adapter-high-noise"><option value="">Select adapter…</option></select>
+</div>
+<div>
+<label for="video-adapter-low-noise">Low-noise adapter</label>
+<select id="video-adapter-low-noise"><option value="">Select adapter…</option></select>
+</div>
+<div>
+<label for="video-adapter-strength-quality">Shared strength</label>
+<input id="video-adapter-strength-quality" max="2" min="0" step="0.05" type="number" value="0.8"/>
+</div>
+</div>
+<div class="mini-note" id="video-adapter-status" style="margin-top:12px;">Load the video backend catalog to pick real LoRA / adapter names. Balanced now keeps a manual first-pass lane instead of forcing every adapter use into High Quality only.</div>
+<div class="card-lite" id="video-adapter-summary" style="margin-top:14px;"></div>
+</div>
+<div class="card-lite" id="video-backend-assets-summary" style="margin-top:14px;"></div>
+</div><div class="card-lite" id="video-post-pipeline-card">
+<div class="accordion-title">Chained post pipeline</div>
+<div class="mini-note" id="video-post-pipeline-note" style="margin-top:12px;">Default stays simple: generate only. Opt into a handoff pipeline only when you want Neo to push a finished generation through the existing post lanes automatically.</div>
+<label for="video-post-pipeline-template" style="margin-top:14px; display:block;">Pipeline template</label>
+<select id="video-post-pipeline-template">
+<option value="generate_only">Generate only</option>
+<option value="generate_upscale">Generate → Upscale</option>
+<option value="generate_repair_upscale">Generate → Repair → Upscale</option>
+<option value="generate_repair_upscale_interpolate">Generate → Repair → Upscale → Interpolate</option>
+</select>
+<div class="mini-note" style="margin-top:12px;">The separate Repair, Upscale, and Interpolate cards still work one at a time. This lane only automates the handoff after a generation job finishes.</div>
+<div id="video-post-pipeline-summary" style="margin-top:14px;"></div>
+</div><div class="card-lite" id="video-runtime-card">
+<div class="accordion-title">Runtime / cost summary</div>
+<div class="row" style="margin-top:12px; gap:8px; flex-wrap:wrap; align-items:center;">
+<span class="badge" id="video-runtime-heaviness-badge">Light</span>
+<span class="badge" id="video-runtime-profile-badge">Balanced / Low VRAM</span>
+</div>
+<div class="mini-note" id="video-empty-state-note" style="margin-top:12px;">Start with the prompt, then decide whether this clip should stay in the safer Balanced lane or move up to High Quality.</div>
+<div class="mini-note" id="video-runtime-copy" style="margin-top:12px;">Balanced stays safer. High Quality is slower, heavier, and now wired to the dedicated Wan 2.2 14B paths.</div>
+<div class="card-lite" id="video-quality-warning-box" style="margin-top:14px; display:none;"></div>
+<div id="video-runtime-summary" style="margin-top:14px;"></div>
+<div class="row" style="margin-top:14px; gap:8px; flex-wrap:wrap;">
+<button class="btn" id="btn-video-open-admin" type="button">Open Admin</button>
+<button class="btn" id="btn-video-open-generation" type="button">Open Image</button>
+</div>
+<div class="card-lite" id="video-job-status-box" style="margin-top:14px; display:none;"></div>
+
+<div class="card-lite" id="video-output-results" style="margin-top:14px; display:none;"></div>
+<div class="card-lite" id="video-output-history" style="margin-top:14px; display:none;"></div>
+</div><div class="card-lite" id="video-saved-preset-card">
+<div class="accordion-title">Saved video preset</div>
+<div class="mini-note" style="margin-top:12px;">Saved video presets are real app-stored backend config records. They stay separate from the browser-local workspace preset lane above.</div>
+<label for="video-saved-preset-select" style="margin-top:14px; display:block;">Saved preset</label>
+<div class="row u-gap-8 u-wrap" style="margin-top:10px;">
+<select class="u-shell-select-width" id="video-saved-preset-select"><option value="">Saved video presets…</option></select>
+<button class="btn btn-small" id="btn-video-load-saved-preset" type="button">Load</button>
+<button class="btn btn-small" id="btn-video-save-video-preset" type="button">Save preset</button>
+<button class="btn btn-small" id="btn-video-update-video-preset" type="button">Update preset</button>
+<button class="btn btn-small btn-danger" id="btn-video-delete-video-preset" type="button">Delete</button>
+<button class="btn btn-small" id="btn-video-set-default-video-preset" type="button">Set default</button>
+<button class="btn btn-small" id="btn-video-clear-default-video-preset" type="button">Clear default</button>
+<div class="badge" id="video-saved-preset-active-badge">No saved video preset</div>
+</div>
+<label for="video-saved-preset-category" style="margin-top:14px; display:block;">Preset category</label>
+<select id="video-saved-preset-category">
+<option value="short_social_clip">Short social clip</option>
+<option value="slow_cinematic">Slow cinematic</option>
+<option value="subtle_image_animation">Subtle image animation</option>
+<option value="aggressive_motion_test">Aggressive motion test</option>
+<option value="low_vram_safe">Low-VRAM safe</option>
+<option value="custom">Custom</option>
+</select>
+<div class="mini-note" id="video-saved-preset-note" style="margin-top:12px;">Saved video presets load reusable run settings like quality, duration, FPS, resolution, negative prompt, and optional quality direction. They do not replace the main prompt or the source image file.</div>
+<div class="card-lite" id="video-saved-preset-summary" style="margin-top:14px;"></div>
+</div></div><div class="video-support-tabpanel" data-video-support-panel="repair" hidden="" role="tabpanel"><div class="card-lite" id="video-repair-card">
+<div class="accordion-title">Repair lane</div>
+<div class="mini-note" id="video-repair-note" style="margin-top:12px;">Repair stays separate from generation on purpose: fix, clean, and stabilize a finished clip without pretending to regenerate the whole thing.</div>
+<input id="video-repair-source-ref" type="hidden" value=""/>
+<label for="video-repair-source-file" style="margin-top:14px; display:block;">Source video file</label>
+<input accept="video/*" id="video-repair-source-file" type="file"/>
+<label for="video-repair-source-label" style="margin-top:14px; display:block;">Selected source</label>
+<input id="video-repair-source-label" placeholder="Pick a local video or send an existing output into Repair" readonly="" type="text"/>
+<div class="help" id="video-repair-source-help" style="margin-top:12px;">Use the latest generated output or upload a clip directly. This lane fixes, cleans, and stabilizes without rerunning generation.</div>
+<div style="margin-top:14px; display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:14px;">
+<div>
+<label for="video-repair-strength">Repair strength</label>
+<select id="video-repair-strength">
+<option value="gentle">Gentle</option>
+<option selected="" value="balanced">Balanced</option>
+<option value="aggressive">Aggressive</option>
+</select>
+</div>
+<div>
+<label for="video-repair-focus">Cleanup focus</label>
+<select id="video-repair-focus">
+<option value="general_cleanup">General cleanup</option>
+<option value="compression_cleanup">Compression artifact cleanup</option>
+</select>
+</div>
+<div>
+<label style="display:flex; gap:10px; align-items:center; margin-top:28px;">
+<input id="video-repair-stabilize" type="checkbox"/>
+<span>Mild temporal stabilization</span>
+</label>
+</div>
+</div>
+<div class="card-lite" id="video-repair-warning-box" style="margin-top:14px; display:none;"></div>
+<div id="video-repair-summary" style="margin-top:14px;"></div>
+<div class="row" style="margin-top:14px; gap:8px; flex-wrap:wrap;">
+<button class="btn btn-small" id="btn-video-repair-run" type="button">Queue Repair</button>
+<button class="btn btn-small" id="btn-video-repair-clear-source" type="button">Clear source</button>
+</div>
+</div></div><div class="video-support-tabpanel" data-video-support-panel="upscale" hidden="" role="tabpanel"><div class="card-lite" id="video-upscale-card">
+<div class="accordion-title">Upscale lane</div>
+<div class="mini-note" id="video-upscale-note" style="margin-top:12px;">Upscale stays separate from generation on purpose: generate smaller, then send a finished clip here for a conservative delivery pass.</div>
+<input id="video-upscale-source-ref" type="hidden" value=""/>
+<label for="video-upscale-source-file" style="margin-top:14px; display:block;">Source video file</label>
+<input accept="video/*" id="video-upscale-source-file" type="file"/>
+<label for="video-upscale-source-label" style="margin-top:14px; display:block;">Selected source</label>
+<input id="video-upscale-source-label" placeholder="Pick a local video or send an existing output into Upscale" readonly="" type="text"/>
+<div class="help" id="video-upscale-source-help" style="margin-top:12px;">Use the latest generated output or upload a delivery source directly. This lane does not rerun generation.</div>
+<div style="margin-top:14px; display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:14px;">
+<div>
+<label for="video-upscale-profile">Upscale profile</label>
+<select id="video-upscale-profile">
+<option value="fast_local">Fast Local</option>
+<option value="quality_conservative">Quality Conservative</option>
+</select>
+</div>
+<div>
+<label for="video-upscale-target">Target resolution</label>
+<select id="video-upscale-target">
+<option value="1280x720">1280 × 720</option>
+<option selected="" value="1920x1080">1920 × 1080</option>
+<option value="2560x1440">2560 × 1440</option>
+</select>
+</div>
+<div>
+<label for="video-upscale-fps-mode">FPS handling</label>
+<select id="video-upscale-fps-mode">
+<option value="preserve">Keep source FPS</option>
+<option value="custom">Custom FPS</option>
+</select>
+</div>
+</div>
+<div style="margin-top:14px; display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:14px;">
+<div id="video-upscale-custom-fps-wrap" style="display:none;">
+<label for="video-upscale-custom-fps">Custom FPS</label>
+<input id="video-upscale-custom-fps" max="60" min="8" step="1" type="number" value="24"/>
+</div>
+<div>
+<label for="video-upscale-container">Output container</label>
+<select id="video-upscale-container">
+<option value="mp4">MP4</option>
+<option value="mov">MOV</option>
+<option value="webm">WebM</option>
+</select>
+</div>
+<div>
+<label for="video-upscale-codec">Output codec</label>
+<select id="video-upscale-codec">
+<option value="auto">Auto</option>
+<option value="h264">H.264</option>
+<option value="hevc">HEVC</option>
+</select>
+</div>
+</div>
+<div class="card-lite" id="video-upscale-warning-box" style="margin-top:14px; display:none;"></div>
+<div id="video-upscale-summary" style="margin-top:14px;"></div>
+<div class="row" style="margin-top:14px; gap:8px; flex-wrap:wrap;">
+<button class="btn btn-small" id="btn-video-upscale-run" type="button">Queue Upscale</button>
+<button class="btn btn-small" id="btn-video-upscale-clear-source" type="button">Clear source</button>
+</div>
+</div></div><div class="video-support-tabpanel" data-video-support-panel="interpolate" hidden="" role="tabpanel"><div class="card-lite" id="video-interpolate-card">
+<div class="accordion-title">Interpolate lane</div>
+<div class="mini-note" id="video-interpolate-note" style="margin-top:12px;">Interpolate stays separate from generation on purpose: smooth choppy clips, raise delivery FPS, or stretch motion into slow motion without rerendering the original generation.</div>
+<input id="video-interpolate-source-ref" type="hidden" value=""/>
+<label for="video-interpolate-source-file" style="margin-top:14px; display:block;">Source video file</label>
+<input accept="video/*" id="video-interpolate-source-file" type="file"/>
+<label for="video-interpolate-source-label" style="margin-top:14px; display:block;">Selected source</label>
+<input id="video-interpolate-source-label" placeholder="Pick a local video or send an existing output into Interpolate" readonly="" type="text"/>
+<div class="help" id="video-interpolate-source-help" style="margin-top:12px;">Use the latest generated output or upload a clip directly. This lane polishes motion and standardizes frame rate after generation.</div>
+<div style="margin-top:14px; display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:14px;">
+<div>
+<label for="video-interpolate-preset">Quick preset</label>
+<select id="video-interpolate-preset">
+<option value="">Manual</option>
+<option value="16_to_24">16 → 24 FPS</option>
+<option value="16_to_30">16 → 30 FPS</option>
+<option value="24_to_30">24 → 30 FPS</option>
+<option value="30_to_60">30 → 60 FPS</option>
+</select>
+</div>
+<div>
+<label for="video-interpolate-target-fps">Target FPS</label>
+<input id="video-interpolate-target-fps" max="60" min="8" step="1" type="number" value="30"/>
+</div>
+</div>
+<div style="margin-top:14px; display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:14px;">
+<div>
+<label for="video-interpolate-multiplier">Interpolation multiplier</label>
+<input id="video-interpolate-multiplier" max="4" min="1" step="0.125" type="number" value="2"/>
+</div>
+<div>
+<label for="video-interpolate-quality">Smoothness / quality mode</label>
+<select id="video-interpolate-quality">
+<option selected="" value="balanced">Balanced</option>
+<option value="smooth">Smoother motion</option>
+<option value="detail_safe">Detail safe</option>
+</select>
+</div>
+<div>
+<label for="video-interpolate-intent">Timing intent</label>
+<select id="video-interpolate-intent">
+<option selected="" value="preserve_timing">Preserve timing</option>
+<option value="slow_motion">Slow motion</option>
+</select>
+</div>
+</div>
+<div class="card-lite" id="video-interpolate-warning-box" style="margin-top:14px; display:none;"></div>
+<div id="video-interpolate-summary" style="margin-top:14px;"></div>
+<div class="row" style="margin-top:14px; gap:8px; flex-wrap:wrap;">
+<button class="btn btn-small" id="btn-video-interpolate-run" type="button">Queue Interpolate</button>
+<button class="btn btn-small" id="btn-video-interpolate-clear-source" type="button">Clear source</button>
+</div>
+</div></div></div></div></div></div>
+</div>
+</section>

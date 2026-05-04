@@ -1,0 +1,131 @@
+<section class="section" id="tab-voice">
+<div class="panel">
+  <div class="row-between" style="gap:12px; align-items:flex-start; flex-wrap:wrap;">
+    <div>
+      <div class="row" style="gap:8px; align-items:center; flex-wrap:wrap;">
+        <h2 style="margin:0;">Voice</h2><span class="badge">Skeleton</span>
+      </div>
+      <div class="muted small">Future TTS surface planning lane. Lock the workflow shape and backend adapter now, then wire generation later.</div>
+    </div>
+    <div class="mini-note" id="voice-surface-summary">Plan voice generation without pretending the runtime is fully built yet.</div>
+  </div>
+
+  <div class="surface-setup-shell-panel" id="voice-setup-shell-panel" style="margin-top:16px;">
+    <button aria-controls="voice-setup-shell-content" aria-expanded="true" class="surface-setup-shell-header" id="voice-setup-shell-header" type="button">
+      <div>
+        <div class="row" style="gap:8px; align-items:center; flex-wrap:wrap;">
+          <span class="stat-title">Voice setup</span>
+          <span class="badge">Setup shell</span>
+        </div>
+        <div class="mini-note">Set the backend, voice lane, and job type here, then collapse the shell so the actual script workspace gets the focus.</div>
+      </div>
+      <div class="surface-setup-shell-header-actions">
+        <span class="surface-setup-shell-toggle-copy" id="voice-setup-shell-toggle-copy">Collapse setup</span>
+        <span aria-hidden="true" class="surface-setup-shell-chevron" id="voice-setup-shell-chevron">⌄</span>
+      </div>
+    </button>
+
+    <div class="surface-setup-shell-summary-strip hidden" id="voice-setup-shell-summary-strip"></div>
+
+    <div id="voice-setup-shell-content">
+      <div class="surface-setup-shell-grid">
+        <section class="surface-setup-shell-slot" data-ui-state="idle" data-ui-tone="neutral" id="voice-setup-shell-backend-card">
+          <div class="surface-setup-shell-slot-head">
+            <div>
+              <div class="stat-title">Voice backend</div>
+              <div class="generation-summary-title">Runtime readiness</div>
+            </div>
+            <span class="badge">1 · Backend</span>
+          </div>
+          <div class="surface-backend-strip compact" data-backend-role="voice" data-surface-backend="voice" style="margin-top:14px;">
+            <div class="row" style="gap:10px; align-items:center; flex-wrap:wrap;">
+              <span class="backend-chip state-offline" id="surface-backend-voice-state">Offline</span>
+              <strong id="surface-backend-voice-name">No active voice backend</strong>
+              <span class="mini-note" id="surface-backend-voice-meta">Pick the future TTS backend here so the Voice tab grows on purpose.</span>
+            </div>
+            <div class="row" style="gap:8px; flex-wrap:wrap; align-items:center;">
+              <button class="btn btn-small" id="btn-surface-backend-voice-launch" type="button">Launch Backend</button>
+              <button class="btn btn-small" id="btn-surface-backend-voice-connect" type="button">Connect Voice Backend</button>
+              <button class="btn btn-small" id="btn-surface-backend-voice-disconnect" type="button">Disconnect</button>
+              <button class="btn btn-small" id="btn-surface-backend-voice-manage" type="button">Manage in Admin</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="surface-setup-shell-slot" data-ui-state="ready" data-ui-tone="primary" id="voice-setup-shell-style-card">
+          <div class="surface-setup-shell-slot-head">
+            <div>
+              <div class="stat-title">Voice engine</div>
+              <div class="generation-summary-title">Style / delivery lane</div>
+            </div>
+            <span class="badge" id="voice-style-active-badge">Clean narrator</span>
+          </div>
+          <label for="voice-style" style="margin-top:14px; display:block;">Voice lane</label>
+          <select id="voice-style">
+            <option value="clean">Clean narrator</option>
+            <option value="warm">Warm expressive</option>
+            <option value="character">Character / RP</option>
+            <option value="ad">Ad / punchy</option>
+          </select>
+          <div class="mini-note" style="margin-top:12px;">Until real backend voice catalogs land, this style lane acts as the shell-level engine choice for how the delivery should feel.</div>
+        </section>
+
+        <section class="surface-setup-shell-slot" data-ui-state="ready" data-ui-tone="primary" id="voice-setup-shell-job-card">
+          <div class="surface-setup-shell-slot-head">
+            <div>
+              <div class="stat-title">Job lane</div>
+              <div class="generation-summary-title">Workspace lane</div>
+            </div>
+            <span class="badge" id="voice-job-active-badge">Text to speech</span>
+          </div>
+          <label for="voice-job-type" style="margin-top:14px; display:block;">Lane</label>
+          <select id="voice-job-type">
+            <option value="tts">Text to speech</option>
+            <option value="preview">Voice preview / test</option>
+            <option value="pack">Voice pack planning</option>
+          </select>
+          <div class="mini-note" style="margin-top:12px;">This lane decides whether the workspace is focused on an actual TTS pass, a quick preview, or building out a reusable voice pack plan.</div>
+        </section>
+      </div>
+      <div class="surface-setup-shell-grid">
+        <section class="surface-setup-shell-slot surface-setup-shell-slot--span-full" data-ui-state="neutral" data-ui-tone="neutral" id="voice-setup-shell-preset-card">
+          <div class="surface-setup-shell-slot-head">
+            <div><div class="stat-title">Workspace preset</div><div class="generation-summary-title">Built-in starters + saved UI setup</div></div>
+            <span class="badge">4 · Preset</span>
+          </div>
+          <div class="row u-gap-8 u-wrap surface-setup-shell-preset-row" style="margin-top:12px;">
+            <select class="u-shell-select-width" id="voice-shell-preset-select"><option value="">Workspace presets…</option></select>
+            <button class="btn btn-small" id="btn-voice-load-preset" type="button">Load</button>
+            <button class="btn btn-small" id="btn-voice-save-preset" type="button">Save preset</button>
+            <button class="btn btn-small" id="btn-voice-update-preset" type="button">Update preset</button>
+            <button class="btn btn-small btn-danger" id="btn-voice-delete-preset" type="button">Delete</button>
+            <button class="btn btn-small" id="btn-voice-set-default-preset" type="button">Set default</button>
+            <button class="btn btn-small" id="btn-voice-clear-default-preset" type="button">Clear default</button>
+            <div class="badge" id="voice-preset-active-badge">Manual setup</div>
+          </div>
+          <div class="mini-note" style="margin-top:12px;">Workspace presets here are browser-local UI presets. Save the current shell + brief inputs when you want to reopen the same voice setup later. Use <strong>Save local draft</strong> below when you only want the working brief draft in this browser.</div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <div class="surface-workspace-shell surface-coming-soon-shell">
+    <div class="surface-workspace-shell-header">
+      <div class="surface-workspace-shell-copy">
+        <div class="stat-title">Workspace lane</div>
+        <div class="generation-summary-title">Voice workspace</div>
+        <div class="muted small">Coming soon. Voice generation is not implemented yet. This tab is reserved for the future TTS/voice workflow, backend wiring, preview, and export tools.</div>
+      </div>
+      <div class="badge">Not yet implemented</div>
+    </div>
+    <div class="card-lite surface-coming-soon-card">
+      <div class="accordion-title">Coming soon</div>
+      <div class="mini-note" style="margin-top:12px;">This workspace is intentionally parked for now so the UI does not imply live runtime support that is not finished yet.</div>
+      <ul class="video-checklist" style="margin-top:14px;">
+        <li>Setup shell can remain available for future planning.</li>
+        <li>Runtime generation, preview, export, and draft tools are not active yet.</li>
+        <li>Implementation will land in a later dedicated workflow pass.</li>
+      </ul>
+    </div>
+  </div>
+</section>

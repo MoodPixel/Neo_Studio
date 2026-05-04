@@ -1,0 +1,908 @@
+<section class="section" id="tab-admin">
+<div class="panel admin-shell-panel">
+  <div class="row-between" style="gap:12px; align-items:flex-start; flex-wrap:wrap;">
+    <div>
+      <h2 style="margin:0;">Admin &amp; developer controls</h2>
+      <div class="muted small">Keep system policy, workspace defaults, saved backend profiles, and developer-only diagnostics separated so the control layer stays usable as Neo Studio grows.</div>
+    </div>
+    <div class="row" style="gap:8px; flex-wrap:wrap; align-items:center;">
+      <span class="badge">Control center</span>
+      <button class="btn" id="btn-admin-refresh-overview" type="button">Refresh overview</button>
+    </div>
+  </div>
+  <div class="admin-overview-grid" style="margin-top:14px;">
+    <div class="admin-overview-chip-card">
+      <div class="surface-backend-kicker">System</div>
+      <div class="generation-summary-title">Startup + runtime owner</div>
+      <div class="mini-note" id="admin-overview-system">Welcome screen, dev mode, and global runtime policy live here.</div>
+    </div>
+    <div class="admin-overview-chip-card">
+      <div class="surface-backend-kicker">Workspace</div>
+      <div class="generation-summary-title">Shared shell defaults</div>
+      <div class="mini-note" id="admin-overview-workspace">Shell grammar, compact backend strips, and primary-action placement stay here.</div>
+    </div>
+    <div class="admin-overview-chip-card">
+      <div class="surface-backend-kicker">Providers</div>
+      <div class="generation-summary-title">Profiles + connections</div>
+      <div class="mini-note" id="admin-overview-providers">Save backend profiles once here, then let the creative tabs stay task-focused.</div>
+    </div>
+    <div class="admin-overview-chip-card" data-admin-dev-only style="display:none;">
+      <div class="surface-backend-kicker">Developer</div>
+      <div class="generation-summary-title">Hidden diagnostics lane</div>
+      <div class="mini-note" id="admin-overview-developer">Dev-only notes and diagnostics stay separate from normal runtime controls.</div>
+    </div>
+  </div>
+  <div class="row admin-section-pillbar" style="margin-top:14px; gap:8px; flex-wrap:wrap;">
+    <button class="btn active" data-admin-section="system" type="button">System</button>
+    <button class="btn" data-admin-section="workspace" type="button">Workspace defaults</button>
+    <button class="btn" data-admin-section="backends" type="button">Providers &amp; Profiles</button>
+    <button class="btn" data-admin-section="extensions" type="button">Extensions</button>
+    <button class="btn" data-admin-section="data" type="button">Data &amp; Health</button>
+    <button class="btn" data-admin-section="developer" data-admin-dev-only type="button" style="display:none;">Developer</button>
+  </div>
+</div>
+
+<div data-admin-section-target="system">
+  <div class="panel">
+    <div class="row-between" style="gap:12px; align-items:flex-start; flex-wrap:wrap;">
+      <div>
+        <h2 style="margin:0;">System</h2>
+        <div class="muted small">Startup behavior and runtime policy live here. This section owns app-wide behavior that should not drift into the creative surfaces.</div>
+      </div>
+      <div class="badge">Global owner</div>
+    </div>
+    <div class="mini-note" id="admin-system-summary" style="margin-top:12px;">Admin overview has not been loaded yet.</div>
+    <div class="grid grid-2" style="margin-top:14px; gap:14px; align-items:start;">
+      <div class="card-lite admin-section-card">
+        <div class="surface-backend-kicker">Startup</div>
+        <div class="generation-summary-title" style="margin-top:4px;">Launch behavior</div>
+        <div class="muted small" style="margin-top:6px;">Keep welcome and dev-mode behavior here so startup rules stay separate from workspace preferences.</div>
+        <label class="row small" style="gap:8px; margin-top:12px;"><input id="admin-setting-show-welcome" type="checkbox"/> Show welcome board on launch</label>
+        <label class="row small" style="gap:8px; margin-top:10px;"><input id="admin-setting-dev-mode" type="checkbox"/> Developer mode</label>
+      </div>
+      <div class="card-lite admin-section-card admin-runtime-card">
+        <div class="row-between" style="gap:12px; align-items:flex-start; flex-wrap:wrap;">
+          <div>
+            <div class="surface-backend-kicker">Runtime policy</div>
+            <div class="generation-summary-title" style="margin-top:4px;">Global memory guardrail</div>
+            <div class="muted small" style="margin-top:6px; max-width:72ch;">Low VRAM mode now lives here as the single runtime owner. Image build no longer keeps a second runtime-profile control in the work area.</div>
+          </div>
+          <span class="badge">Global</span>
+        </div>
+        <div class="row" style="margin-top:12px; gap:10px; flex-wrap:wrap; align-items:center;">
+          <label class="row small" style="gap:8px; margin:0;"><input checked id="backend-low-vram-toggle" type="checkbox"/> Low VRAM mode</label>
+          <div class="mini-note" id="admin-runtime-policy-note">Use this when you want Neo to favor lighter memory paths across image runtime decisions.</div>
+        </div>
+      </div>
+    </div>
+    <div class="row" style="margin-top:12px; gap:8px; flex-wrap:wrap;">
+      <button class="btn btn-primary" data-admin-save-settings id="btn-admin-save-settings" type="button">Save System Settings</button>
+      <button class="btn" id="btn-admin-open-welcome-board" type="button">Open Welcome Board</button>
+    </div>
+    <div class="status" id="admin-system-status" style="margin-top:12px;"></div>
+  </div>
+</div>
+
+<div data-admin-section-target="workspace" style="display:none;">
+  <div class="panel">
+    <div class="row-between" style="gap:12px; align-items:flex-start; flex-wrap:wrap;">
+      <div>
+        <h2 style="margin:0;">Workspace defaults</h2>
+        <div class="muted small">These controls shape shared shell grammar and workspace comfort without pretending every surface has the same lower layout.</div>
+      </div>
+      <div class="badge">Shared UI rules</div>
+    </div>
+    <div class="mini-note" id="admin-workspace-summary" style="margin-top:12px;">Workspace defaults have not been loaded yet.</div>
+    <div class="grid grid-2" style="margin-top:14px; gap:14px; align-items:start;">
+      <div class="card-lite admin-section-card">
+        <div class="surface-backend-kicker">Shell grammar</div>
+        <div class="generation-summary-title" style="margin-top:4px;">Shared surface framing</div>
+        <div class="muted small" style="margin-top:6px;">These options affect shared shell behavior, not the custom work area inside each surface.</div>
+        <label class="row small" style="gap:8px; margin-top:12px;"><input id="admin-setting-compact-backend" type="checkbox"/> Compact backend status in surfaces</label>
+        <label class="row small" style="gap:8px; margin-top:10px;"><input id="admin-setting-workspace-setup" type="checkbox"/> Use workspace setup strips</label>
+      </div>
+      <div class="card-lite admin-section-card">
+        <div class="surface-backend-kicker">Action placement</div>
+        <div class="generation-summary-title" style="margin-top:4px;">Image launch hand preference</div>
+        <div class="muted small" style="margin-top:6px;">Controls whether the main Generate group sits on the left or the right of the Image launch area.</div>
+        <div style="margin-top:12px;">
+          <label for="admin-setting-generation-action-order">Image action order</label>
+          <select id="admin-setting-generation-action-order">
+            <option value="left">Primary action on left</option>
+            <option value="right">Primary action on right</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="backend-info-box" style="margin-top:14px;">Workspace defaults now own the shared shell framing, preset lane expectations, and lower workspace handoff rhythm. Surface-specific interiors still stay free to match their own task flow.</div>
+    <div class="row" style="margin-top:12px; gap:8px; flex-wrap:wrap;">
+      <button class="btn btn-primary" data-admin-save-settings id="btn-admin-save-workspace-settings" type="button">Save Workspace Defaults</button>
+    </div>
+    <div class="status" id="admin-workspace-status" style="margin-top:12px;"></div>
+  </div>
+</div>
+
+<div data-admin-section-target="backends" style="display:none;">
+  <div class="panel admin-backend-panel">
+    <div class="row-between" style="gap:12px; align-items:flex-start;">
+      <div>
+        <h2 style="margin:0;">Providers &amp; Profiles</h2>
+        <div class="muted small">Connect, disconnect, test, and save shared backend profiles here. The creative tabs only show quick connect controls for the backend they need.</div>
+      </div>
+      <div class="badge">Shared adapters</div>
+    </div>
+    <div class="row-between" style="margin-top:14px; gap:12px; align-items:center; flex-wrap:wrap;">
+      <div class="mini-note" id="admin-backend-summary">No backend status loaded yet.</div>
+      <div class="row" style="gap:8px; flex-wrap:wrap; align-items:center;">
+        <button class="btn" id="btn-refresh-backend-state" type="button">Refresh all</button>
+      </div>
+    </div>
+    <div class="backend-info-box" style="margin-top:12px;">Phase 5 keeps Image and Video as separate backend roles. They can still share an adapter family like ComfyUI, but their saved profiles, summaries, and future capability contracts no longer have to pretend they are the same lane.</div>
+    <div class="backend-manager-grid" style="margin-top:14px;">
+      <section class="backend-manager-card" data-backend-role="text" id="admin-backend-card-text">
+        <div class="row-between">
+          <div>
+            <h3 style="margin:0;">Text Backend</h3>
+            <div class="mini-note">Use this for Prompt Studio, caption cleanup, Roleplay, Assistant, and text-side tools.</div>
+          </div>
+          <span class="backend-chip state-offline" id="backend-card-text-state">Offline</span>
+        </div>
+        <div class="grid grid-2" style="margin-top:14px;">
+          <div><label for="backend-text-type">Backend type</label><select id="backend-text-type"><option value="koboldcpp">KoboldCpp</option></select></div>
+          <div><label for="backend-text-profile">Saved profile</label><select id="backend-text-profile"></select></div>
+        </div>
+        <div class="grid grid-2" style="margin-top:14px;">
+          <div><label for="backend-text-name">Profile name</label><input id="backend-text-name" placeholder="KoboldCpp Local" type="text"/></div>
+          <div><label for="backend-text-url">Base URL</label><input id="backend-text-url" placeholder="http://127.0.0.1:5001" type="text"/></div>
+        </div>
+        <div class="grid grid-3" style="margin-top:14px;">
+          <div><label for="backend-text-timeout">Timeout (sec)</label><input id="backend-text-timeout" max="120" min="2" type="number" value="8"/></div>
+          <div style="display:flex;align-items:end;"><label class="row small" style="gap:8px; margin:0;"><input id="backend-text-auto-reconnect" type="checkbox"/> Auto reconnect on startup</label></div>
+          <div class="help">Use saved profiles so low-VRAM users can attach the backend only when they need it.</div>
+        </div>
+        <div class="backend-info-box backend-launcher-box" style="margin-top:14px;">
+          <div class="row-between" style="gap:12px; align-items:flex-start; flex-wrap:wrap;">
+            <div>
+              <div class="surface-backend-kicker">Launcher details</div>
+              <div class="mini-note">Optional: start this backend from Neo. Connection settings above stay separate from launch settings below. Native UI opens the backend browser URL only; it does not start or stop anything.</div>
+            </div>
+            <span class="badge">Launch only</span>
+          </div>
+          <div class="grid grid-3" style="margin-top:12px;">
+            <div><label for="backend-text-launch-type">Launch type</label><select id="backend-text-launch-type"><option value="bat">BAT</option><option value="exe">EXE</option><option value="py">Python script</option><option value="custom">Custom command</option></select></div>
+            <div><label for="backend-text-launch-path">Backend path / command</label><input id="backend-text-launch-path" placeholder="C:\Path\run_backend.bat" type="text"/></div>
+            <div><label for="backend-text-launch-cwd">Working directory</label><input id="backend-text-launch-cwd" placeholder="C:\Path\Backend" type="text"/></div>
+          </div>
+          <div class="grid grid-2" style="margin-top:12px;">
+            <div><label for="backend-text-launch-args">Launch arguments</label><input id="backend-text-launch-args" placeholder="--host 127.0.0.1 --port 8188" type="text"/></div>
+            <div><label for="backend-text-native-ui-url">Native UI URL</label><input id="backend-text-native-ui-url" placeholder="Optional; uses Base URL if empty" type="text"/></div>
+          </div>
+          <div class="row backend-action-row" style="margin-top:12px;">
+            <button class="btn btn-primary" data-backend-action="launch" data-backend-role="text" type="button">Start backend</button>
+            <button class="btn" data-backend-action="open-ui" data-backend-role="text" type="button">Open native UI (browser only)</button>
+            <button class="btn" data-backend-action="view-launch-log" data-backend-role="text" type="button">View launch log</button>
+          </div>
+          <div class="mini-note" id="backend-text-launch-status" style="margin-top:10px;">Launcher not used yet.</div>
+        </div>
+        <div class="row backend-action-row" style="margin-top:14px;">
+          <button class="btn" data-backend-action="new" data-backend-role="text" type="button">New</button>
+          <button class="btn" data-backend-action="save" data-backend-role="text" type="button">Save profile</button>
+          <button class="btn btn-danger" data-backend-action="delete" data-backend-role="text" type="button">Delete profile</button>
+          <button class="btn" data-backend-action="test" data-backend-role="text" type="button">Test</button>
+          <button class="btn btn-primary" data-backend-action="connect" data-backend-role="text" type="button">Connect</button>
+          <button class="btn" data-backend-action="disconnect" data-backend-role="text" type="button">Disconnect</button>
+          <button class="btn" data-backend-action="refresh" data-backend-role="text" type="button">Refresh</button>
+        </div>
+        <div class="status" id="backend-text-status" style="margin-top:12px;"></div>
+        <div class="backend-info-box" id="backend-text-result" style="margin-top:12px;">No text backend probe yet.</div>
+      </section>
+      <section class="backend-manager-card" data-backend-role="image" id="admin-backend-card-image">
+        <div class="row-between">
+          <div>
+            <h3 style="margin:0;">Image Backend</h3>
+            <div class="mini-note">Use this for generation queue polling and image-side tools.</div>
+          </div>
+          <span class="backend-chip state-offline" id="backend-card-image-state">Offline</span>
+        </div>
+        <div class="grid grid-2" style="margin-top:14px;">
+          <div><label for="backend-image-type">Backend type</label><select id="backend-image-type"><option value="comfyui">ComfyUI</option></select></div>
+          <div><label for="backend-image-profile">Saved profile</label><select id="backend-image-profile"></select></div>
+        </div>
+        <div class="grid grid-2" style="margin-top:14px;">
+          <div><label for="backend-image-name">Profile name</label><input id="backend-image-name" placeholder="ComfyUI Local" type="text"/></div>
+          <div><label for="backend-image-url">Base URL</label><input id="backend-image-url" placeholder="http://127.0.0.1:8188" type="text"/></div>
+        </div>
+        <div class="grid grid-3" style="margin-top:14px;">
+          <div><label for="backend-image-timeout">Timeout (sec)</label><input id="backend-image-timeout" max="120" min="2" type="number" value="12"/></div>
+          <div style="display:flex;align-items:end;"><label class="row small" style="gap:8px; margin:0;"><input id="backend-image-auto-reconnect" type="checkbox"/> Auto reconnect on startup</label></div>
+          <div class="help">ComfyUI can stay offline until the user wants to generate, which keeps the app lighter.</div>
+        </div>
+        <div class="backend-info-box backend-launcher-box" style="margin-top:14px;">
+          <div class="row-between" style="gap:12px; align-items:flex-start; flex-wrap:wrap;">
+            <div>
+              <div class="surface-backend-kicker">Launcher details</div>
+              <div class="mini-note">Optional: start this backend from Neo. Connection settings above stay separate from launch settings below. Native UI opens the backend browser URL only; it does not start or stop anything.</div>
+            </div>
+            <span class="badge">Launch only</span>
+          </div>
+          <div class="grid grid-3" style="margin-top:12px;">
+            <div><label for="backend-image-launch-type">Launch type</label><select id="backend-image-launch-type"><option value="bat">BAT</option><option value="exe">EXE</option><option value="py">Python script</option><option value="custom">Custom command</option></select></div>
+            <div><label for="backend-image-launch-path">Backend path / command</label><input id="backend-image-launch-path" placeholder="C:\Path\run_backend.bat" type="text"/></div>
+            <div><label for="backend-image-launch-cwd">Working directory</label><input id="backend-image-launch-cwd" placeholder="C:\Path\Backend" type="text"/></div>
+          </div>
+          <div class="grid grid-2" style="margin-top:12px;">
+            <div><label for="backend-image-launch-args">Launch arguments</label><input id="backend-image-launch-args" placeholder="--host 127.0.0.1 --port 8188" type="text"/></div>
+            <div><label for="backend-image-native-ui-url">Native UI URL</label><input id="backend-image-native-ui-url" placeholder="Optional; uses Base URL if empty" type="text"/></div>
+          </div>
+          <div class="row backend-action-row" style="margin-top:12px;">
+            <button class="btn btn-primary" data-backend-action="launch" data-backend-role="image" type="button">Start backend</button>
+            <button class="btn" data-backend-action="open-ui" data-backend-role="image" type="button">Open native UI (browser only)</button>
+            <button class="btn" data-backend-action="view-launch-log" data-backend-role="image" type="button">View launch log</button>
+          </div>
+          <div class="mini-note" id="backend-image-launch-status" style="margin-top:10px;">Launcher not used yet.</div>
+        </div>
+        <div class="row backend-action-row" style="margin-top:14px;">
+          <button class="btn" data-backend-action="new" data-backend-role="image" type="button">New</button>
+          <button class="btn" data-backend-action="save" data-backend-role="image" type="button">Save profile</button>
+          <button class="btn btn-danger" data-backend-action="delete" data-backend-role="image" type="button">Delete profile</button>
+          <button class="btn" data-backend-action="test" data-backend-role="image" type="button">Test</button>
+          <button class="btn btn-primary" data-backend-action="connect" data-backend-role="image" type="button">Connect</button>
+          <button class="btn" data-backend-action="disconnect" data-backend-role="image" type="button">Disconnect</button>
+          <button class="btn" data-backend-action="refresh" data-backend-role="image" type="button">Refresh</button>
+        </div>
+        <div class="status" id="backend-image-status" style="margin-top:12px;"></div>
+        <div class="backend-info-box" id="backend-image-result" style="margin-top:12px;">No image backend probe yet.</div>
+      </section>
+      <section class="backend-manager-card" data-backend-role="video" id="admin-backend-card-video">
+        <div class="row-between">
+          <div>
+            <h3 style="margin:0;">Video Backend</h3>
+            <div class="mini-note">Separate role-based video lane. It can still target the same adapter family as Image without sharing the same contract owner.</div>
+          </div>
+          <span class="backend-chip state-offline" id="backend-card-video-state">Offline</span>
+        </div>
+        <div class="grid grid-2" style="margin-top:14px;">
+          <div><label for="backend-video-type">Backend type</label><select id="backend-video-type"><option value="comfyui">ComfyUI</option></select></div>
+          <div><label for="backend-video-profile">Saved profile</label><select id="backend-video-profile"></select></div>
+        </div>
+        <div class="grid grid-2" style="margin-top:14px;">
+          <div><label for="backend-video-name">Profile name</label><input id="backend-video-name" placeholder="ComfyUI Video Local" type="text"/></div>
+          <div><label for="backend-video-url">Base URL</label><input id="backend-video-url" placeholder="http://127.0.0.1:8188" type="text"/></div>
+        </div>
+        <div class="grid grid-3" style="margin-top:14px;">
+          <div><label for="backend-video-timeout">Timeout (sec)</label><input id="backend-video-timeout" max="120" min="2" type="number" value="20"/></div>
+          <div style="display:flex;align-items:end;"><label class="row small" style="gap:8px; margin:0;"><input id="backend-video-auto-reconnect" type="checkbox"/> Auto reconnect on startup</label></div>
+          <div class="help">Video now gets its own contract-clean backend role even when the runtime adapter family overlaps with Image.</div>
+        </div>
+        <div class="backend-info-box backend-launcher-box" style="margin-top:14px;">
+          <div class="row-between" style="gap:12px; align-items:flex-start; flex-wrap:wrap;">
+            <div>
+              <div class="surface-backend-kicker">Launcher details</div>
+              <div class="mini-note">Optional: start this backend from Neo. Connection settings above stay separate from launch settings below. Native UI opens the backend browser URL only; it does not start or stop anything.</div>
+            </div>
+            <span class="badge">Launch only</span>
+          </div>
+          <div class="grid grid-3" style="margin-top:12px;">
+            <div><label for="backend-video-launch-type">Launch type</label><select id="backend-video-launch-type"><option value="bat">BAT</option><option value="exe">EXE</option><option value="py">Python script</option><option value="custom">Custom command</option></select></div>
+            <div><label for="backend-video-launch-path">Backend path / command</label><input id="backend-video-launch-path" placeholder="C:\Path\run_backend.bat" type="text"/></div>
+            <div><label for="backend-video-launch-cwd">Working directory</label><input id="backend-video-launch-cwd" placeholder="C:\Path\Backend" type="text"/></div>
+          </div>
+          <div class="grid grid-2" style="margin-top:12px;">
+            <div><label for="backend-video-launch-args">Launch arguments</label><input id="backend-video-launch-args" placeholder="--host 127.0.0.1 --port 8188" type="text"/></div>
+            <div><label for="backend-video-native-ui-url">Native UI URL</label><input id="backend-video-native-ui-url" placeholder="Optional; uses Base URL if empty" type="text"/></div>
+          </div>
+          <div class="row backend-action-row" style="margin-top:12px;">
+            <button class="btn btn-primary" data-backend-action="launch" data-backend-role="video" type="button">Start backend</button>
+            <button class="btn" data-backend-action="open-ui" data-backend-role="video" type="button">Open native UI (browser only)</button>
+            <button class="btn" data-backend-action="view-launch-log" data-backend-role="video" type="button">View launch log</button>
+          </div>
+          <div class="mini-note" id="backend-video-launch-status" style="margin-top:10px;">Launcher not used yet.</div>
+        </div>
+        <div class="row backend-action-row" style="margin-top:14px;">
+          <button class="btn" data-backend-action="new" data-backend-role="video" type="button">New</button>
+          <button class="btn" data-backend-action="save" data-backend-role="video" type="button">Save profile</button>
+          <button class="btn btn-danger" data-backend-action="delete" data-backend-role="video" type="button">Delete profile</button>
+          <button class="btn" data-backend-action="test" data-backend-role="video" type="button">Test</button>
+          <button class="btn btn-primary" data-backend-action="connect" data-backend-role="video" type="button">Connect</button>
+          <button class="btn" data-backend-action="disconnect" data-backend-role="video" type="button">Disconnect</button>
+          <button class="btn" data-backend-action="refresh" data-backend-role="video" type="button">Refresh</button>
+        </div>
+        <div class="status" id="backend-video-status" style="margin-top:12px;"></div>
+        <div class="backend-info-box" id="backend-video-result" style="margin-top:12px;">No video backend probe yet.</div>
+      </section>
+      <section class="backend-manager-card" data-backend-role="voice" id="admin-backend-card-voice">
+        <div class="row-between">
+          <div>
+            <h3 style="margin:0;">Voice Backend</h3>
+            <div class="mini-note">Skeleton adapter lane for future TTS work. Use this now to lock the backend direction before deeper UI/runtime wiring.</div>
+          </div>
+          <span class="backend-chip state-offline" id="backend-card-voice-state">Offline</span>
+        </div>
+        <div class="grid grid-2" style="margin-top:14px;">
+          <div><label for="backend-voice-type">Backend type</label><select id="backend-voice-type"><option value="kokoro">Kokoro</option><option value="chatterbox">Chatterbox</option><option value="zonos">Zonos</option><option value="custom_tts">Custom TTS</option></select></div>
+          <div><label for="backend-voice-profile">Saved profile</label><select id="backend-voice-profile"></select></div>
+        </div>
+        <div class="grid grid-2" style="margin-top:14px;">
+          <div><label for="backend-voice-name">Profile name</label><input id="backend-voice-name" placeholder="Kokoro Local" type="text"/></div>
+          <div><label for="backend-voice-url">Base URL</label><input id="backend-voice-url" placeholder="http://127.0.0.1:7000" type="text"/></div>
+        </div>
+        <div class="grid grid-3" style="margin-top:14px;">
+          <div><label for="backend-voice-timeout">Timeout (sec)</label><input id="backend-voice-timeout" max="120" min="2" type="number" value="20"/></div>
+          <div style="display:flex;align-items:end;"><label class="row small" style="gap:8px; margin:0;"><input id="backend-voice-auto-reconnect" type="checkbox"/> Auto reconnect on startup</label></div>
+          <div class="help">This adapter layer exists now so later TTS features know exactly which backend profile contract to use.</div>
+        </div>
+        <div class="backend-info-box backend-launcher-box" style="margin-top:14px;">
+          <div class="row-between" style="gap:12px; align-items:flex-start; flex-wrap:wrap;">
+            <div>
+              <div class="surface-backend-kicker">Launcher details</div>
+              <div class="mini-note">Optional: start this backend from Neo. Connection settings above stay separate from launch settings below. Native UI opens the backend browser URL only; it does not start or stop anything.</div>
+            </div>
+            <span class="badge">Launch only</span>
+          </div>
+          <div class="grid grid-3" style="margin-top:12px;">
+            <div><label for="backend-voice-launch-type">Launch type</label><select id="backend-voice-launch-type"><option value="bat">BAT</option><option value="exe">EXE</option><option value="py">Python script</option><option value="custom">Custom command</option></select></div>
+            <div><label for="backend-voice-launch-path">Backend path / command</label><input id="backend-voice-launch-path" placeholder="C:\Path\run_backend.bat" type="text"/></div>
+            <div><label for="backend-voice-launch-cwd">Working directory</label><input id="backend-voice-launch-cwd" placeholder="C:\Path\Backend" type="text"/></div>
+          </div>
+          <div class="grid grid-2" style="margin-top:12px;">
+            <div><label for="backend-voice-launch-args">Launch arguments</label><input id="backend-voice-launch-args" placeholder="--host 127.0.0.1 --port 8188" type="text"/></div>
+            <div><label for="backend-voice-native-ui-url">Native UI URL</label><input id="backend-voice-native-ui-url" placeholder="Optional; uses Base URL if empty" type="text"/></div>
+          </div>
+          <div class="row backend-action-row" style="margin-top:12px;">
+            <button class="btn btn-primary" data-backend-action="launch" data-backend-role="voice" type="button">Start backend</button>
+            <button class="btn" data-backend-action="open-ui" data-backend-role="voice" type="button">Open native UI (browser only)</button>
+            <button class="btn" data-backend-action="view-launch-log" data-backend-role="voice" type="button">View launch log</button>
+          </div>
+          <div class="mini-note" id="backend-voice-launch-status" style="margin-top:10px;">Launcher not used yet.</div>
+        </div>
+        <div class="row backend-action-row" style="margin-top:14px;">
+          <button class="btn" data-backend-action="new" data-backend-role="voice" type="button">New</button>
+          <button class="btn" data-backend-action="save" data-backend-role="voice" type="button">Save profile</button>
+          <button class="btn btn-danger" data-backend-action="delete" data-backend-role="voice" type="button">Delete profile</button>
+          <button class="btn" data-backend-action="test" data-backend-role="voice" type="button">Test</button>
+          <button class="btn btn-primary" data-backend-action="connect" data-backend-role="voice" type="button">Connect</button>
+          <button class="btn" data-backend-action="disconnect" data-backend-role="voice" type="button">Disconnect</button>
+          <button class="btn" data-backend-action="refresh" data-backend-role="voice" type="button">Refresh</button>
+        </div>
+        <div class="status" id="backend-voice-status" style="margin-top:12px;"></div>
+        <div class="backend-info-box" id="backend-voice-result" style="margin-top:12px;">No voice backend probe yet.</div>
+      </section>
+      <section class="backend-manager-card" data-backend-role="audio" id="admin-backend-card-audio">
+        <div class="row-between">
+          <div>
+            <h3 style="margin:0;">Music / SFX Backend</h3>
+            <div class="mini-note">Skeleton adapter lane for future text-to-audio and sound-design surfaces.</div>
+          </div>
+          <span class="backend-chip state-offline" id="backend-card-audio-state">Offline</span>
+        </div>
+        <div class="grid grid-2" style="margin-top:14px;">
+          <div><label for="backend-audio-type">Backend type</label><select id="backend-audio-type"><option value="stable_audio">Stable Audio</option><option value="ace_step">ACE-Step</option><option value="custom_audio">Custom Audio</option></select></div>
+          <div><label for="backend-audio-profile">Saved profile</label><select id="backend-audio-profile"></select></div>
+        </div>
+        <div class="grid grid-2" style="margin-top:14px;">
+          <div><label for="backend-audio-name">Profile name</label><input id="backend-audio-name" placeholder="Stable Audio Local" type="text"/></div>
+          <div><label for="backend-audio-url">Base URL</label><input id="backend-audio-url" placeholder="http://127.0.0.1:7100" type="text"/></div>
+        </div>
+        <div class="grid grid-3" style="margin-top:14px;">
+          <div><label for="backend-audio-timeout">Timeout (sec)</label><input id="backend-audio-timeout" max="120" min="2" type="number" value="30"/></div>
+          <div style="display:flex;align-items:end;"><label class="row small" style="gap:8px; margin:0;"><input id="backend-audio-auto-reconnect" type="checkbox"/> Auto reconnect on startup</label></div>
+          <div class="help">This keeps the future audio tab honest about which backend family it will actually target.</div>
+        </div>
+        <div class="backend-info-box backend-launcher-box" style="margin-top:14px;">
+          <div class="row-between" style="gap:12px; align-items:flex-start; flex-wrap:wrap;">
+            <div>
+              <div class="surface-backend-kicker">Launcher details</div>
+              <div class="mini-note">Optional: start this backend from Neo. Connection settings above stay separate from launch settings below. Native UI opens the backend browser URL only; it does not start or stop anything.</div>
+            </div>
+            <span class="badge">Launch only</span>
+          </div>
+          <div class="grid grid-3" style="margin-top:12px;">
+            <div><label for="backend-audio-launch-type">Launch type</label><select id="backend-audio-launch-type"><option value="bat">BAT</option><option value="exe">EXE</option><option value="py">Python script</option><option value="custom">Custom command</option></select></div>
+            <div><label for="backend-audio-launch-path">Backend path / command</label><input id="backend-audio-launch-path" placeholder="C:\Path\run_backend.bat" type="text"/></div>
+            <div><label for="backend-audio-launch-cwd">Working directory</label><input id="backend-audio-launch-cwd" placeholder="C:\Path\Backend" type="text"/></div>
+          </div>
+          <div class="grid grid-2" style="margin-top:12px;">
+            <div><label for="backend-audio-launch-args">Launch arguments</label><input id="backend-audio-launch-args" placeholder="--host 127.0.0.1 --port 8188" type="text"/></div>
+            <div><label for="backend-audio-native-ui-url">Native UI URL</label><input id="backend-audio-native-ui-url" placeholder="Optional; uses Base URL if empty" type="text"/></div>
+          </div>
+          <div class="row backend-action-row" style="margin-top:12px;">
+            <button class="btn btn-primary" data-backend-action="launch" data-backend-role="audio" type="button">Start backend</button>
+            <button class="btn" data-backend-action="open-ui" data-backend-role="audio" type="button">Open native UI (browser only)</button>
+            <button class="btn" data-backend-action="view-launch-log" data-backend-role="audio" type="button">View launch log</button>
+          </div>
+          <div class="mini-note" id="backend-audio-launch-status" style="margin-top:10px;">Launcher not used yet.</div>
+        </div>
+        <div class="row backend-action-row" style="margin-top:14px;">
+          <button class="btn" data-backend-action="new" data-backend-role="audio" type="button">New</button>
+          <button class="btn" data-backend-action="save" data-backend-role="audio" type="button">Save profile</button>
+          <button class="btn btn-danger" data-backend-action="delete" data-backend-role="audio" type="button">Delete profile</button>
+          <button class="btn" data-backend-action="test" data-backend-role="audio" type="button">Test</button>
+          <button class="btn btn-primary" data-backend-action="connect" data-backend-role="audio" type="button">Connect</button>
+          <button class="btn" data-backend-action="disconnect" data-backend-role="audio" type="button">Disconnect</button>
+          <button class="btn" data-backend-action="refresh" data-backend-role="audio" type="button">Refresh</button>
+        </div>
+        <div class="status" id="backend-audio-status" style="margin-top:12px;"></div>
+        <div class="backend-info-box" id="backend-audio-result" style="margin-top:12px;">No audio backend probe yet.</div>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<div data-admin-section-target="extensions" style="display:none;">
+  <div class="panel">
+    <div class="row-between" style="gap:12px; align-items:flex-start; flex-wrap:wrap;">
+      <div>
+        <h2 style="margin:0;">Extensions</h2>
+        <div class="muted small">Neo extensions and Comfy custom nodes are now separated. Extension Manager controls Neo feature modules; Node Manager handles node installation and maintenance.</div>
+      </div>
+      <div class="badge">Admin-only</div>
+    </div>
+    <div class="mini-note" id="admin-extension-summary" style="margin-top:12px;">No extension overview loaded yet.</div>
+    <div class="tabbar subtabbar admin-extension-subtabbar" id="admin-extension-subtabbar" style="margin-top:14px;">
+      <button class="active" data-admin-extension-subtab="extension-manager" type="button">Extension Manager</button>
+      <button data-admin-extension-subtab="node-manager" type="button">Node Manager</button>
+    </div>
+  </div>
+
+  <div data-admin-extension-subtab-panel="extension-manager">
+    <div class="panel">
+      <div class="row-between" style="gap:12px; align-items:flex-start; flex-wrap:wrap;">
+        <div>
+          <h2 style="margin:0;">Extension Manager</h2>
+          <div class="muted small">Manage Neo extension packs by surface. Use this for app-level feature modules, not Comfy custom-node installs.</div>
+        </div>
+        <div class="badge">Neo extensions</div>
+      </div>
+      <div class="grid grid-2" style="margin-top:14px; gap:14px; align-items:start;">
+        <div>
+          <label for="admin-extension-pack-select">Registered extension packs</label>
+          <select id="admin-extension-pack-select"><option value="">Load extension packs…</option></select>
+          <div class="row" style="margin-top:12px; gap:8px; flex-wrap:wrap;">
+            <button class="btn" id="btn-admin-extension-refresh" type="button">Refresh Registry</button>
+            <button class="btn" id="btn-admin-extension-health" type="button">Health Check</button>
+            <button class="btn" id="btn-admin-extension-disable-broken" type="button">Disable Broken</button>
+            <button class="btn" id="btn-admin-extension-clear-cache" type="button">Clear Cache</button>
+            <button class="btn" disabled id="btn-admin-extension-toggle" type="button">Toggle Pack</button>
+            <button class="btn" disabled id="btn-admin-extension-update" type="button">Update</button>
+            <button class="btn" disabled id="btn-admin-extension-repair" type="button">Repair</button>
+            <button class="btn" disabled id="btn-admin-extension-open-folder" type="button">Open Folder</button>
+            <button class="btn" disabled id="btn-admin-extension-view-manifest" type="button">View Manifest</button>
+            <button class="btn" disabled id="btn-admin-extension-view-log" type="button">View Log</button>
+            <button class="btn btn-danger" disabled id="btn-admin-extension-remove" type="button">Remove</button>
+            <button class="btn" id="btn-admin-extension-show-manifest" type="button">Show Manifest Standard</button>
+          </div>
+        </div>
+        <div class="backend-info-box" id="admin-extension-pack-details">Pick an extension pack to inspect its injected sections, actions, guides, and backend requirements.</div>
+      </div>
+      <div class="grid grid-2" style="margin-top:14px; gap:14px; align-items:end;">
+        <div>
+          <label for="admin-extension-git-url">Install from Git URL</label>
+          <input id="admin-extension-git-url" placeholder="https://github.com/user/neo-extension.git" type="text"/>
+        </div>
+        <div>
+          <label for="admin-extension-git-branch">Branch (optional)</label>
+          <input id="admin-extension-git-branch" placeholder="main" type="text"/>
+        </div>
+      </div>
+      <div class="row" style="margin-top:12px; gap:8px; flex-wrap:wrap;">
+        <button class="btn btn-primary" id="btn-admin-extension-install-git" type="button">Install Git Extension</button>
+        <label class="btn" for="admin-extension-zip-file" style="cursor:pointer;">Choose ZIP</label>
+        <input id="admin-extension-zip-file" accept=".zip" type="file" style="display:none;"/>
+        <button class="btn btn-primary" id="btn-admin-extension-install-zip" type="button">Install ZIP Extension</button>
+        <label class="small muted" style="display:flex; gap:6px; align-items:center;"><input id="admin-extension-overwrite" type="checkbox"/> overwrite existing</label>
+      </div>
+      <div class="status" id="admin-extension-action-status" style="margin-top:10px;"></div>
+      <div class="backend-info-box" id="admin-extension-manifest-standard" style="display:none; margin-top:14px; white-space:pre-wrap;">Manifest standard not loaded yet.</div>
+      <div class="backend-info-box" id="admin-extension-health-display" style="display:none; margin-top:14px; white-space:pre-wrap;">Extension health not checked yet.</div>
+      <div class="backend-info-box extension-permission-display" id="admin-extension-permission-display" style="display:none; margin-top:14px;">
+        <div class="row-between" style="gap:12px; align-items:flex-start; flex-wrap:wrap;">
+          <div>
+            <h3 style="margin:0;">Permission Display</h3>
+            <div class="muted small">Declared extension permissions from neo_extension.json. Display-only for now; risky permissions are highlighted but not blocked yet.</div>
+          </div>
+          <div class="badge">Phase 10</div>
+        </div>
+        <div class="mini-note" id="admin-extension-permission-summary" style="margin-top:10px;">Select an extension to review permissions.</div>
+        <div class="permission-list" id="admin-extension-permission-list" style="margin-top:10px;"></div>
+      </div>
+      <div class="backend-info-box extension-dependency-display" id="admin-extension-dependency-display" style="display:none; margin-top:14px;">
+        <div class="row-between" style="gap:12px; align-items:flex-start; flex-wrap:wrap;">
+          <div>
+            <h3 style="margin:0;">Dependency Notes</h3>
+            <div class="muted small">Declared dependency requirements from neo_extension.json. Display-only for now; Neo does not auto-install these yet.</div>
+          </div>
+          <div class="badge">Phase 14</div>
+        </div>
+        <div class="mini-note" id="admin-extension-dependency-summary" style="margin-top:10px;">Select an extension to review dependency notes.</div>
+        <div class="dependency-list" id="admin-extension-dependency-list" style="margin-top:10px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <div data-admin-extension-subtab-panel="node-manager" style="display:none;">
+    <div class="panel">
+      <div class="row-between" style="gap:12px; align-items:flex-start; flex-wrap:wrap;">
+        <div>
+          <h2 style="margin:0;">Node Manager</h2>
+          <div class="muted small">Install, update, rescan, and inspect ComfyUI custom nodes from one maintenance lane.</div>
+        </div>
+        <div class="badge">Comfy nodes</div>
+      </div>
+      <div class="grid grid-2" style="margin-top:14px; gap:14px; align-items:start;">
+        <div><label for="node-manager-custom-nodes-path">ComfyUI custom_nodes path</label><input id="node-manager-custom-nodes-path" placeholder="F:\ComfyUI\custom_nodes" type="text"/></div>
+        <div><label for="node-manager-python-executable">Python executable for pip installs</label><input id="node-manager-python-executable" placeholder="F:\ComfyUI\venv\Scripts\python.exe" type="text"/></div>
+      </div>
+      <div class="row" style="margin-top:12px; flex-wrap:wrap; gap:8px;">
+        <button class="btn" id="btn-node-manager-save-settings" type="button">Save Settings</button>
+        <button class="btn" id="btn-node-manager-refresh" type="button">Rescan Nodes</button>
+        <button class="btn" id="btn-node-manager-open-root" type="button">Open custom_nodes</button>
+        <button class="btn" id="btn-node-manager-reconnect-image" type="button">Reconnect Image Backend</button>
+      </div>
+      <div class="mini-note" id="node-manager-summary" style="margin-top:10px;">No node manager state loaded yet.</div>
+      <div class="status" id="node-manager-status" style="margin-top:10px;"></div>
+    </div>
+    <div class="panel">
+      <div class="row-between" style="gap:12px; align-items:flex-start; flex-wrap:wrap;"><div><h2 style="margin:0;">Install from Git</h2><div class="muted small">Paste a repo URL, optionally set a branch, and Neo Studio will clone it into custom_nodes and run pip if a requirements.txt exists.</div></div><div class="badge">Node install</div></div>
+      <div class="grid grid-2" style="margin-top:14px; gap:14px; align-items:end;">
+        <div><label for="node-manager-git-url">Git URL</label><input id="node-manager-git-url" placeholder="https://github.com/example/ComfyUI-CustomNode.git" type="text"/></div>
+        <div><label for="node-manager-git-branch">Branch (optional)</label><input id="node-manager-git-branch" placeholder="main" type="text"/></div>
+      </div>
+      <div class="row" style="margin-top:12px; gap:8px; flex-wrap:wrap;"><button class="btn btn-primary" id="btn-node-manager-install" type="button">Install Node</button></div>
+    </div>
+    <div class="panel">
+      <div class="row-between" style="gap:12px; align-items:flex-start; flex-wrap:wrap;"><div><h2 style="margin:0;">Installed Nodes</h2><div class="muted small">Pick an installed repo to inspect it, open the folder, or pull updates.</div></div><div class="badge">Node inventory</div></div>
+      <div class="grid grid-2" style="margin-top:14px; gap:14px; align-items:start;">
+        <div>
+          <label for="node-manager-node-select">Installed custom nodes</label>
+          <select id="node-manager-node-select"><option value="">Load installed nodes…</option></select>
+          <div class="row" style="margin-top:12px; gap:8px; flex-wrap:wrap;">
+            <button class="btn" id="btn-node-manager-open-selected" type="button">Open Folder</button>
+            <button class="btn" id="btn-node-manager-update-selected" type="button">Update Selected</button>
+          </div>
+        </div>
+        <div class="backend-info-box" id="node-manager-node-details">Pick a node to inspect its repo details.</div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="row-between" style="gap:12px; align-items:flex-start; flex-wrap:wrap;"><div><h2 style="margin:0;">Action Log</h2><div class="muted small">Clone, pip, and update output will show here. Some custom nodes still require a manual ComfyUI restart after install/update.</div></div></div>
+      <textarea id="node-manager-log" readonly="" style="margin-top:14px; min-height:260px; font-family:ui-monospace, SFMono-Regular, Consolas, monospace;"></textarea>
+    </div>
+  </div>
+</div>
+<div data-admin-section-target="data" style="display:none;">
+  <div class="panel">
+    <div class="row-between" style="gap:12px; align-items:flex-start;">
+      <div>
+        <h2 style="margin:0;">Data &amp; health</h2>
+        <div class="muted small">Guide records, helper packets, preset totals, and stored creative data summaries live here. Keep this separate from runtime policy and provider control.</div>
+      </div>
+      <div class="badge">Schema-aware</div>
+    </div>
+    <div class="mini-note" id="admin-data-summary" style="margin-top:12px;">No data summary loaded yet.</div>
+    <div class="backend-info-box" id="admin-guides-summary" style="margin-top:12px;">No guide summary loaded yet.</div>
+    <div class="backend-info-box" id="admin-memory-summary" style="margin-top:12px;">No memory health summary loaded yet.</div>
+    <div class="card-lite admin-section-card" style="margin-top:14px;">
+      <div class="row-between" style="gap:12px; align-items:flex-start; flex-wrap:wrap;">
+        <div>
+          <div class="surface-backend-kicker">Storage cleanup</div>
+          <div class="generation-summary-title" style="margin-top:4px;">Temporary input/output folders</div>
+          <div class="muted small" style="margin-top:6px; max-width:84ch;">Clean Neo generation input staging and Comfy input/output folders. This never targets Neo final outputs, models, custom nodes, or extension folders.</div>
+        </div>
+        <span class="badge">Manual cleanup</span>
+      </div>
+      <div class="backend-info-box" id="admin-storage-cleanup-summary" style="margin-top:12px;">Cleanup targets have not been scanned yet.</div>
+      <div class="grid grid-3" id="admin-storage-cleanup-targets" style="margin-top:12px; gap:12px;"></div>
+      <div class="row" style="margin-top:12px; gap:8px; flex-wrap:wrap;">
+        <button class="btn" id="btn-admin-storage-refresh" type="button">Scan cleanup folders</button>
+        <button class="btn btn-danger" id="btn-admin-storage-clean-selected" type="button">Clean selected</button>
+      </div>
+      <div class="status" id="admin-storage-cleanup-status" style="margin-top:12px;"></div>
+    </div>
+  </div>
+</div>
+
+<div data-admin-section-target="developer" style="display:none;" data-admin-dev-only>
+  <div class="panel">
+    <div class="row-between" style="gap:12px; align-items:flex-start;">
+      <div>
+        <h2 style="margin:0;">Developer &amp; diagnostics</h2>
+        <div class="muted small">Developer-only diagnostics, structure notes, and boundary checks. This section stays hidden unless dev mode is enabled.</div>
+      </div>
+      <div class="badge">Dev mode</div>
+    </div>
+    <div class="mini-note" id="admin-dev-summary" style="margin-top:12px;">No developer summary loaded yet.</div>
+    <div class="backend-info-box" style="margin-top:12px;">Use the dev BAT to expose developer workflows cleanly. Keep runtime user controls out of this section unless they are truly diagnostic or maintenance focused.</div>
+    <div class="backend-info-box" style="margin-top:12px;">Developer mode should never become a shadow home for normal user settings. If a control shapes everyday workspace behavior, it belongs in System or Workspace defaults instead.</div>
+  </div>
+</div>
+</section>
+
+<div class="modal-backdrop hidden" id="generation-image-zoom-modal">
+<div class="modal-shell modal-lg generation-zoom-shell">
+<div class="modal-header">
+<div>
+<h2 style="margin:0;">Generated Image Preview</h2>
+<div class="muted small" id="generation-zoom-help">Mouse wheel zooms, drag pans, double-click resets. Compare appears when a derived before image exists.</div>
+</div>
+<button class="modal-close" id="btn-close-generation-zoom" type="button">×</button>
+</div>
+<div class="generation-zoom-toolbar" id="generation-zoom-toolbar">
+<button class="btn btn-small" id="btn-generation-zoom-reset" type="button">Fit</button>
+<button class="btn btn-small" id="btn-generation-zoom-actual" type="button">100%</button>
+<button class="btn btn-small hidden" id="btn-generation-compare-toggle" type="button">Before / After</button>
+<button class="btn btn-small hidden" id="btn-generation-compare-slider" type="button">Slider</button>
+<span class="mini-note" id="generation-zoom-scale">100%</span>
+<span class="mini-note hidden" id="generation-compare-label">After</span>
+</div>
+<div class="modal-body generation-zoom-body">
+<div class="generation-zoom-stage" id="generation-zoom-stage">
+<img alt="Zoomed generated image" class="generation-zoom-image" id="generation-image-zoom" draggable="false"/>
+<img alt="Before image comparison" class="generation-zoom-image generation-zoom-before hidden" id="generation-image-zoom-before" draggable="false"/>
+<div class="generation-compare-wipe hidden" id="generation-compare-wipe"></div>
+<input class="generation-compare-range hidden" id="generation-compare-range" type="range" min="0" max="100" value="50" aria-label="Before after compare amount"/>
+</div>
+</div>
+</div>
+</div>
+<div class="modal-backdrop hidden" id="generation-mask-editor-modal">
+<div class="modal-shell modal-lg generation-mask-editor-shell">
+<div class="modal-header">
+<div>
+<h2 style="margin:0;">Inpaint Mask Editor</h2>
+<div class="muted small">Paint directly over the source image. White = repaint, black = protect. Left drag paints, right drag erases.</div>
+</div>
+<button class="modal-close" id="btn-close-generation-mask-editor" type="button">×</button>
+</div>
+<div class="modal-body">
+<div class="row-between" style="gap:12px;align-items:flex-start;flex-wrap:wrap;">
+<div class="generation-mask-editor-toolbar">
+<label for="generation-mask-brush-size">Brush size</label>
+<input id="generation-mask-brush-size" max="120" min="4" type="range" value="26"/>
+<div class="mini-note" id="generation-mask-brush-size-label">26 px</div>
+<div class="mini-note" style="margin-top:8px;">Wheel zooms · middle/space drag pans · double-click resets.</div>
+<div class="row" style="gap:6px;flex-wrap:wrap;margin-top:8px;">
+<button class="btn btn-small" id="btn-generation-mask-fit" type="button">Fit</button>
+<button class="btn btn-small" id="btn-generation-mask-100" type="button">100%</button>
+<span class="mini-note" id="generation-mask-zoom-label">100%</span>
+</div>
+</div>
+<div class="row" style="gap:8px;flex-wrap:wrap;">
+<button class="btn btn-small" id="btn-generation-mask-clear-editor" type="button">Clear</button>
+<button class="btn btn-small" id="btn-generation-mask-invert-editor" type="button">Invert</button>
+<button class="btn btn-primary btn-small" id="btn-generation-mask-save-editor" type="button">Save Mask</button>
+</div>
+</div>
+<div class="generation-mask-editor-stage" style="margin-top:14px;">
+<canvas class="generation-mask-base-canvas" id="generation-mask-base-canvas"></canvas>
+<canvas class="generation-mask-draw-canvas" id="generation-mask-draw-canvas"></canvas>
+<div aria-hidden="true" class="generation-mask-brush-cursor hidden" id="generation-mask-brush-cursor"></div>
+</div>
+</div>
+</div>
+</div>
+<div class="modal-backdrop hidden" id="generation-outpaint-canvas-editor-modal">
+<div class="modal-shell modal-lg generation-outpaint-canvas-editor-shell">
+<div class="modal-header">
+<div>
+<h2 style="margin:0;">Outpaint Canvas Editor</h2>
+<div class="muted small">Drag edges/corners to resize each side independently. Drag the source image to reposition within the canvas.</div>
+</div>
+<button class="modal-close" id="btn-close-generation-outpaint-canvas-editor" type="button">×</button>
+</div>
+<div class="modal-body">
+<div class="row-between" style="gap:12px;align-items:flex-start;flex-wrap:wrap;">
+<div>
+<div class="stat-title" id="generation-outpaint-canvas-editor-title">No source loaded</div>
+<div class="mini-note" id="generation-outpaint-canvas-editor-summary">Load a source image before opening this editor.</div>
+</div>
+<div class="row" style="gap:8px;flex-wrap:wrap;">
+<button class="btn btn-small" id="btn-generation-outpaint-canvas-pad-128" type="button">+128 all sides</button>
+<button class="btn btn-small" id="btn-generation-outpaint-canvas-pad-256" type="button">+256 all sides</button>
+<button class="btn btn-small" id="btn-generation-outpaint-canvas-center" type="button">Center source</button>
+<button class="btn btn-primary btn-small" id="btn-generation-outpaint-canvas-apply" type="button">Apply Padding</button>
+</div>
+</div>
+<div class="generation-outpaint-canvas-editor-stage" id="generation-outpaint-canvas-editor-stage" style="margin-top:14px;overflow:auto;max-height:70vh;border:1px solid rgba(148,163,184,0.22);border-radius:14px;background:rgba(2,6,23,0.4);padding:14px;">
+<canvas id="generation-outpaint-canvas-editor-canvas" style="display:block;max-width:100%;height:auto;margin:0 auto;cursor:grab;border-radius:10px;background:rgba(15,23,42,0.8);"></canvas>
+</div>
+<div class="mini-note" style="margin-top:10px;">Tip: drag blue edges/corners for left/right/top/bottom padding. Drag inside the image to reposition it without changing total canvas size.</div>
+</div>
+</div>
+</div>
+<div aria-hidden="true" class="hidden" id="backend-manager-modal"></div>
+<div class="modal-backdrop hidden" id="generation-keyword-manager-modal">
+<div class="modal-shell modal-lg">
+<div class="modal-header">
+<div>
+<div class="accordion-title">Keyword library manager</div>
+<div class="muted small">Add or edit Library keywords without leaving Generation, and handle import or export from the same popup.</div>
+</div>
+<button class="modal-close" id="btn-close-generation-keyword-manager" type="button">×</button>
+</div>
+<div class="modal-body">
+<div class="grid grid-2">
+<div class="card-lite">
+<div class="row-between">
+<div>
+<div class="accordion-title">Add / Edit keywords</div>
+<div class="mini-note">This keeps keyword editing close to the prompt workflow so you can reuse snippets faster.</div>
+</div>
+<div class="row" style="gap:8px;">
+<button class="btn btn-small" id="btn-generation-keyword-modal-new" type="button">New</button>
+<button class="btn btn-small" id="btn-generation-keyword-modal-save" type="button">Save</button>
+<button class="btn btn-small btn-danger" id="btn-generation-keyword-modal-delete" type="button">Delete</button>
+</div>
+</div>
+<div class="grid grid-4" style="margin-top:14px;">
+<div><label for="generation-keyword-modal-filter-cat">Filter category</label><select id="generation-keyword-modal-filter-cat"></select></div>
+<div><label for="generation-keyword-modal-filter-sub">Filter subcategory</label><select id="generation-keyword-modal-filter-sub"></select></div>
+<div><label for="generation-keyword-modal-search">Search keywords</label><input id="generation-keyword-modal-search" placeholder="streetwear / soft light..." type="text"/></div>
+<div><label for="generation-keyword-modal-select">Saved keywords</label><select id="generation-keyword-modal-select"></select></div>
+</div>
+<div class="grid grid-2" style="margin-top:14px;">
+<div><label for="generation-keyword-modal-category">Category</label><input id="generation-keyword-modal-category" placeholder="Locations" type="text"/></div>
+<div><label for="generation-keyword-modal-subcategory">Subcategory</label><input id="generation-keyword-modal-subcategory" placeholder="Airport" type="text"/></div>
+</div>
+<div class="grid grid-2" style="margin-top:14px;">
+<div><label for="generation-keyword-modal-name">Keyword</label><input id="generation-keyword-modal-name" placeholder="departure gate" type="text"/></div>
+<div><label for="generation-keyword-modal-aliases">Aliases (CSV)</label><input id="generation-keyword-modal-aliases" placeholder="airport gate, boarding gate" type="text"/></div>
+</div>
+<label for="generation-keyword-modal-desc" style="margin-top:14px;">Description</label>
+<textarea id="generation-keyword-modal-desc" placeholder="Optional description..."></textarea>
+<div class="row" style="margin-top:12px;"><label><input checked="" id="generation-keyword-modal-enabled" type="checkbox"/> Enabled</label></div>
+<input id="generation-keyword-modal-id" type="hidden"/>
+<div class="status" id="generation-keyword-modal-status" style="margin-top:12px;"></div>
+</div>
+<div class="stack" style="display:flex;flex-direction:column;gap:14px;">
+<div class="card-lite">
+<div class="accordion-title">Export library pack</div>
+<div class="mini-note">Portable backup zip with prompts, captions, characters, presets, bundles, metadata, and selected assets.</div>
+<div class="grid grid-2" style="margin-top:12px;">
+<label><input checked="" id="generation-library-export-prompts" type="checkbox"/> Prompts</label>
+<label><input checked="" id="generation-library-export-captions" type="checkbox"/> Captions + assets</label>
+<label><input checked="" id="generation-library-export-characters" type="checkbox"/> Characters</label>
+<label><input checked="" id="generation-library-export-presets" type="checkbox"/> Presets</label>
+<label><input checked="" id="generation-library-export-categories" type="checkbox"/> Categories</label>
+<label><input checked="" id="generation-library-export-metadata" type="checkbox"/> Metadata records</label>
+<label><input checked="" id="generation-library-export-bundles" type="checkbox"/> Prompt bundles</label>
+<label><input id="generation-library-export-full-snapshot" type="checkbox"/> Full snapshot</label>
+</div>
+<label for="generation-library-export-categories-select" style="margin-top:12px;">Selected categories only (optional)</label>
+<select id="generation-library-export-categories-select" multiple="" size="6"></select>
+<div class="row" style="margin-top:12px;"><button class="btn" id="btn-generation-library-export" type="button">Export library zip</button></div>
+<div class="status" id="generation-library-export-status"></div>
+</div>
+<div class="card-lite">
+<div class="accordion-title">Import library pack</div>
+<div class="mini-note">Restore from a Neo Studio library zip right from here.</div>
+<label for="generation-library-import-file" style="margin-top:12px;">Library zip</label>
+<input accept="application/zip,.zip,application/json,.json" id="generation-library-import-file" type="file"/>
+<label for="generation-library-import-mode" style="margin-top:12px;">Conflict mode</label>
+<select id="generation-library-import-mode">
+<option value="merge">Merge</option>
+<option value="overwrite">Overwrite matching</option>
+<option value="skip_duplicates">Skip duplicates</option>
+</select>
+<div class="row" style="margin-top:12px;"><button class="btn" id="btn-generation-library-import" type="button">Import library zip</button></div>
+<div class="status" id="generation-library-import-status"></div>
+<div class="mini-note" id="generation-library-import-summary" style="margin-top:10px;">No import has been run yet.</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="modal-backdrop hidden" id="generation-character-tool-modal">
+<div class="modal-shell modal-lg">
+<div class="modal-header">
+<div>
+<div class="accordion-title">Character Builder</div>
+<div class="muted small">Build or load character prompt parts without keeping the full panel open on the main canvas.</div>
+</div>
+<button class="modal-close" id="btn-close-generation-character-tool" type="button">×</button>
+</div>
+<div class="modal-body generation-tool-modal-body"><div id="generation-character-tool-host"></div></div>
+</div>
+</div>
+<div class="modal-backdrop hidden" id="generation-keyword-tool-modal">
+<div class="modal-shell modal-lg">
+<div class="modal-header">
+<div>
+<div class="accordion-title">Keyword Browser</div>
+<div class="muted small">Browse saved keyword snippets and insert them into the prompt without leaving the generation flow.</div>
+</div>
+<button class="modal-close" id="btn-close-generation-keyword-tool" type="button">×</button>
+</div>
+<div class="modal-body generation-tool-modal-body"><div id="generation-keyword-tool-host"></div></div>
+</div>
+</div>
+<div class="modal-backdrop hidden" id="generation-caption-tool-modal">
+<div class="modal-shell modal-lg">
+<div class="modal-header">
+<div>
+<div class="accordion-title">Caption Browser</div>
+<div class="muted small">Use caption-side reuse tools in a popup instead of keeping the full browser open in the main workspace.</div>
+</div>
+<button class="modal-close" id="btn-close-generation-caption-tool" type="button">×</button>
+</div>
+<div class="modal-body generation-tool-modal-body"><div id="generation-caption-tool-host"></div></div>
+</div>
+</div>
+<div class="modal-backdrop hidden" id="generation-prompt-manager-modal">
+<div class="modal-shell modal-lg">
+<div class="modal-header">
+<div>
+<div class="accordion-title">Prompt manager</div>
+<div class="muted small">Use the saved prompt dropdown for quick loads, then open this manager when you need full search, edit, update, or delete controls.</div>
+</div>
+<button class="modal-close" id="btn-close-generation-prompt-manager" type="button">×</button>
+</div>
+<div class="modal-body">
+<div id="generation-prompt-manager-host"></div>
+</div>
+</div>
+</div>
+<div class="modal-backdrop hidden" id="generation-save-prompt-modal">
+<div class="modal-shell modal-sm">
+<div class="modal-header">
+<div>
+<div class="accordion-title">Save prompt</div>
+<div class="muted small">Save the current Generation prompt stack so it shows up in the saved prompt dropdown and Prompt manager.</div>
+</div>
+<button class="modal-close" id="btn-close-generation-save-prompt" type="button">×</button>
+</div>
+<div class="modal-body">
+<div class="grid grid-2 generation-save-prompt-grid">
+<div>
+<label for="generation-save-prompt-name">Name</label>
+<input id="generation-save-prompt-name" placeholder="Neo prompt name" type="text"/>
+</div>
+<div>
+<label for="generation-save-prompt-category">Category</label>
+<select id="generation-save-prompt-category"></select>
+</div>
+</div>
+<label for="generation-save-prompt-notes" style="margin-top:14px;">Notes</label>
+<textarea id="generation-save-prompt-notes" placeholder="Optional notes, prompt intent, model reminders, or cleanup notes..." rows="4"></textarea>
+<div class="mini-note generation-save-prompt-preview-note" style="margin-top:12px;">Positive and negative prompts from the current Generation workspace will be saved together. Negative prompt and helper context are stored in the notes block so you can recover the setup later.</div>
+<div class="generation-save-prompt-preview" style="margin-top:12px;">
+<div>
+<label for="generation-save-prompt-positive-preview">Positive prompt</label>
+<textarea id="generation-save-prompt-positive-preview" readonly="" rows="5"></textarea>
+</div>
+<div>
+<label for="generation-save-prompt-negative-preview" style="margin-top:12px;">Negative prompt</label>
+<textarea id="generation-save-prompt-negative-preview" readonly="" rows="4"></textarea>
+</div>
+</div>
+<div class="row generation-save-prompt-actions" style="margin-top:16px; justify-content:flex-end; gap:10px;">
+<button class="btn" id="btn-cancel-generation-save-prompt" type="button">Cancel</button>
+<button class="btn btn-primary" id="btn-submit-generation-save-prompt" type="button">Save Prompt</button>
+</div>
+<div class="status" id="generation-save-prompt-status" style="margin-top:12px;"></div>
+</div>
+</div>
+</div>
+<div class="modal-backdrop hidden" id="backend-choice-modal">
+<div class="modal-shell modal-sm">
+<div class="modal-header">
+<div>
+<h3 style="margin:0;">Low VRAM mode</h3>
+<div class="muted small">Another heavy backend is already connected.</div>
+</div>
+</div>
+<div class="modal-body">
+<div class="mini-note" id="backend-choice-message">Choose how to continue.</div>
+<div class="row" style="margin-top:14px;">
+<button class="btn btn-primary" id="btn-backend-choice-disconnect" type="button">Disconnect current and continue</button>
+<button class="btn" id="btn-backend-choice-keep" type="button">Keep both</button>
+<button class="btn btn-danger" id="btn-backend-choice-cancel" type="button">Cancel</button>
+</div>
+</div>
+</div>
+</div>
+<div class="lightbox hidden" id="image-lightbox">
+<button class="lightbox-close" id="btn-close-lightbox" type="button">×</button>
+<img alt="Preview" id="lightbox-image"/>
+</div>
