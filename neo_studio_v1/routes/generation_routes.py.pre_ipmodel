@@ -1,0 +1,3176 @@
+from __future__ import annotations
+
+import asyncio
+import base64
+import io
+import json
+import time
+from urllib.parse import urlencode
+from pathlib import Path
+from PIL import Image, ImageOps
+from uuid import uuid4
+
+import cv2
+import httpx
+import numpy as np
+import websockets
+from fastapi import APIRouter, BackgroundTasks, File, Form, Request, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse, JSONResponse, Response
+
+from ..utils.backend_manager import get_profile, get_manager_state
+from ..utils.comfy_adapter import ComfyBackendAdapter
+from ..utils.comfy_workflows import build_generation_workflow, build_image_upscale_workflow
+from ..extensions.image.scene_director.adapter import scene_director_to_regional_payload
+from ..contracts.job_records import infer_generation_family
+from ..contracts.output_records import build_generation_output_sidecar
+from ..contracts.generation_families import normalize_generation_mode, normalize_inpaint_backend, validate_generation_support
+from ..contracts.inpaint_payloads import get_shared_inpaint_payload, merge_shared_inpaint_payload
+from ..utils.generation_jobs import (
+    GENERATION_INPUT_DIR,
+    create_generation_job,
+    ensure_generation_dirs,
+    get_generation_job,
+    list_generation_jobs,
+    update_generation_job,
+)
+from ..utils.generation_output_settings import (
+    DEFAULT_OUTPUT_ROOT,
+    add_generation_category,
+    category_display_name,
+    category_slug,
+    ensure_category_dir,
+    ensure_output_root,
+    load_generation_output_settings,
+    next_category_index,
+    save_generation_output_settings,
+)
+from ..utils.generation_styles import (
+    delete_generation_style,
+    duplicate_generation_style,
+    export_generation_styles_path,
+    import_generation_styles_csv,
+    load_generation_styles,
+    upsert_generation_style,
+)
+from ..utils.library_common import safe_name
+from ..utils.library_settings_store import get_library_root
+from ..utils.detailer_models import download_sam_model, list_generation_detailer_models, prepare_detailer_assets_for_payload
+from ..utils.detailer_preview import preview_detailer_detections
+from ..utils.generation_dependency_audit import build_generation_dependency_audit
+from ..utils.logging_utils import get_logger
+from ..utils.storage_io import atomic_write_json
+from ..utils.draft_store import load_draft, save_draft
+from ..utils.long_task_jobs import create_long_task, get_long_task, update_long_task
+from ..utils.shared_data_paths import studio_data_path
+from .common import json_error, json_exception
+
+router = APIRouter()
+logger = get_logger(__name__)
+GENERATION_DRAFT_PATH = studio_data_path('generation_draft.json', legacy_rel='generation_draft.json', default_json={})
+GENERATION_REJECTED_WORKFLOW_PATH = studio_data_path('debug_last_rejected_workflow.json', legacy_rel='debug_last_rejected_workflow.json', default_json={})
+_OUTPUT_IMAGE_EXTS = {'.png', '.jpg', '.jpeg', '.webp', '.bmp'}
+_MODE_OUTPUT_DIRS = {'txt2img': 'txt2img-images', 'img2img': 'img2img-images', 'inpaint': 'inpaint-images', 'outpaint': 'outpaint-images'}
+CONTROLNET_MAP_NAMESPACE = 'controlnet_map_builder'
+TAG_ASSIST_NAMESPACE = 'tag_assist'
+
+
+def _sanitize_generation_draft_removed_features(draft: dict | None) -> dict:
+    """Phase 10.3: remove retired Image Tab section state from saved/restored drafts."""
+    if not isinstance(draft, dict):
+        return {}
+    removed_prefixes = (
+        'regional_',
+        'regionalPrompt',
+        'expression_',
+        'expression_editor_',
+        'expressionEditor',
+        'reference_match_',
+        'referenceMatch',
+        'cleanup_prep_',
+        'cleanupPrep',
+    )
+    removed_exact = {
+        'regionalBackendCapabilities',
+        'regional_prompt_regions',
+        'regional_backend_capabilities',
+        'expression_editor_pass',
+        'expression_editor_enabled',
+        'expression_pass',
+        'expression_enabled',
+        'reference_match_enabled',
+        'cleanup_prep_enabled',
+    }
+
+    def clean(value):
+        if isinstance(value, dict):
+            out = {}
+            for key, item in value.items():
+                key_text = str(key)
+                if key_text in removed_exact or any(key_text.startswith(prefix) for prefix in removed_prefixes):
+                    continue
+                out[key] = clean(item)
+            return out
+        if isinstance(value, list):
+            return [clean(item) for item in value]
+        return value
+
+    cleaned = clean(draft)
+    if not isinstance(cleaned, dict):
+        cleaned = {}
+    try:
+        cleaned['version'] = max(int(cleaned.get('version') or 0), 7)
+    except Exception:
+        cleaned['version'] = 7
+    cleaned['_neo_draft_sanitized'] = True
+    cleaned['_neo_draft_sanitizer_version'] = 'phase10.3'
+    return cleaned
+
+
+def _extract_required_combo_values(schema_entry) -> list[str]:
+    values = []
+    if isinstance(schema_entry, (list, tuple)) and schema_entry:
+        head = schema_entry[0]
+        if isinstance(head, (list, tuple)):
+            values.extend(str(item or '').strip() for item in head if str(item or '').strip())
+        elif head == 'COMBO' and len(schema_entry) > 1 and isinstance(schema_entry[1], (list, tuple)):
+            values.extend(str(item or '').strip() for item in schema_entry[1] if str(item or '').strip())
+    elif isinstance(schema_entry, dict):
+        options = schema_entry.get('choices') or schema_entry.get('values') or schema_entry.get('options') or []
+        if isinstance(options, (list, tuple)):
+            values.extend(str(item or '').strip() for item in options if str(item or '').strip())
+    return values
+
+
+def _object_required_inputs(info: dict | None) -> dict:
+    if not isinstance(info, dict):
+        return {}
+    input_block = info.get('input')
+    if isinstance(input_block, dict):
+        required = input_block.get('required')
+        if isinstance(required, dict):
+            return required
+    required = info.get('required')
+    return required if isinstance(required, dict) else {}
+
+
+async def _validate_generation_runtime_compatibility(adapter: ComfyBackendAdapter, payload: dict) -> list[str]:
+    notes: list[str] = []
+    family = str(payload.get('family') or '').strip().lower()
+    mode = normalize_generation_mode(payload.get('mode') or payload.get('workflow_type') or 'txt2img')
+    inpaint_backend = normalize_inpaint_backend(payload.get('inpaint_backend') or 'standard')
+
+    if family == 'sdxl_sd':
+        inpaint_payload = get_shared_inpaint_payload(payload)
+        source_images = (inpaint_payload.get('source_images') or {}) if isinstance(inpaint_payload, dict) else {}
+        mask_row = (inpaint_payload.get('mask') or {}) if isinstance(inpaint_payload, dict) else {}
+        outpaint_row = (inpaint_payload.get('outpaint') or {}) if isinstance(inpaint_payload, dict) else {}
+        base_image_name = str(source_images.get('base_image_name') or payload.get('source_image_name') or '').strip()
+        mask_image_name = str(mask_row.get('mask_image_name') or payload.get('mask_image_name') or '').strip()
+        if mode == 'inpaint':
+            if not base_image_name:
+                raise ValueError('SDXL inpaint needs a source image first. Upload the base image before queueing.')
+            if not mask_image_name:
+                raise ValueError('SDXL inpaint needs a mask image. Paint the mask area first, then queue again.')
+            context = str(payload.get('inpaint_context') or 'full_image').strip().lower() or 'full_image'
+            target = str(payload.get('inpaint_target') or 'masked').strip().lower() or 'masked'
+            grow_mask_by = mask_row.get('grow_mask_by') if isinstance(mask_row, dict) else None
+            if grow_mask_by in (None, ''):
+                grow_mask_by = payload.get('grow_mask_by') or 6
+            notes.append(f'SDXL validation: standard inpaint is using the {context.replace("_", " ")} context on the {target.replace("_", " ")} region.')
+            notes.append(f'SDXL validation: grow_mask_by {int(grow_mask_by)} will be used when masked-focus encoding is selected.')
+        elif mode == 'outpaint':
+            if not base_image_name:
+                raise ValueError('SDXL outpaint needs a source image first. Upload the base image before queueing.')
+            left = int(outpaint_row.get('left') if outpaint_row.get('left') is not None else payload.get('outpaint_left') or 0)
+            top = int(outpaint_row.get('top') if outpaint_row.get('top') is not None else payload.get('outpaint_top') or 0)
+            right = int(outpaint_row.get('right') if outpaint_row.get('right') is not None else payload.get('outpaint_right') or 0)
+            bottom = int(outpaint_row.get('bottom') if outpaint_row.get('bottom') is not None else payload.get('outpaint_bottom') or 0)
+            if left + top + right + bottom <= 0:
+                raise ValueError('SDXL outpaint needs padding on at least one side before queueing.')
+            notes.append(f'SDXL validation: standard outpaint padding is left {left}, top {top}, right {right}, bottom {bottom}.')
+        return notes
+
+    if family != 'qwen_image_edit' or mode != 'inpaint':
+        return notes
+
+    inpaint_payload = get_shared_inpaint_payload(payload)
+    source_images = (inpaint_payload.get('source_images') or {}) if isinstance(inpaint_payload, dict) else {}
+    composition = (inpaint_payload.get('composition') or {}) if isinstance(inpaint_payload, dict) else {}
+    mask_row = (inpaint_payload.get('mask') or {}) if isinstance(inpaint_payload, dict) else {}
+
+    base_image_name = str(source_images.get('base_image_name') or payload.get('source_image_name') or '').strip()
+    reference_image_2_name = str(source_images.get('reference_image_2_name') or payload.get('source_image__2_name') or '').strip()
+    composition_image_name = str(source_images.get('composition_image_name') or payload.get('source_image__3_name') or '').strip()
+    composition_source_mode = str(composition.get('source_mode') or payload.get('composition_source_mode') or 'source_image').strip().lower()
+    composition_guide_type = str(composition.get('guide_type') or payload.get('composition_guide_type') or 'none').strip().lower()
+    mask_image_name = str(mask_row.get('mask_image_name') or payload.get('mask_image_name') or '').strip()
+
+    if not base_image_name:
+        raise ValueError('Qwen inpaint needs image1 first. Upload the base source image before queueing.')
+    if not mask_image_name:
+        raise ValueError('Qwen inpaint needs a mask image. Paint the mask area first, then queue again.')
+    if composition_source_mode == 'composition_image' and not composition_image_name:
+        raise ValueError('Composition source is set to image3, but no composition image is loaded. Add image3 or switch the source back to image1.')
+    if composition_guide_type in {'depth', 'pose'} and composition_source_mode == 'composition_image' and not composition_image_name:
+        raise ValueError(f'Composition guide {composition_guide_type} needs image3 because the source is set to the dedicated composition image.')
+
+    if reference_image_2_name:
+        notes.append('Qwen validation: image2 reference is loaded for the inpaint pass.')
+    if composition_image_name:
+        notes.append(f'Qwen validation: image3 is loaded and composition source is set to {composition_source_mode.replace("_", " ")}.')
+    elif composition_source_mode == 'source_image':
+        notes.append('Qwen validation: image3 is falling back to image1 because no dedicated composition image is loaded.')
+
+    if inpaint_backend == 'lanpaint':
+        lanpaint_info = await adapter.get_object_info('LanPaint_KSampler')
+        if isinstance(lanpaint_info, dict) and 'LanPaint_KSampler' in lanpaint_info:
+            lanpaint_info = lanpaint_info.get('LanPaint_KSampler')
+        required = _object_required_inputs(lanpaint_info if isinstance(lanpaint_info, dict) else {})
+        allowed_samplers = _extract_required_combo_values(required.get('sampler_name'))
+        allowed_schedulers = _extract_required_combo_values(required.get('scheduler'))
+        chosen_sampler = str(payload.get('sampler') or 'euler').strip() or 'euler'
+        chosen_scheduler = str(payload.get('scheduler') or 'simple').strip() or 'simple'
+        if allowed_samplers and chosen_sampler not in allowed_samplers:
+            preview = ', '.join(allowed_samplers[:6])
+            suffix = '…' if len(allowed_samplers) > 6 else ''
+            raise ValueError(f"Sampling method mismatch: LanPaint on this backend does not support '{chosen_sampler}'. Choose one of: {preview}{suffix}")
+        if allowed_schedulers and chosen_scheduler not in allowed_schedulers:
+            preview = ', '.join(allowed_schedulers[:6])
+            suffix = '…' if len(allowed_schedulers) > 6 else ''
+            raise ValueError(f"Scheduler mismatch: LanPaint on this backend does not support '{chosen_scheduler}'. Choose one of: {preview}{suffix}")
+        if chosen_sampler == 'euler' and chosen_scheduler == 'simple':
+            notes.append('Qwen validation: LanPaint sampler pair is using the known-good euler / simple combo.')
+
+    if composition_guide_type == 'depth':
+        depth_class = str(payload.get('composition_depth_node_class') or 'DepthAnythingV2Preprocessor').strip() or 'DepthAnythingV2Preprocessor'
+        depth_info = await adapter.get_object_info(depth_class)
+        if not (isinstance(depth_info, dict) and ((depth_info.get(depth_class) if depth_class in depth_info else depth_info))):
+            raise ValueError(f'Composition guide mismatch: Neo could not find the selected depth preprocessor ({depth_class}) on this backend.')
+        notes.append(f'Qwen validation: depth composition guide will use {depth_class}.')
+    elif composition_guide_type == 'pose':
+        pose_class = str(payload.get('composition_pose_node_class') or 'DWPreprocessor').strip() or 'DWPreprocessor'
+        pose_info = await adapter.get_object_info(pose_class)
+        if not (isinstance(pose_info, dict) and ((pose_info.get(pose_class) if pose_class in pose_info else pose_info))):
+            raise ValueError(f'Composition guide mismatch: Neo could not find the selected pose preprocessor ({pose_class}) on this backend.')
+        notes.append(f'Qwen validation: pose composition guide will use {pose_class}.')
+
+    return notes
+
+
+def _output_settings_response(settings: dict | None = None) -> dict:
+    settings = settings or load_generation_output_settings()
+    output_root = str(settings.get('output_root') or DEFAULT_OUTPUT_ROOT)
+    selected_category = category_display_name(str(settings.get('selected_category') or 'Uncategorized'))
+    save_dir = str(Path(output_root) / selected_category)
+    slug = category_slug(selected_category)
+    padding = max(2, min(8, int(settings.get('filename_padding') or 4)))
+    try:
+        next_index = next_category_index(Path(save_dir), slug)
+    except Exception:
+        next_index = 1
+    return {
+        'output_root': output_root,
+        'categories': list(settings.get('categories') or ['Uncategorized']),
+        'selected_category': selected_category,
+        'filename_padding': padding,
+        'save_directory': save_dir,
+        'next_index': next_index,
+        'filename_example': f"{slug}_{str(next_index).zfill(padding)}_[seed].png",
+    }
+
+
+def _mode_output_dir_name(mode: str) -> str:
+    return _MODE_OUTPUT_DIRS.get(str(mode or '').strip().lower(), 'generated-images')
+
+
+def _source_output_key(item: dict) -> tuple[str, str, str]:
+    return (
+        str(item.get('filename') or ''),
+        str(item.get('subfolder') or ''),
+        str(item.get('type') or 'output'),
+    )
+
+
+def _guess_output_suffix(item: dict) -> str:
+    suffix = Path(str(item.get('filename') or '')).suffix.lower()
+    if suffix in _OUTPUT_IMAGE_EXTS:
+        return suffix
+    return '.png'
+
+
+def _output_metadata_root_for_mode(mode_name: str) -> Path:
+    root = get_library_root() / 'output_metadata' / (str(mode_name or 'txt2img').strip().lower() or 'txt2img')
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
+def _mode_relative_name(mode_root: Path, candidate_path: Path) -> str:
+    try:
+        rel = candidate_path.resolve().relative_to(mode_root.resolve())
+    except Exception:
+        rel = Path(candidate_path.name)
+    return str(rel).replace('\\', '/')
+
+
+def _extract_node_input_keys(node_info) -> list[str]:
+    if isinstance(node_info, dict) and len(node_info) == 1:
+        only_value = next(iter(node_info.values()))
+        if isinstance(only_value, dict) and 'input' in only_value:
+            node_info = only_value
+    if not isinstance(node_info, dict):
+        return []
+    input_block = node_info.get('input') or {}
+    if not isinstance(input_block, dict):
+        return []
+    keys: list[str] = []
+    for section_name in ('required', 'optional'):
+        section = input_block.get(section_name) or {}
+        if not isinstance(section, dict):
+            continue
+        for key in section.keys():
+            key_text = str(key or '').strip()
+            if key_text and key_text not in keys:
+                keys.append(key_text)
+    return keys
+
+
+async def _inject_refine_ultimate_runtime_hints(adapter: ComfyBackendAdapter, payload: dict) -> list[str]:
+    notes: list[str] = []
+    refine_enabled = bool(payload.get('refine_enabled'))
+    refine_mode = str(payload.get('refine_mode') or '').strip().lower()
+    if not (refine_enabled and refine_mode == 'image_upscale'):
+        return notes
+
+    upscale_model_name = str(payload.get('refine_upscaler') or '').strip()
+    if not upscale_model_name:
+        notes.append('Upscale Lab image mode is active without an upscaler model, so Neo will use the fallback image-upscale refine path instead of Ultimate SD Upscale.')
+        return notes
+
+    try:
+        ultimate_info = await adapter.get_object_info('UltimateSDUpscale')
+        input_keys = _extract_node_input_keys(ultimate_info)
+        if input_keys:
+            payload['_neo_refine_use_ultimate_upscale'] = True
+            payload['_neo_ultimate_input_keys'] = input_keys
+            notes.append('Upscale Lab preserve mode will compile through Ultimate SD Upscale.')
+        else:
+            notes.append('Ultimate SD Upscale node was not available on this backend, so Neo will use the fallback image-upscale refine path.')
+            return notes
+    except Exception as exc:
+        notes.append(f'Ultimate SD Upscale validation failed, so Neo will use the fallback image-upscale refine path ({exc}).')
+        return notes
+
+    try:
+        catalog = await adapter.get_catalog()
+    except Exception:
+        catalog = {}
+    controlnet_list = catalog.get('controlnet') if isinstance(catalog, dict) else []
+    if isinstance(controlnet_list, list):
+        try:
+            controlnet_loader = await adapter.get_object_info('ControlNetLoader')
+            controlnet_apply = await adapter.get_object_info('ControlNetApply')
+            controlnet_ready = bool(_extract_node_input_keys(controlnet_loader) and _extract_node_input_keys(controlnet_apply))
+        except Exception:
+            controlnet_ready = False
+        tile_model = next((str(name).strip() for name in controlnet_list if 'tile' in str(name).lower()), '') if controlnet_ready else ''
+        if tile_model:
+            payload['_neo_refine_tile_controlnet_model'] = tile_model
+            notes.append(f'Upscale Lab preserve mode will use tile ControlNet guidance: {tile_model}.')
+        elif controlnet_ready:
+            notes.append('No tile ControlNet model was found in the backend catalog, so Ultimate SD Upscale will run without tile guidance.')
+        else:
+            notes.append('ControlNet apply nodes are not ready on this backend, so Ultimate SD Upscale will run without tile guidance.')
+    return notes
+
+
+def _build_generation_sidecar(job: dict, payload: dict, source: dict, candidate_path: Path, mode_root: Path, mode_name: str, category: str, slug: str, next_index: int) -> tuple[dict, Path]:
+    relative_name = _mode_relative_name(mode_root, candidate_path)
+    sidecar_path = (_output_metadata_root_for_mode(mode_name) / Path(relative_name)).with_suffix('.json')
+    sidecar_path.parent.mkdir(parents=True, exist_ok=True)
+
+    width = str(payload.get('width') or '').strip()
+    height = str(payload.get('height') or '').strip()
+    size_value = f"{width}x{height}" if width and height else ''
+
+    control_units = list(payload.get('controlnet_units') or []) if isinstance(payload.get('controlnet_units'), list) else []
+    ipadapter_units = list(payload.get('ipadapter_units') or []) if isinstance(payload.get('ipadapter_units'), list) else []
+    lora_units = list(payload.get('loras') or []) if isinstance(payload.get('loras'), list) else []
+    if not lora_units and str(payload.get('lora_name') or '').strip():
+        lora_units = [{
+            'name': str(payload.get('lora_name') or '').strip(),
+            'strength': payload.get('lora_strength') if payload.get('lora_strength') is not None else 0.8,
+        }]
+
+    generation_summary = {
+        'Checkpoint': str(payload.get('checkpoint') or '').strip(),
+        'Seed': payload.get('seed') if payload.get('seed') is not None else '',
+        'Steps': payload.get('steps') if payload.get('steps') is not None else '',
+        'CFG scale': payload.get('cfg') if payload.get('cfg') is not None else '',
+        'Sampler': str(payload.get('sampler') or '').strip(),
+        'Scheduler': str(payload.get('scheduler') or '').strip(),
+        'Size': size_value,
+        'Denoising strength': payload.get('denoise') if payload.get('denoise') is not None else '',
+        'VAE': str(payload.get('vae') or '').strip(),
+        'Batch size': payload.get('batch_size') if payload.get('batch_size') is not None else '',
+        'Mode': str(payload.get('mode') or '').strip(),
+    }
+
+    extra_generation_params = {
+        'refine_enabled': bool(payload.get('refine_enabled')),
+        'refine_strategy': str(payload.get('refine_strategy') or '').strip(),
+        'refine_mode': str(payload.get('refine_mode') or '').strip(),
+        'refine_resize_method': str(payload.get('refine_resize_method') or '').strip(),
+        'refine_scale': payload.get('refine_scale') if payload.get('refine_scale') is not None else '',
+        'refine_steps': payload.get('refine_steps') if payload.get('refine_steps') is not None else '',
+        'refine_denoise': payload.get('refine_denoise') if payload.get('refine_denoise') is not None else '',
+        'refine_cfg': payload.get('refine_cfg') if payload.get('refine_cfg') is not None else '',
+        'refine_sampler': str(payload.get('refine_sampler') or '').strip(),
+        'refine_scheduler': str(payload.get('refine_scheduler') or '').strip(),
+        'refine_tiled_vae': payload.get('refine_tiled_vae') if payload.get('refine_tiled_vae') is not None else '',
+        'refine_tile_size': payload.get('refine_tile_size') if payload.get('refine_tile_size') is not None else '',
+        'refine_tile_overlap': payload.get('refine_tile_overlap') if payload.get('refine_tile_overlap') is not None else '',
+        'refine_upscaler': str(payload.get('refine_upscaler') or '').strip(),
+        'supir_enabled': bool(payload.get('supir_enabled')),
+        'supir_model': str(payload.get('supir_model') or '').strip(),
+        'supir_sdxl_model': str(payload.get('supir_sdxl_model') or '').strip(),
+        'supir_scale': payload.get('supir_scale') if payload.get('supir_scale') is not None else '',
+        'supir_steps': payload.get('supir_steps') if payload.get('supir_steps') is not None else '',
+        'supir_restoration_scale': payload.get('supir_restoration_scale') if payload.get('supir_restoration_scale') is not None else '',
+        'supir_cfg_scale': payload.get('supir_cfg_scale') if payload.get('supir_cfg_scale') is not None else '',
+        'supir_control_scale': payload.get('supir_control_scale') if payload.get('supir_control_scale') is not None else '',
+        'supir_color_fix_type': str(payload.get('supir_color_fix_type') or '').strip(),
+        'inpaint_target': str(payload.get('inpaint_target') or '').strip(),
+        'inpaint_context': str(payload.get('inpaint_context') or '').strip(),
+        'grow_mask_by': payload.get('grow_mask_by') if payload.get('grow_mask_by') is not None else '',
+        'mask_feather': payload.get('mask_feather') if payload.get('mask_feather') is not None else '',
+        'outpaint_left': payload.get('outpaint_left') if payload.get('outpaint_left') is not None else '',
+        'outpaint_top': payload.get('outpaint_top') if payload.get('outpaint_top') is not None else '',
+        'outpaint_right': payload.get('outpaint_right') if payload.get('outpaint_right') is not None else '',
+        'outpaint_bottom': payload.get('outpaint_bottom') if payload.get('outpaint_bottom') is not None else '',
+        'outpaint_feather': payload.get('outpaint_feather') if payload.get('outpaint_feather') is not None else '',
+        'style_positive': str(payload.get('style_positive') or '').strip(),
+        'style_negative': str(payload.get('style_negative') or '').strip(),
+        'loras': lora_units,
+        'textual_inversions': list(payload.get('textual_inversions') or []) if isinstance(payload.get('textual_inversions'), list) else [],
+        'ipadapter_units': ipadapter_units,
+    }
+    extra_generation_params = {k: v for k, v in extra_generation_params.items() if v not in ('', None, [], {})}
+
+    raw_lines = []
+    if str(payload.get('positive') or '').strip():
+        raw_lines.append(str(payload.get('positive') or '').strip())
+    if str(payload.get('negative') or '').strip():
+        raw_lines.append(f"Negative prompt: {str(payload.get('negative') or '').strip()}")
+    settings_parts = []
+    for key in ('Steps', 'Sampler', 'Scheduler', 'CFG scale', 'Seed', 'Size', 'Checkpoint', 'VAE', 'Denoising strength', 'Batch size', 'Mode'):
+        value = generation_summary.get(key)
+        if value not in ('', None):
+            label = 'Model' if key == 'Checkpoint' else key
+            settings_parts.append(f"{label}: {value}")
+    if settings_parts:
+        raw_lines.append(', '.join(settings_parts))
+
+    output_id = f"out_{str(job.get('id') or '').strip() or 'job'}_{str(next_index).zfill(4)}"
+    base_sidecar = {
+        'schema_version': 2,
+        'saved_from_job_id': job.get('id') or '',
+        'saved_at': job.get('updated_at') or job.get('created_at') or '',
+        'main': {
+            'positive_box': str(payload.get('positive') or '').strip(),
+            'negative_box': str(payload.get('negative') or '').strip(),
+        },
+        'generation': generation_summary,
+        'controlnet': {
+            'units': control_units,
+        },
+        'ipadapter': {
+            'units': ipadapter_units,
+        },
+        'extra_generation_params': extra_generation_params,
+        'raw_parameters': '\n'.join([line for line in raw_lines if line]),
+        'save': {
+            'output_root': str(mode_root.parent),
+            'mode_folder': _mode_output_dir_name(mode_name),
+            'category': category,
+            'category_slug': slug,
+            'directory': str(candidate_path.parent),
+            'filename': candidate_path.name,
+            'relative_name': relative_name,
+            'path': str(candidate_path),
+            'index': next_index,
+        },
+        'backend': {
+            'name': job.get('backend_name') or '',
+            'type': job.get('backend_type') or '',
+            'base_url': job.get('backend_url') or '',
+        },
+        'comfy': {
+            'prompt_id': job.get('prompt_id') or '',
+            'queue_number': job.get('queue_number'),
+            'source_output': source,
+        },
+        'payload': payload,
+        'compile_notes': list(job.get('compile_notes') or []),
+        'workflow_graph': job.get('workflow_graph') or {},
+    }
+    sidecar = build_generation_output_sidecar(
+        base_sidecar=base_sidecar,
+        job=job,
+        payload=payload,
+        source_output=source,
+        candidate_path=str(candidate_path),
+        relative_name=relative_name,
+        output_id=output_id,
+        category=category,
+        category_slug=slug,
+        mode_name=_mode_output_dir_name(mode_name),
+        next_index=next_index,
+    )
+    return sidecar, sidecar_path
+
+
+def _build_local_generation_output_url(filename: str, subfolder: str = '', file_type: str = 'output') -> str:
+    params = {'filename': str(filename or ''), 'file_type': str(file_type or 'output')}
+    if subfolder:
+        params['subfolder'] = str(subfolder or '')
+    return '/api/generation/output-download?' + urlencode(params)
+
+
+def _build_remote_generation_output_url(adapter: ComfyBackendAdapter | None, filename: str, subfolder: str = '', file_type: str = 'output') -> str:
+    if adapter is None:
+        return ''
+    try:
+        return adapter.build_view_url(str(filename or ''), str(subfolder or ''), str(file_type or 'output'))
+    except Exception:
+        return ''
+
+
+def _normalize_generation_history_outputs(history_entry: dict | None, adapter: ComfyBackendAdapter | None = None) -> list[dict]:
+    outputs: list[dict] = []
+    for image in _extract_history_images(history_entry):
+        filename = str(image.get('filename') or '').strip()
+        if not filename:
+            continue
+        subfolder = str(image.get('subfolder') or '').strip()
+        file_type = str(image.get('type') or 'output').strip() or 'output'
+        outputs.append({
+            'filename': filename,
+            'subfolder': subfolder,
+            'type': file_type,
+            'view_url': _build_local_generation_output_url(filename, subfolder, file_type),
+            'remote_view_url': _build_remote_generation_output_url(adapter, filename, subfolder, file_type),
+        })
+    return outputs
+
+
+def _history_entry_completed(history_entry: dict | None) -> bool:
+    if not isinstance(history_entry, dict):
+        return False
+    status = history_entry.get('status')
+    if isinstance(status, dict):
+        return bool(status.get('completed', False))
+    return True
+
+
+async def _download_output_bytes(url: str, timeout_sec: int = 60) -> bytes:
+    async with httpx.AsyncClient(follow_redirects=True, timeout=timeout_sec) as client:
+        response = await client.get(url)
+        response.raise_for_status()
+        return response.content
+
+
+async def _persist_generation_outputs(job: dict, source_outputs: list[dict], adapter: ComfyBackendAdapter) -> list[dict]:
+    if not source_outputs:
+        return []
+
+    payload = job.get('payload') or {}
+    settings = load_generation_output_settings()
+    output_root = str(payload.get('output_root') or settings.get('output_root') or DEFAULT_OUTPUT_ROOT).strip() or str(DEFAULT_OUTPUT_ROOT)
+    category = category_display_name(str(payload.get('output_category') or settings.get('selected_category') or 'Uncategorized'))
+    try:
+        padding = max(2, min(8, int(payload.get('output_filename_padding') or settings.get('filename_padding') or 4)))
+    except Exception:
+        padding = 4
+    mode_name = str(payload.get('save_mode_override') or payload.get('output_mode_override') or payload.get('mode') or job.get('mode') or 'txt2img').strip().lower()
+    mode_root = Path(output_root) / _mode_output_dir_name(mode_name)
+    category_dir = ensure_category_dir(mode_root, category)
+    slug = category_slug(category)
+    seed = str(payload.get('seed') or '0').strip() or '0'
+
+    existing_outputs = list(job.get('outputs') or [])
+    existing_by_key = {}
+    for item in existing_outputs:
+        if not isinstance(item, dict):
+            continue
+        key = _source_output_key(item)
+        saved_path_raw = str(item.get('saved_path') or '').strip()
+        # Important: Path('') resolves to the current working directory and
+        # exists(), which made raw ComfyUI output refs look already persisted.
+        # Only treat an output as persisted when it has a real saved_path.
+        if key and saved_path_raw and Path(saved_path_raw).exists():
+            existing_by_key[key] = item
+
+    next_index = next_category_index(category_dir, slug)
+    merged_outputs: list[dict] = []
+    for idx, source in enumerate(source_outputs, start=1):
+        key = _source_output_key(source)
+        if key in existing_by_key:
+            merged = dict(source)
+            merged.update(existing_by_key[key])
+            merged_outputs.append(merged)
+            continue
+
+        ext = _guess_output_suffix(source)
+        source_url = str(source.get('remote_view_url') or source.get('view_url') or '').strip()
+        if source_url.startswith('/api/generation/output-download'):
+            source_url = _build_remote_generation_output_url(
+                adapter,
+                str(source.get('filename') or ''),
+                str(source.get('subfolder') or ''),
+                str(source.get('type') or 'output'),
+            )
+        if not source_url:
+            raise ValueError('Could not resolve a generation output download URL for persistence.')
+        data = await _download_output_bytes(source_url, timeout_sec=max(20, int(adapter.timeout_sec or 30)))
+        while True:
+            candidate_name = f"{slug}_{str(next_index).zfill(padding)}_{seed}{ext}"
+            candidate_path = category_dir / candidate_name
+            if not candidate_path.exists():
+                break
+            next_index += 1
+        candidate_path.write_bytes(data)
+        sidecar, sidecar_path = _build_generation_sidecar(job, payload, source, candidate_path, mode_root, mode_name, category, slug, next_index)
+        atomic_write_json(sidecar_path, sidecar)
+        merged_outputs.append({
+            **source,
+            'schema_version': 1,
+            'record_type': 'job_output_ref',
+            'job_id': str(job.get('job_id') or job.get('id') or ''),
+            'output_id': str(sidecar.get('output_id') or ''),
+            'media_type': 'image',
+            'status': 'saved',
+            'family': infer_generation_family(payload),
+            'lineage': sidecar.get('lineage') or {},
+            'saved_filename': candidate_name,
+            'saved_path': str(candidate_path),
+            'save_directory': str(category_dir),
+            'mode_folder': _mode_output_dir_name(mode_name),
+            'sidecar_path': str(sidecar_path),
+            'category': category,
+            'category_slug': slug,
+        })
+        next_index += 1
+    return merged_outputs
+
+
+
+_FINALIZATION_ACTIVE_STATES = {'queued', 'running', 'processing', 'executing', 'finalizing_output', 'outputs_registered', 'persisting_outputs'}
+_FINALIZATION_TERMINAL_STATES = {'completed', 'error', 'failed', 'cancelled'}
+_FINALIZATION_MISSING_HISTORY_LIMIT = 8
+
+
+def _now_unix() -> int:
+    try:
+        return int(time.time())
+    except Exception:
+        return 0
+
+
+def _finalization_meta(job: dict | None) -> dict:
+    source = (job or {}).get('finalization') if isinstance((job or {}).get('finalization'), dict) else {}
+    return {
+        'schema_version': 1,
+        'phase': str(source.get('phase') or 'queued'),
+        'history_seen': bool(source.get('history_seen', False)),
+        'history_completed': bool(source.get('history_completed', False)),
+        'outputs_normalized': bool(source.get('outputs_normalized', False)),
+        'outputs_persisted': bool(source.get('outputs_persisted', False)),
+        'ui_finalized': bool(source.get('ui_finalized', False)),
+        'missing_history_checks': int(source.get('missing_history_checks') or 0),
+        'last_prompt_state': str(source.get('last_prompt_state') or ''),
+        'last_error': str(source.get('last_error') or ''),
+        'updated_at_unix': int(source.get('updated_at_unix') or 0),
+    }
+
+
+def _with_finalization(job: dict | None, **updates) -> dict:
+    meta = _finalization_meta(job)
+    meta.update(updates or {})
+    meta['updated_at_unix'] = _now_unix()
+    return meta
+
+
+def _job_has_persisted_outputs(job: dict | None) -> bool:
+    """Return true only when Neo has a real persisted output record."""
+    for item in (job or {}).get('outputs') or []:
+        if not isinstance(item, dict):
+            continue
+        saved_path_raw = str(item.get('saved_path') or '').strip()
+        save_directory_raw = str(item.get('save_directory') or '').strip()
+        if not saved_path_raw or not save_directory_raw:
+            continue
+        try:
+            if Path(saved_path_raw).exists():
+                return True
+        except Exception:
+            continue
+    return False
+
+
+def _job_needs_finalization(job: dict | None) -> bool:
+    """Single predicate used by /job, /state, and background finalization."""
+    if not isinstance(job, dict):
+        return False
+    state = str(job.get('state') or job.get('status') or '').strip().lower()
+    if state in {'error', 'failed', 'cancelled'}:
+        return False
+    if state in _FINALIZATION_ACTIVE_STATES:
+        return True
+    if state == 'completed' and not _job_has_persisted_outputs(job):
+        return True
+    return False
+
+
+def _job_state_update(state: str, text: str, *, progress: int | None = None, finalization: dict | None = None, outputs: list[dict] | None = None, error: str = '') -> dict:
+    update = {'state': state, 'status_text': text, 'error': error}
+    if progress is not None:
+        update['progress'] = {'percent': max(0, min(100, int(progress))), 'detail': text}
+    if finalization is not None:
+        update['finalization'] = finalization
+    if outputs is not None:
+        update['outputs'] = outputs
+    return update
+
+async def _refresh_generation_job_from_backend(job_id: str) -> dict | None:
+    """Refresh one generation job and persist backend outputs into Neo.
+
+    This is the single finalization path used by /job polling, /state refresh,
+    and the background finalizer. Keeping the persistence logic here prevents the
+    ComfyUI-only save regression where a job completes but Neo never copies the
+    final image into its configured output folder.
+    """
+    job = get_generation_job(job_id)
+    if not job:
+        return None
+
+    adapter, _session, _error = _image_profile_or_error()
+    prompt_id = str(job.get('prompt_id') or '').strip()
+    target_job_id = str(job.get('id') or job.get('job_id') or job_id)
+    if not adapter or not prompt_id:
+        return job
+
+    try:
+        history = await adapter.get_history(prompt_id)
+        data = history.get(prompt_id) if isinstance(history, dict) else None
+
+        if not data:
+            try:
+                full_history = await adapter.get_history(None)
+                if isinstance(full_history, dict):
+                    data = full_history.get(prompt_id)
+            except Exception as exc:
+                logger.debug('Generation full-history fallback failed for %s | %s', target_job_id, exc)
+
+        if data:
+            completed = _history_entry_completed(data)
+            outputs = _normalize_generation_history_outputs(data, adapter)
+            meta = _with_finalization(
+                job,
+                phase='history_complete' if completed else 'backend_running',
+                history_seen=True,
+                history_completed=bool(completed),
+                outputs_normalized=bool(outputs),
+                missing_history_checks=0,
+                last_prompt_state='history',
+                last_error='',
+            )
+            if completed and outputs:
+                job = update_generation_job(target_job_id, _job_state_update(
+                    'outputs_registered',
+                    f'Registered {len(outputs)} backend output(s); saving to Neo library…',
+                    progress=96,
+                    finalization=meta,
+                    outputs=outputs,
+                )) or job
+                try:
+                    meta = _with_finalization(job, phase='persisting_outputs', outputs_normalized=True, last_error='')
+                    job = update_generation_job(target_job_id, _job_state_update(
+                        'persisting_outputs',
+                        'Saving generated output files and metadata…',
+                        progress=98,
+                        finalization=meta,
+                        outputs=outputs,
+                    )) or job
+                    persisted_outputs = await _persist_generation_outputs(job, outputs, adapter)
+                except Exception as exc:
+                    logger.exception('Could not persist generation outputs for %s', target_job_id)
+                    meta = _with_finalization(job, phase='persist_failed', last_error=str(exc))
+                    return update_generation_job(target_job_id, _job_state_update(
+                        'error',
+                        'Could not persist generated outputs.',
+                        progress=100,
+                        finalization=meta,
+                        outputs=outputs,
+                        error=str(exc),
+                    )) or job
+
+                meta = _with_finalization(
+                    job,
+                    phase='ui_finalized',
+                    history_seen=True,
+                    history_completed=True,
+                    outputs_normalized=True,
+                    outputs_persisted=True,
+                    ui_finalized=True,
+                    last_error='',
+                )
+                return update_generation_job(target_job_id, _job_state_update(
+                    'completed',
+                    'Completed.',
+                    progress=100,
+                    finalization=meta,
+                    outputs=persisted_outputs,
+                )) or job
+
+            if completed and not outputs:
+                prior_meta = _finalization_meta(job)
+                checks = int(prior_meta.get('missing_history_checks') or 0) + 1
+                if checks < _FINALIZATION_MISSING_HISTORY_LIMIT:
+                    meta = _with_finalization(
+                        job,
+                        phase='awaiting_outputs',
+                        history_seen=True,
+                        history_completed=True,
+                        outputs_normalized=False,
+                        missing_history_checks=checks,
+                        last_error='Backend history completed without image outputs yet.',
+                    )
+                    return update_generation_job(target_job_id, _job_state_update(
+                        'finalizing_output',
+                        f'Backend completed; waiting for image outputs to appear in history ({checks}/{_FINALIZATION_MISSING_HISTORY_LIMIT})…',
+                        progress=95,
+                        finalization=meta,
+                    )) or job
+                meta = _with_finalization(
+                    job,
+                    phase='history_completed_without_images',
+                    history_seen=True,
+                    history_completed=True,
+                    outputs_normalized=False,
+                    missing_history_checks=checks,
+                    last_error='Backend history completed without image outputs.',
+                )
+                return update_generation_job(target_job_id, _job_state_update(
+                    'error',
+                    'ComfyUI finished, but no image output was returned in history.',
+                    progress=100,
+                    finalization=meta,
+                    error='The backend history entry exists and is completed, but it has no image outputs. Check the workflow final Save Image / output node and ComfyUI console for node errors.',
+                )) or job
+
+            meta = _with_finalization(job, phase='backend_running', history_seen=True, history_completed=False, outputs_normalized=bool(outputs), last_error='')
+            return update_generation_job(target_job_id, _job_state_update(
+                'running',
+                'Running in ComfyUI.',
+                progress=65,
+                finalization=meta,
+                outputs=outputs,
+            )) or job
+
+        try:
+            queue_state = await adapter.get_queue()
+            prompt_state = _queue_prompt_state(queue_state, prompt_id)
+            if prompt_state:
+                meta = _with_finalization(job, phase=prompt_state, last_prompt_state=prompt_state, missing_history_checks=0, last_error='')
+                return update_generation_job(target_job_id, _job_state_update(
+                    prompt_state,
+                    'Running in ComfyUI.' if prompt_state == 'running' else 'Queued in ComfyUI.',
+                    progress=35 if prompt_state == 'running' else 5,
+                    finalization=meta,
+                )) or job
+
+            meta = _finalization_meta(job)
+            checks = int(meta.get('missing_history_checks') or 0) + 1
+            prior_state = str(job.get('state') or '').strip().lower()
+            has_saved_outputs = _job_has_persisted_outputs(job)
+            if checks < _FINALIZATION_MISSING_HISTORY_LIMIT and prior_state not in _FINALIZATION_TERMINAL_STATES:
+                meta = _with_finalization(
+                    job,
+                    phase='history_wait',
+                    missing_history_checks=checks,
+                    last_prompt_state='missing',
+                    last_error='Prompt is not in queue yet history is not available.',
+                )
+                return update_generation_job(target_job_id, _job_state_update(
+                    'finalizing_output',
+                    f'ComfyUI finished queueing this prompt; waiting for history/output registration ({checks}/{_FINALIZATION_MISSING_HISTORY_LIMIT})…',
+                    progress=95,
+                    finalization=meta,
+                )) or job
+            if prior_state == 'completed' and has_saved_outputs:
+                return job
+            meta = _with_finalization(
+                job,
+                phase='history_missing_failed',
+                missing_history_checks=checks,
+                last_prompt_state='missing',
+                last_error='Prompt was not found in queue or history after repeated checks.',
+            )
+            return update_generation_job(target_job_id, _job_state_update(
+                'error',
+                'Generation finished in the backend, but Neo could not resolve the final output record.',
+                progress=100,
+                finalization=meta,
+                error='The Image Backend no longer reports this prompt in queue/history. Neo waited for history/output registration and then stopped polling this job.',
+            )) or job
+        except Exception as exc:
+            logger.warning('Could not refresh generation queue state for %s | %s', target_job_id, exc)
+            return job
+    except Exception as exc:
+        logger.exception('Could not refresh generation job %s', target_job_id)
+        meta = _with_finalization(job, phase='refresh_failed', last_error=str(exc))
+        return update_generation_job(target_job_id, _job_state_update(
+            'error',
+            'Could not refresh generation job.',
+            progress=100,
+            finalization=meta,
+            error=str(exc),
+        )) or job
+
+
+async def _background_finalize_generation_job(job_id: str, *, max_checks: int = 240, interval_sec: float = 2.0) -> None:
+    """Keep finalizing a queued generation even if the frontend polling path stops."""
+    target = str(job_id or '').strip()
+    if not target:
+        return
+    for _ in range(max(1, int(max_checks))):
+        await asyncio.sleep(max(0.5, float(interval_sec)))
+        job = get_generation_job(target)
+        if not _job_needs_finalization(job):
+            return
+        refreshed = await _refresh_generation_job_from_backend(target)
+        if not _job_needs_finalization(refreshed):
+            return
+
+
+def _default_wildcard_root() -> Path:
+    root = get_library_root() / 'wildcards'
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
+def _resolve_wildcard_root(raw: str = '') -> Path:
+    value = str(raw or '').strip()
+    root = Path(value).expanduser() if value else _default_wildcard_root()
+    root.mkdir(parents=True, exist_ok=True)
+    return root.resolve()
+
+
+def _wildcard_token_for_path(root: Path, fp: Path) -> str:
+    rel = fp.resolve().relative_to(root.resolve())
+    return str(rel.with_suffix('')).replace('\\', '/')
+
+
+def _load_wildcard_values_file(fp: Path) -> list[str]:
+    suffix = fp.suffix.lower()
+    if suffix == '.txt':
+        values = []
+        for line in fp.read_text(encoding='utf-8', errors='ignore').splitlines():
+            item = line.strip()
+            if item and not item.startswith('#'):
+                values.append(item)
+        return values
+    if suffix == '.json':
+        payload = json.loads(fp.read_text(encoding='utf-8'))
+        if isinstance(payload, list):
+            return [str(item).strip() for item in payload if str(item).strip()]
+        if isinstance(payload, dict):
+            items = payload.get('items') if isinstance(payload.get('items'), list) else []
+            if items:
+                return [str(item).strip() for item in items if str(item).strip()]
+            values = []
+            for key, value in payload.items():
+                if isinstance(value, list):
+                    values.extend(str(item).strip() for item in value if str(item).strip())
+                elif isinstance(value, str) and value.strip():
+                    values.append(value.strip())
+            return values
+    if suffix in {'.yaml', '.yml'}:
+        try:
+            import yaml  # type: ignore
+            payload = yaml.safe_load(fp.read_text(encoding='utf-8'))
+        except Exception:
+            payload = None
+        if isinstance(payload, list):
+            return [str(item).strip() for item in payload if str(item).strip()]
+        if isinstance(payload, dict):
+            items = payload.get('items') if isinstance(payload.get('items'), list) else []
+            if items:
+                return [str(item).strip() for item in items if str(item).strip()]
+    return []
+
+
+def _queue_prompt_state(queue_payload, prompt_id: str) -> str | None:
+    target = str(prompt_id or '').strip()
+    if not target:
+        return None
+
+    def _contains_prompt(rows) -> bool:
+        for row in rows or []:
+            if isinstance(row, (list, tuple)):
+                for item in row:
+                    if str(item or '') == target:
+                        return True
+            elif isinstance(row, dict):
+                if str(row.get('prompt_id') or '') == target:
+                    return True
+            elif str(row or '') == target:
+                return True
+        return False
+
+    if isinstance(queue_payload, dict):
+        if _contains_prompt(queue_payload.get('queue_running')):
+            return 'running'
+        if _contains_prompt(queue_payload.get('queue_pending')):
+            return 'queued'
+    return None
+
+
+def _image_profile_or_error():
+    manager_state = get_manager_state()
+    session = (manager_state.get('session') or {}).get('image') or {}
+    if not session.get('connected'):
+        return None, session, json_error('Connect the Image Backend first.', 400)
+    profile = get_profile('image', session.get('profile_id') or None)
+    if not profile:
+        return None, session, json_error('Active Image Backend profile was not found.', 404)
+    adapter = ComfyBackendAdapter(profile.get('base_url') or session.get('base_url') or '', timeout_sec=int(profile.get('timeout_sec') or 30))
+    return adapter, session, None
+
+
+async def _save_upload(upload: UploadFile | None, prefix: str) -> dict | None:
+    if not upload:
+        return None
+    raw = await upload.read()
+    if not raw:
+        return None
+    ensure_generation_dirs()
+    filename = safe_name(Path(upload.filename or prefix).stem) + Path(upload.filename or '').suffix[:12]
+    target = GENERATION_INPUT_DIR / f'{prefix}_{filename}'
+    target.write_bytes(raw)
+    return {
+        'path': target,
+        'filename': target.name,
+        'content': raw,
+    }
+
+
+
+def _normalize_source_resize_mode(raw: str | None) -> str:
+    clean = str(raw or 'native').strip().lower()
+    return clean if clean in {'native', 'fit', 'crop', 'stretch'} else 'native'
+
+
+def _target_size_from_payload(payload: dict | None) -> tuple[int, int]:
+    payload = payload or {}
+    try:
+        width = int(float(payload.get('width') or 0) or 0)
+    except Exception:
+        width = 0
+    try:
+        height = int(float(payload.get('height') or 0) or 0)
+    except Exception:
+        height = 0
+    return max(0, width), max(0, height)
+
+
+def _image_size_from_bytes(raw: bytes | None) -> tuple[int, int]:
+    if not raw:
+        return 0, 0
+    try:
+        image = Image.open(io.BytesIO(raw))
+        image = ImageOps.exif_transpose(image)
+        width, height = image.size
+        return int(width or 0), int(height or 0)
+    except Exception:
+        return 0, 0
+
+
+def _is_detailer_output_pass(payload: dict | None) -> bool:
+    return bool((payload or {}).get('detailer_output_pass'))
+
+
+def _lock_detailer_output_source_to_native(payload: dict, saved_source: dict | None) -> list[str]:
+    """Preserve preview-derived Highres outputs for Selective Repair-only passes.
+
+    Preview ADetailer queues as img2img and can inherit source_resize_mode='crop'
+    from the main workspace. That is correct for normal img2img/inpaint, but
+    destructive for a later detailer pass: the selected Highres output gets copied
+    back to a source upload and cropped down to the base canvas before FaceDetailer
+    sees it. For detailer_output_pass the source image itself is the canvas.
+    """
+    if not _is_detailer_output_pass(payload):
+        return []
+    notes = ['Selective Repair later pass is source-native: source_resize_mode was forced to native so Highres outputs are not cropped back to the base canvas.']
+    payload['source_resize_mode'] = 'native'
+    width, height = _image_size_from_bytes((saved_source or {}).get('content') if saved_source else None)
+    if width > 0 and height > 0:
+        previous_width, previous_height = _target_size_from_payload(payload)
+        payload['width'] = width
+        payload['height'] = height
+        if (previous_width, previous_height) != (width, height):
+            notes.append(f'Selective Repair later pass is using the active source dimensions {width}×{height} instead of the workspace canvas {previous_width or "?"}×{previous_height or "?"}.')
+    return notes
+
+
+def _prepare_image_bytes_for_target(raw: bytes, fallback_name: str, *, width: int, height: int, resize_mode: str = 'native', is_mask: bool = False) -> tuple[bytes, str, list[str]]:
+    mode = _normalize_source_resize_mode(resize_mode)
+    if not raw or mode == 'native' or width <= 0 or height <= 0:
+        return raw, fallback_name, []
+    try:
+        image = Image.open(io.BytesIO(raw))
+        image = ImageOps.exif_transpose(image)
+    except Exception:
+        return raw, fallback_name, [f'Could not decode the {"mask" if is_mask else "source"} image for {mode} resize, so the original file was kept.']
+
+    original_size = tuple(int(v) for v in image.size)
+    if original_size == (width, height):
+        return raw, fallback_name, []
+
+    if is_mask:
+        if image.mode not in {'1', 'L', 'LA', 'RGBA'}:
+            image = image.convert('L')
+        elif image.mode == 'LA':
+            image = image.convert('L')
+    else:
+        if image.mode == 'P':
+            image = image.convert('RGBA')
+        elif image.mode not in {'RGB', 'RGBA'}:
+            image = image.convert('RGB')
+
+    resample = Image.Resampling.NEAREST if is_mask else Image.Resampling.LANCZOS
+    target = (int(width), int(height))
+    if mode == 'crop':
+        prepared = ImageOps.fit(image, target, method=resample, centering=(0.5, 0.5))
+        note = f'Applied center-crop resize to match {width}×{height} before upload.'
+    elif mode == 'fit':
+        if is_mask:
+            prepared = ImageOps.pad(image, target, method=resample, color=0, centering=(0.5, 0.5))
+        else:
+            pad_color = (0, 0, 0, 0) if 'A' in prepared_mode(image) else (0, 0, 0)
+            prepared = ImageOps.pad(image, target, method=resample, color=pad_color, centering=(0.5, 0.5))
+        note = f'Applied fit-to-target resize with padding to match {width}×{height} before upload.'
+    elif mode == 'stretch':
+        prepared = image.resize(target, resample=resample)
+        note = f'Applied stretch resize to match {width}×{height} before upload.'
+    else:
+        return raw, fallback_name, []
+
+    output = io.BytesIO()
+    save_kwargs = {}
+    if is_mask and prepared.mode not in {'1', 'L'}:
+        prepared = prepared.convert('L')
+    prepared.save(output, format='PNG', **save_kwargs)
+    stem = safe_name(Path(fallback_name or ('mask' if is_mask else 'source')).stem) or ('mask' if is_mask else 'source')
+    next_name = f'{stem}_{mode}_{width}x{height}.png'
+    prefix = 'Mask' if is_mask else 'Source image'
+    return output.getvalue(), next_name, [f'{prefix}: {note}']
+
+
+def prepared_mode(image: Image.Image) -> str:
+    try:
+        return str(image.mode or '')
+    except Exception:
+        return ''
+
+
+async def _prepare_generation_source_assets(payload: dict, saved_source: dict | None, saved_mask: dict | None) -> tuple[dict | None, dict | None, list[str]]:
+    notes: list[str] = []
+    if _is_detailer_output_pass(payload):
+        notes.extend(_lock_detailer_output_source_to_native(payload, saved_source))
+        return saved_source, saved_mask, notes
+    mode = str(payload.get('mode') or payload.get('workflow_type') or 'txt2img').strip().lower()
+    resize_mode = _normalize_source_resize_mode(payload.get('source_resize_mode') or 'native')
+    width, height = _target_size_from_payload(payload)
+    if resize_mode == 'native' or width <= 0 or height <= 0:
+        return saved_source, saved_mask, notes
+    if mode not in {'img2img', 'inpaint'}:
+        return saved_source, saved_mask, notes
+    if saved_source:
+        source_content, source_name, source_notes = _prepare_image_bytes_for_target(
+            saved_source.get('content') or b'',
+            str(saved_source.get('filename') or 'source.png'),
+            width=width,
+            height=height,
+            resize_mode=resize_mode,
+            is_mask=False,
+        )
+        saved_source = {
+            **saved_source,
+            'content': source_content,
+            'filename': source_name,
+            'path': GENERATION_INPUT_DIR / source_name,
+        }
+        try:
+            saved_source['path'].write_bytes(source_content)
+        except Exception:
+            pass
+        notes.extend(source_notes)
+    if saved_mask:
+        mask_content, mask_name, mask_notes = _prepare_image_bytes_for_target(
+            saved_mask.get('content') or b'',
+            str(saved_mask.get('filename') or 'mask.png'),
+            width=width,
+            height=height,
+            resize_mode=resize_mode,
+            is_mask=True,
+        )
+        saved_mask = {
+            **saved_mask,
+            'content': mask_content,
+            'filename': mask_name,
+            'path': GENERATION_INPUT_DIR / mask_name,
+        }
+        try:
+            saved_mask['path'].write_bytes(mask_content)
+        except Exception:
+            pass
+        notes.extend(mask_notes)
+    return saved_source, saved_mask, notes
+
+
+
+def _remote_path_from_upload_result(remote: dict, fallback_filename: str) -> str:
+    remote_name = str(remote.get('name') or fallback_filename)
+    remote_subfolder = str(remote.get('subfolder') or 'neo_studio').strip('/')
+    return f'{remote_subfolder}/{remote_name}' if remote_subfolder else remote_name
+
+
+async def _upload_saved(adapter: ComfyBackendAdapter, saved: dict | None):
+    if not saved:
+        return ''
+    remote = await adapter.upload_image(saved['content'], saved['filename'])
+    return _remote_path_from_upload_result(remote, saved['filename'])
+
+
+def _preprocess_control_image(raw: bytes, preprocessor: str, fallback_name: str) -> tuple[bytes, str, list[str]]:
+    mode = str(preprocessor or 'none').strip().lower()
+    if mode in {'', 'none'}:
+        return raw, fallback_name, []
+    if mode in {'openpose', 'depth'}:
+        return raw, fallback_name, [f'Using the prebuilt {mode} control map as-is.']
+    image_array = np.frombuffer(raw, dtype=np.uint8)
+    image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
+    if image is None:
+        return raw, fallback_name, [f'Preprocessor {mode} was skipped because the control image could not be decoded.']
+
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    stem = safe_name(Path(fallback_name or 'control').stem) or 'control'
+    note = ''
+    output = None
+
+    try:
+        if mode == 'canny':
+            output = cv2.Canny(cv2.GaussianBlur(gray, (3, 3), 0), 100, 200)
+            note = 'Applied built-in Canny preprocessor before upload.'
+        elif mode == 'softedge':
+            blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+            sx = cv2.Sobel(blurred, cv2.CV_32F, 1, 0, ksize=3)
+            sy = cv2.Sobel(blurred, cv2.CV_32F, 0, 1, ksize=3)
+            mag = cv2.magnitude(sx, sy)
+            output = cv2.normalize(mag, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+            note = 'Applied built-in Soft Edge preprocessor before upload.'
+        elif mode == 'lineart':
+            filtered = cv2.bilateralFilter(gray, 7, 30, 30)
+            output = cv2.adaptiveThreshold(filtered, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
+            note = 'Applied built-in Lineart preprocessor before upload.'
+        elif mode == 'lineart_anime':
+            filtered = cv2.medianBlur(gray, 5)
+            output = cv2.adaptiveThreshold(filtered, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 9, 3)
+            note = 'Applied built-in Lineart Anime preprocessor before upload.'
+        elif mode == 'scribble':
+            filtered = cv2.GaussianBlur(gray, (3, 3), 0)
+            edges = cv2.Canny(filtered, 64, 160)
+            output = cv2.bitwise_not(edges)
+            note = 'Applied built-in Scribble preprocessor before upload.'
+        elif mode == 'threshold':
+            _ret, output = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            note = 'Applied built-in Threshold preprocessor before upload.'
+        elif mode == 'invert':
+            output = cv2.bitwise_not(gray)
+            note = 'Applied built-in Invert preprocessor before upload.'
+        else:
+            return raw, fallback_name, [f'Preprocessor {mode} is not supported yet in the legacy shell, so the original control image was used.']
+    except Exception:
+        return raw, fallback_name, [f'Preprocessor {mode} failed, so the original control image was used.']
+
+    encoded_ok, encoded = cv2.imencode('.png', output)
+    if not encoded_ok:
+        return raw, fallback_name, [f'{mode} preprocessing failed during PNG encode, so the original control image was used.']
+    return encoded.tobytes(), f'{stem}_{mode}.png', [note]
+
+
+def _extract_history_images(history_entry: dict | None) -> list[dict]:
+    images: list[dict] = []
+    if not isinstance(history_entry, dict):
+        return images
+    for node_data in (history_entry.get('outputs') or {}).values():
+        if not isinstance(node_data, dict):
+            continue
+        for image in node_data.get('images') or []:
+            if isinstance(image, dict) and image.get('filename'):
+                images.append(image)
+    return images
+
+
+def _extract_history_texts(history_entry: dict | None) -> list[str]:
+    texts: list[str] = []
+    if not isinstance(history_entry, dict):
+        return texts
+    outputs = history_entry.get('outputs') or {}
+    if not isinstance(outputs, dict):
+        return texts
+    for node_data in outputs.values():
+        if not isinstance(node_data, dict):
+            continue
+        for key, value in node_data.items():
+            key_lower = str(key or '').strip().lower()
+            if key_lower in {'images', 'gifs', 'audio', 'videos', 'filename'}:
+                continue
+            if isinstance(value, str) and value.strip():
+                texts.append(value.strip())
+                continue
+            if isinstance(value, list):
+                for item in value:
+                    if isinstance(item, str) and item.strip():
+                        texts.append(item.strip())
+    return texts
+
+
+def _parse_tag_caption(caption: str | None) -> list[str]:
+    raw = str(caption or '').strip()
+    if not raw:
+        return []
+    out: list[str] = []
+    seen: set[str] = set()
+    for part in raw.replace('\n', ',').split(','):
+        tag = str(part or '').strip()
+        if not tag:
+            continue
+        lowered = tag.lower()
+        if lowered in seen:
+            continue
+        seen.add(lowered)
+        out.append(tag)
+    return out
+
+
+def _tag_assist_output_inputs(required: dict[str, object], text_ref: list[object]) -> dict[str, object]:
+    inputs: dict[str, object] = {}
+    for key, spec in required.items():
+        key_lower = str(key or '').strip().lower()
+        input_type = ''
+        meta = {}
+        choices: list[object] = []
+        if isinstance(spec, (list, tuple)) and spec:
+            first = spec[0]
+            if isinstance(first, str):
+                input_type = first
+            elif isinstance(first, (list, tuple)):
+                choices = list(first)
+            if len(spec) > 1 and isinstance(spec[1], dict):
+                meta = spec[1]
+        if input_type in {'STRING', 'TEXT'} or key_lower in {'text', 'string', 'source', 'value', 'input'}:
+            inputs[key] = list(text_ref)
+            continue
+        if 'default' in meta:
+            inputs[key] = meta.get('default')
+            continue
+        if input_type == 'BOOLEAN':
+            inputs[key] = True
+            continue
+        if input_type == 'INT':
+            inputs[key] = 0
+            continue
+        if input_type == 'FLOAT':
+            inputs[key] = 0.0
+            continue
+        if choices:
+            inputs[key] = choices[0]
+            continue
+        if input_type == 'STRING':
+            inputs[key] = ''
+    return inputs
+
+
+def _tag_assist_inputs(required: dict[str, object], image_ref: list[object], threshold: float, filter_tags: str) -> dict[str, object]:
+    inputs: dict[str, object] = {}
+    parsed_filter = str(filter_tags or '').strip()
+    for key, spec in required.items():
+        key_lower = str(key or '').strip().lower()
+        input_type = ''
+        meta = {}
+        choices: list[object] = []
+        if isinstance(spec, (list, tuple)) and spec:
+            first = spec[0]
+            if isinstance(first, str):
+                input_type = first
+            elif isinstance(first, (list, tuple)):
+                choices = list(first)
+            if len(spec) > 1 and isinstance(spec[1], dict):
+                meta = spec[1]
+        if key_lower in {'image', 'images'} or input_type == 'IMAGE':
+            inputs[key] = list(image_ref)
+            continue
+        if key_lower == 'threshold':
+            inputs[key] = float(threshold)
+            continue
+        if key_lower in {'sort_alpha', 'sortalphabetically'}:
+            inputs[key] = False
+            continue
+        if key_lower in {'use_spaces', 'replace_underscore'}:
+            inputs[key] = True
+            continue
+        if key_lower in {'escape', 'escape_bracket'}:
+            inputs[key] = False
+            continue
+        if key_lower in {'filter_tags', 'filter'}:
+            inputs[key] = parsed_filter
+            continue
+        if key_lower in {'prefix', 'suffix'}:
+            inputs[key] = ''
+            continue
+        if key_lower in {'enabled', 'enable'}:
+            inputs[key] = True
+            continue
+        if key_lower in {'device_mode', 'device'} and choices:
+            preferred = next((item for item in choices if str(item or '').strip().upper() in {'AUTO', 'DEFAULT', 'CUDA'}), None)
+            inputs[key] = preferred if preferred is not None else choices[0]
+            continue
+        if 'default' in meta:
+            inputs[key] = meta.get('default')
+            continue
+        if input_type == 'BOOLEAN':
+            inputs[key] = False
+            continue
+        if input_type == 'INT':
+            inputs[key] = 0
+            continue
+        if input_type == 'FLOAT':
+            inputs[key] = 0.0
+            continue
+        if choices:
+            inputs[key] = choices[0]
+            continue
+        if input_type == 'STRING':
+            inputs[key] = ''
+    return inputs
+
+
+def _object_required_inputs(node_info: dict | None) -> dict[str, object]:
+    if not isinstance(node_info, dict):
+        return {}
+    input_info = node_info.get('input') if isinstance(node_info.get('input'), dict) else {}
+    return (input_info.get('required') or {}) if isinstance(input_info, dict) else {}
+
+
+def _build_aux_node_inputs(required: dict[str, object], image_ref: list[object], mode: str) -> dict[str, object]:
+    inputs: dict[str, object] = {}
+    for key, spec in required.items():
+        key_lower = str(key or '').strip().lower()
+        input_type = ''
+        meta = {}
+        choices: list[object] = []
+        if isinstance(spec, (list, tuple)) and spec:
+            first = spec[0]
+            if isinstance(first, str):
+                input_type = first
+            elif isinstance(first, (list, tuple)):
+                choices = list(first)
+            if len(spec) > 1 and isinstance(spec[1], dict):
+                meta = spec[1]
+        if key_lower in {'image', 'images'} or input_type == 'IMAGE':
+            inputs[key] = list(image_ref)
+            continue
+        if 'default' in meta:
+            inputs[key] = meta.get('default')
+            continue
+        if key_lower in {'resolution', 'detect_resolution'}:
+            inputs[key] = 512
+            continue
+        if input_type in {'INT', 'FLOAT'}:
+            inputs[key] = 0 if input_type == 'INT' else 0.0
+            continue
+        if input_type == 'BOOLEAN':
+            inputs[key] = True
+            continue
+        if choices:
+            lowered = [str(item).strip().lower() for item in choices]
+            preferred = None
+            if key_lower.startswith('detect_'):
+                preferred = next((item for item in choices if str(item).strip().lower() in {'enable', 'enabled', 'true', 'yes'}), None)
+            if mode == 'openpose' and key_lower in {'bbox_detector', 'pose_estimator'}:
+                preferred = next((item for item in choices if 'dw' in str(item).strip().lower()), None)
+            inputs[key] = preferred if preferred is not None else choices[0]
+            continue
+        if input_type == 'STRING':
+            inputs[key] = ''
+    return inputs
+
+
+async def _run_controlnet_aux_map(adapter: ComfyBackendAdapter, raw: bytes, mode: str, fallback_name: str) -> tuple[bytes, str, list[str]]:
+    mode = str(mode or '').strip().lower()
+    if mode not in {'openpose', 'depth'}:
+        raise ValueError('Only OpenPose and Depth maps are supported here.')
+
+    candidates = {
+        'openpose': ['DWPreprocessor', 'OpenposePreprocessor'],
+        'depth': ['DepthAnythingV2Preprocessor', 'DepthAnythingPreprocessor', 'MiDaSDepthMapPreprocessor', 'MiDaS-DepthMapPreprocessor', 'ZoeDepthMapPreprocessor', 'Zoe-DepthMapPreprocessor'],
+    }.get(mode, [])
+
+    selected_name = ''
+    selected_info = None
+    for node_name in candidates:
+        try:
+            info = await adapter.get_object_info(node_name)
+        except Exception:
+            info = {}
+        if isinstance(info, dict) and node_name in info:
+            info = info.get(node_name)
+        if isinstance(info, dict) and info:
+            selected_name = node_name
+            selected_info = info
+            break
+    if not selected_name:
+        raise ValueError(f'No {mode} preprocessor node was detected in the connected ComfyUI backend.')
+
+    ensure_generation_dirs()
+    source_name = f'controlmap_{mode}_{safe_name(Path(fallback_name or mode).stem)[:48]}.png'
+    local_path = GENERATION_INPUT_DIR / source_name
+    local_path.write_bytes(raw)
+    remote = await adapter.upload_image(raw, local_path.name)
+    remote_name = _remote_path_from_upload_result(remote, local_path.name)
+
+    graph = {
+        '1': {
+            'class_type': 'LoadImage',
+            'inputs': {
+                'image': remote_name,
+                'upload': 'image',
+            },
+        },
+    }
+    aux_inputs = _build_aux_node_inputs(_object_required_inputs(selected_info), ['1', 0], mode)
+    graph['2'] = {
+        'class_type': selected_name,
+        'inputs': aux_inputs,
+    }
+    graph['3'] = {
+        'class_type': 'SaveImage',
+        'inputs': {
+            'filename_prefix': f'neo_studio/control_maps/{mode}',
+            'images': ['2', 0],
+        },
+    }
+
+    queued = await adapter.queue_prompt(graph)
+    prompt_id = str(queued.get('prompt_id') or '').strip()
+    if not prompt_id:
+        raise ValueError('ComfyUI did not return a prompt id for the ControlNet map build.')
+
+    deadline = time.monotonic() + 45.0
+    history_entry = None
+    while time.monotonic() < deadline:
+        history = await adapter.get_history(prompt_id)
+        history_entry = history.get(prompt_id) if isinstance(history, dict) else None
+        images = _extract_history_images(history_entry)
+        if images:
+            image = images[0]
+            view_url = _build_local_generation_output_url(image.get('filename') or '', image.get('subfolder') or '', image.get('type') or 'output')
+            if not view_url:
+                break
+            output_bytes = await _download_output_bytes(view_url, timeout_sec=45)
+            filename = image.get('filename') or f'{mode}_map.png'
+            note = f'Built {mode} map with {selected_name}.'
+            return output_bytes, filename, [note]
+        await asyncio.sleep(0.5)
+
+    raise ValueError(f'ComfyUI did not finish building the {mode} map in time.')
+
+
+async def _prepare_controlnet_units(adapter: ComfyBackendAdapter, payload: dict, uploads: dict[str, UploadFile | None]) -> list[str]:
+    compile_notes: list[str] = []
+    units = payload.get('controlnet_units')
+    if not isinstance(units, list):
+        units = []
+    normalized_units = []
+    for index, unit in enumerate(units):
+        if not isinstance(unit, dict):
+            continue
+        model_name = str(unit.get('model') or unit.get('controlnet_name') or '').strip()
+        if not model_name:
+            continue
+        uid = str(unit.get('uid') or f'unit_{index + 1}').strip() or f'unit_{index + 1}'
+        upload_key = str(unit.get('image_field') or f'control_image__{uid}')
+        upload = uploads.get(upload_key)
+        remote_name = ''
+        if upload:
+            raw = await upload.read()
+            if raw:
+                processed_raw, processed_name, notes = _preprocess_control_image(raw, unit.get('preprocessor') or 'none', upload.filename or f'{uid}.png')
+                compile_notes.extend(notes)
+                ensure_generation_dirs()
+                target = GENERATION_INPUT_DIR / f'control_{uid}_{safe_name(Path(processed_name).stem)}{Path(processed_name).suffix[:12]}'
+                target.write_bytes(processed_raw)
+                remote = await adapter.upload_image(processed_raw, target.name)
+                remote_name = _remote_path_from_upload_result(remote, target.name)
+        normalized_units.append({
+            'uid': uid,
+            'model': model_name,
+            'preprocessor': str(unit.get('preprocessor') or 'none').strip().lower() or 'none',
+            'strength': unit.get('strength') if unit.get('strength') is not None else 1.0,
+            'image_name': remote_name,
+        })
+    if normalized_units and payload.get('control_image_name') and not normalized_units[0].get('image_name'):
+        normalized_units[0]['image_name'] = str(payload.get('control_image_name') or '').strip()
+    payload['controlnet_units'] = normalized_units
+    if normalized_units:
+        first = normalized_units[0]
+        payload['controlnet_name'] = first.get('model') or payload.get('controlnet_name') or ''
+        payload['control_image_name'] = first.get('image_name') or payload.get('control_image_name') or ''
+        payload['controlnet_strength'] = first.get('strength') if first.get('strength') is not None else payload.get('controlnet_strength')
+    return compile_notes
+
+
+async def _prepare_ipadapter_units(adapter: ComfyBackendAdapter, payload: dict, uploads: dict[str, UploadFile | list[UploadFile] | None]) -> list[str]:
+    compile_notes: list[str] = []
+    units = payload.get('ipadapter_units')
+    if not isinstance(units, list):
+        units = []
+    normalized_units = []
+    for index, unit in enumerate(units):
+        if not isinstance(unit, dict):
+            continue
+        mode = str(unit.get('mode') or 'standard').strip().lower() or 'standard'
+        model_name = str(unit.get('model') or unit.get('ipadapter_name') or '').strip()
+        clip_vision = str(unit.get('clip_vision') or unit.get('clip_vision_name') or '').strip()
+        if not clip_vision or (mode != 'faceid' and not model_name):
+            continue
+        uid = str(unit.get('uid') or f'unit_{index + 1}').strip() or f'unit_{index + 1}'
+        upload_key = str(unit.get('image_field') or f'ipadapter_image__{uid}')
+        upload_value = uploads.get(upload_key)
+        upload_list = upload_value if isinstance(upload_value, list) else ([upload_value] if upload_value else [])
+        remote_names: list[str] = []
+        for upload_index, upload in enumerate(upload_list):
+            if not upload:
+                continue
+            raw = await upload.read()
+            if not raw:
+                continue
+            ensure_generation_dirs()
+            suffix = Path(upload.filename or f'{uid}_{upload_index + 1}.png').suffix or '.png'
+            target = GENERATION_INPUT_DIR / f'ipadapter_{uid}_{upload_index + 1}_{safe_name(Path(upload.filename or f"{uid}_{upload_index + 1}").stem)}{suffix[:12]}'
+            target.write_bytes(raw)
+            remote = await adapter.upload_image(raw, target.name)
+            remote_name = _remote_path_from_upload_result(remote, target.name)
+            if remote_name:
+                remote_names.append(remote_name)
+        remote_name = remote_names[0] if remote_names else ''
+        normalized_units.append({
+            'uid': uid,
+            'mode': mode,
+            'model': model_name,
+            'clip_vision': clip_vision,
+            'weight_type': str(unit.get('weight_type') or 'linear').strip() or 'linear',
+            'combine_embeds': str(unit.get('combine_embeds') or 'concat').strip() or 'concat',
+            'embeds_scaling': str(unit.get('embeds_scaling') or 'V only').strip() or 'V only',
+            'start_at': unit.get('start_at') if unit.get('start_at') is not None else 0.0,
+            'end_at': unit.get('end_at') if unit.get('end_at') is not None else 1.0,
+            'weight': unit.get('weight') if unit.get('weight') is not None else 1.0,
+            'weight_faceidv2': unit.get('weight_faceidv2') if unit.get('weight_faceidv2') is not None else (unit.get('weight') if unit.get('weight') is not None else 1.0),
+            'faceid_preset': str(unit.get('faceid_preset') or 'FACEID PLUS V2').strip() or 'FACEID PLUS V2',
+            'faceid_provider': str(unit.get('faceid_provider') or 'CUDA').strip() or 'CUDA',
+            'faceid_lora_strength': unit.get('faceid_lora_strength') if unit.get('faceid_lora_strength') is not None else 0.75,
+            'image_name': remote_name,
+            'image_names': remote_names,
+        })
+    if normalized_units and payload.get('ipadapter_image_name') and not normalized_units[0].get('image_name'):
+        normalized_units[0]['image_name'] = str(payload.get('ipadapter_image_name') or '').strip()
+        if not normalized_units[0].get('image_names'):
+            normalized_units[0]['image_names'] = [normalized_units[0]['image_name']] if normalized_units[0].get('image_name') else []
+    bound_slots_raw = payload.get('scene_director_ipadapter_bound_slots')
+    bound_slots = set()
+    if isinstance(bound_slots_raw, list):
+        for item in bound_slots_raw:
+            try:
+                slot = int(item)
+            except Exception:
+                slot = 0
+            if slot > 0:
+                bound_slots.add(slot)
+    suppress_global_scene_ip = bool(payload.get('scene_director_suppress_global_ipadapter'))
+    if bound_slots or suppress_global_scene_ip:
+        payload['scene_director_bound_ipadapter_units_source'] = [dict(unit, _neo_slot_index=index + 1) for index, unit in enumerate(normalized_units)]
+        if suppress_global_scene_ip:
+            suppressed_count = len(normalized_units)
+            normalized_units = []
+            if suppressed_count:
+                compile_notes.append(f"Scene Director suppressed {suppressed_count} global IPAdapter slot(s); only region-bound IPAdapter slots will be applied.")
+        else:
+            normalized_units = [unit for index, unit in enumerate(normalized_units) if (index + 1) not in bound_slots]
+            if normalized_units:
+                compile_notes.append(f"Scene Director moved {len(bound_slots)} bound IPAdapter slot(s) out of the global IPAdapter stack for masked regional use.")
+            else:
+                compile_notes.append(f"Scene Director moved {len(bound_slots)} bound IPAdapter slot(s) out of the global IPAdapter stack; no global IPAdapter slots remain.")
+    payload['ipadapter_units'] = normalized_units
+    if normalized_units:
+        first = normalized_units[0]
+        payload['ipadapter_mode'] = first.get('mode') or payload.get('ipadapter_mode') or 'standard'
+        payload['ipadapter_name'] = first.get('model') or payload.get('ipadapter_name') or ''
+        payload['ipadapter_clip_vision'] = first.get('clip_vision') or payload.get('ipadapter_clip_vision') or ''
+        payload['ipadapter_image_name'] = first.get('image_name') or payload.get('ipadapter_image_name') or ''
+        payload['ipadapter_image_names'] = first.get('image_names') or payload.get('ipadapter_image_names') or ([] if not payload.get('ipadapter_image_name') else [payload.get('ipadapter_image_name')])
+        payload['ipadapter_weight'] = first.get('weight') if first.get('weight') is not None else payload.get('ipadapter_weight')
+        payload['ipadapter_weight_faceidv2'] = first.get('weight_faceidv2') if first.get('weight_faceidv2') is not None else payload.get('ipadapter_weight_faceidv2')
+        payload['ipadapter_weight_type'] = first.get('weight_type') or payload.get('ipadapter_weight_type') or 'linear'
+        payload['ipadapter_combine_embeds'] = first.get('combine_embeds') or payload.get('ipadapter_combine_embeds') or 'concat'
+        payload['ipadapter_embeds_scaling'] = first.get('embeds_scaling') or payload.get('ipadapter_embeds_scaling') or 'V only'
+        payload['ipadapter_faceid_preset'] = first.get('faceid_preset') or payload.get('ipadapter_faceid_preset') or 'FACEID PLUS V2'
+        payload['ipadapter_faceid_provider'] = first.get('faceid_provider') or payload.get('ipadapter_faceid_provider') or 'CUDA'
+        payload['ipadapter_faceid_lora_strength'] = first.get('faceid_lora_strength') if first.get('faceid_lora_strength') is not None else payload.get('ipadapter_faceid_lora_strength')
+        payload['ipadapter_start_at'] = first.get('start_at') if first.get('start_at') is not None else payload.get('ipadapter_start_at')
+        payload['ipadapter_end_at'] = first.get('end_at') if first.get('end_at') is not None else payload.get('ipadapter_end_at')
+    return compile_notes
+
+
+async def _prepare_scene_director_ipadapter_units(adapter: ComfyBackendAdapter, payload: dict, uploads: dict[str, UploadFile | list[UploadFile] | None]) -> list[str]:
+    compile_notes: list[str] = []
+
+    # Phase 10.3.2 hard bridge: Identity Profiles must not depend on the main
+    # Neo IPAdapter toggle. The Scene Director UI emits scene_director_identity_units;
+    # here we convert those profile-backed units into the exact
+    # scene_director_ipadapter_units shape consumed by the Comfy graph builder.
+    identity_units = payload.get('scene_director_identity_units')
+    if not isinstance(identity_units, list):
+        identity_units = payload.get('identity_profile_units') if isinstance(payload.get('identity_profile_units'), list) else []
+    bridged_identity_units: list[dict] = []
+    for idx, unit in enumerate(identity_units or []):
+        if not isinstance(unit, dict):
+            continue
+        mode = str(unit.get('mode') or unit.get('ipadapter_mode') or 'faceid').strip().lower() or 'faceid'
+        if mode == 'ipadapter':
+            mode = 'standard'
+        if mode not in {'standard', 'faceid'}:
+            mode = 'faceid'
+        image_names = unit.get('image_names') if isinstance(unit.get('image_names'), list) else unit.get('reference_images')
+        if not isinstance(image_names, list):
+            image_names = []
+        image_names = [str(item or '').strip() for item in image_names if str(item or '').strip()]
+        image_name = str(unit.get('image_name') or '').strip()
+        if image_name and image_name not in image_names:
+            image_names.insert(0, image_name)
+        if not image_names:
+            compile_notes.append(f"Scene Director Identity Profile skipped {str(unit.get('profile_name') or unit.get('label') or idx + 1)}: no reference image filename/path was provided.")
+            continue
+        clip_vision = str(unit.get('clip_vision') or unit.get('clip_vision_model') or '').strip()
+        if not clip_vision or clip_vision.lower() == 'auto':
+            clip_vision = str(payload.get('ipadapter_clip_vision') or 'CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors').strip()
+        model_name = str(unit.get('model') or unit.get('ipadapter_model') or '').strip()
+        if mode != 'faceid' and not model_name:
+            model_name = str(payload.get('ipadapter_name') or 'ip-adapter-plus_sdxl_vit-h.safetensors').strip()
+        try:
+            region_index = int(unit.get('region_index') or idx + 1)
+        except Exception:
+            region_index = idx + 1
+        region_index = max(1, min(4, region_index))
+        bridged_identity_units.append({
+            'uid': str(unit.get('uid') or unit.get('profile_id') or unit.get('region_id') or f'identity_profile_{idx + 1}'),
+            'mode': mode,
+            'model': '' if mode == 'faceid' else model_name,
+            'clip_vision': clip_vision,
+            'faceid_preset': str(unit.get('faceid_preset') or payload.get('ipadapter_faceid_preset') or 'FACEID PLUS V2').strip() or 'FACEID PLUS V2',
+            'faceid_provider': str(unit.get('faceid_provider') or payload.get('ipadapter_faceid_provider') or 'CUDA').strip() or 'CUDA',
+            'faceid_lora_strength': unit.get('faceid_lora_strength') if unit.get('faceid_lora_strength') is not None else payload.get('ipadapter_faceid_lora_strength', 0.75),
+            'weight_faceidv2': unit.get('weight_faceidv2') if unit.get('weight_faceidv2') is not None else unit.get('weight', 0.45),
+            'image_name': image_names[0],
+            'image_names': image_names,
+            'weight': unit.get('weight') if unit.get('weight') is not None else 0.45,
+            'weight_type': str(unit.get('weight_type') or 'linear').strip() or 'linear',
+            'combine_embeds': str(unit.get('combine_embeds') or 'concat').strip() or 'concat',
+            'start_at': unit.get('start_at') if unit.get('start_at') is not None else 0.0,
+            'end_at': unit.get('end_at') if unit.get('end_at') is not None else 0.65,
+            'embeds_scaling': str(unit.get('embeds_scaling') or 'V only').strip() or 'V only',
+            'region_id': str(unit.get('region_id') or ''),
+            'region_index': region_index,
+            'label': str(unit.get('profile_name') or unit.get('label') or f'Identity Profile {idx + 1}'),
+            'attn_mask_output_index': int(unit.get('attn_mask_output_index') or (5 + region_index)),
+            'source': 'scene_director_identity_profile_bridge',
+            'composer_mode': 'identity_profile',
+        })
+    if bridged_identity_units:
+        existing_scene_units = payload.get('scene_director_ipadapter_units') if isinstance(payload.get('scene_director_ipadapter_units'), list) else []
+        existing_keys = {str(item.get('uid') or '') for item in existing_scene_units if isinstance(item, dict)}
+        merged = list(existing_scene_units)
+        for unit in bridged_identity_units:
+            if str(unit.get('uid') or '') not in existing_keys:
+                merged.append(unit)
+        payload['scene_director_ipadapter_units'] = merged
+        compile_notes.append(f"Scene Director bridged {len(bridged_identity_units)} Identity Profile(s) into masked IPAdapter/FaceID unit(s).")
+    bindings = payload.get('scene_director_ipadapter_bindings')
+    if isinstance(bindings, list) and bindings:
+        source_units = payload.get('scene_director_bound_ipadapter_units_source')
+        if not isinstance(source_units, list):
+            source_units = payload.get('ipadapter_units') if isinstance(payload.get('ipadapter_units'), list) else []
+        normalized_units = []
+        for binding in bindings:
+            if not isinstance(binding, dict):
+                continue
+            try:
+                slot = int(binding.get('slot') or 0)
+            except Exception:
+                slot = 0
+            if slot < 1 or slot > len(source_units):
+                compile_notes.append(f"Scene Director IPAdapter binding skipped: slot {slot or '?'} is not available.")
+                continue
+            source = source_units[slot - 1]
+            if not isinstance(source, dict):
+                continue
+            mode = str(source.get('mode') or 'standard').strip().lower() or 'standard'
+            if mode not in {'standard', 'faceid'}:
+                mode = 'standard'
+            model_name = str(source.get('model') or source.get('ipadapter_name') or '').strip()
+            clip_vision = str(source.get('clip_vision') or source.get('clip_vision_name') or '').strip()
+            image_names = source.get('image_names') if isinstance(source.get('image_names'), list) else []
+            image_names = [str(item or '').strip() for item in image_names if str(item or '').strip()]
+            image_name = str(source.get('image_name') or '').strip()
+            if image_name and image_name not in image_names:
+                image_names.insert(0, image_name)
+            if not clip_vision or not image_names or (mode != 'faceid' and not model_name):
+                missing = 'CLIP Vision/reference image' if mode == 'faceid' else 'model, CLIP Vision, or reference image'
+                compile_notes.append(f"Scene Director IPAdapter binding skipped slot {slot}: missing {missing}.")
+                continue
+            region_index = int(binding.get('region_index') or len(normalized_units) + 1)
+            use_slot_weight = str(binding.get('weight_mode') or 'slot_default').strip().lower() != 'custom'
+            normalized_units.append({
+                'uid': str(binding.get('uid') or f'scene_slot_{slot}_region_{region_index}'),
+                'mode': mode,
+                'model': model_name,
+                'clip_vision': clip_vision,
+                'faceid_preset': str(source.get('faceid_preset') or 'FACEID PLUS V2').strip() or 'FACEID PLUS V2',
+                'faceid_provider': str(source.get('faceid_provider') or 'CUDA').strip() or 'CUDA',
+                'faceid_lora_strength': source.get('faceid_lora_strength'),
+                'weight_faceidv2': source.get('weight_faceidv2') if use_slot_weight else binding.get('weight_faceidv2'),
+                'image_name': image_names[0],
+                'image_names': image_names,
+                'weight': source.get('weight') if use_slot_weight else binding.get('weight'),
+                'weight_type': str(source.get('weight_type') or 'linear').strip() or 'linear',
+                'combine_embeds': str(source.get('combine_embeds') or 'concat').strip() or 'concat',
+                'start_at': source.get('start_at') if use_slot_weight else binding.get('start_at'),
+                'end_at': source.get('end_at') if use_slot_weight else binding.get('end_at'),
+                'embeds_scaling': str(source.get('embeds_scaling') or 'V only').strip() or 'V only',
+                'region_id': str(binding.get('region_id') or ''),
+                'region_index': region_index,
+                'label': str(binding.get('label') or f'Region {region_index}'),
+                'slot': slot,
+                'attn_mask_output_index': int(binding.get('attn_mask_output_index') or (5 + region_index)),
+                'source': 'scene_director_existing_ipadapter_slot',
+            })
+        payload['scene_director_ipadapter_units'] = normalized_units
+        if normalized_units:
+            faceid_bound = sum(1 for unit in normalized_units if str(unit.get('mode') or '').lower() == 'faceid')
+            if faceid_bound:
+                compile_notes.append(f"Scene Director bound {faceid_bound} FaceID slot(s) to region masks.")
+            compile_notes.append(f"Scene Director bound {len(normalized_units)} region(s) to existing Neo IPAdapter slot(s).")
+        return compile_notes
+
+    units = payload.get('scene_director_ipadapter_units')
+    if not isinstance(units, list):
+        return compile_notes
+    normalized_units = []
+    for index, unit in enumerate(units):
+        if not isinstance(unit, dict):
+            continue
+        mode = str(unit.get('mode') or 'standard').strip().lower() or 'standard'
+        if mode not in {'standard', 'faceid'}:
+            mode = 'standard'
+        model_name = str(unit.get('model') or unit.get('ipadapter_name') or '').strip()
+        clip_vision = str(unit.get('clip_vision') or unit.get('clip_vision_name') or '').strip()
+        if not clip_vision or (mode != 'faceid' and not model_name):
+            continue
+        uid = str(unit.get('uid') or f'scene_region_{index + 1}').strip() or f'scene_region_{index + 1}'
+        upload_key = str(unit.get('image_field') or f'ipadapter_image__{uid}')
+        upload_value = uploads.get(upload_key)
+        upload_list = upload_value if isinstance(upload_value, list) else ([upload_value] if upload_value else [])
+        remote_names: list[str] = []
+        for upload_index, upload in enumerate(upload_list):
+            if not upload:
+                continue
+            raw = await upload.read()
+            if not raw:
+                continue
+            ensure_generation_dirs()
+            suffix = Path(upload.filename or f'{uid}_{upload_index + 1}.png').suffix or '.png'
+            target = GENERATION_INPUT_DIR / f'ipadapter_{uid}_{upload_index + 1}_{safe_name(Path(upload.filename or f"{uid}_{upload_index + 1}").stem)}{suffix[:12]}'
+            target.write_bytes(raw)
+            remote = await adapter.upload_image(raw, target.name)
+            remote_name = _remote_path_from_upload_result(remote, target.name)
+            if remote_name:
+                remote_names.append(remote_name)
+        existing_names = unit.get('image_names') if isinstance(unit.get('image_names'), list) else []
+        existing_names = [str(item or '').strip() for item in existing_names if str(item or '').strip()]
+        existing_name = str(unit.get('image_name') or '').strip()
+        if existing_name and existing_name not in existing_names:
+            existing_names.insert(0, existing_name)
+        final_names = remote_names or existing_names
+        normalized = dict(unit)
+        normalized.update({
+            'uid': uid,
+            'model': model_name,
+            'clip_vision': clip_vision,
+            'image_name': final_names[0] if final_names else '',
+            'image_names': final_names,
+            'image_field': upload_key,
+        })
+        normalized_units.append(normalized)
+    payload['scene_director_ipadapter_units'] = normalized_units
+    if normalized_units:
+        with_images = sum(1 for unit in normalized_units if unit.get('image_name'))
+        profile_units = sum(1 for unit in normalized_units if str(unit.get('composer_mode') or '') == 'identity_profile')
+        compile_notes.append(f'Scene Director prepared {with_images}/{len(normalized_units)} per-region IPAdapter reference image(s).')
+        if profile_units:
+            compile_notes.append(f'Scene Director Identity Profiles active: {profile_units} profile-backed IPAdapter unit(s).')
+    return compile_notes
+
+
+@router.get('/api/generation/styles')
+async def api_generation_styles_get():
+    return JSONResponse({'ok': True, 'styles': load_generation_styles()})
+
+
+@router.post('/api/generation/styles/save')
+async def api_generation_styles_save(request: Request):
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    try:
+        styles = upsert_generation_style(
+            name=str(payload.get('name') or '').strip(),
+            prompt=str(payload.get('prompt') or '').strip(),
+            negative_prompt=str(payload.get('negative_prompt') or '').strip(),
+            original_name=str(payload.get('original_name') or '').strip(),
+        )
+    except ValueError as exc:
+        return json_error(str(exc), 400)
+    return JSONResponse({'ok': True, 'styles': styles})
+
+
+@router.post('/api/generation/styles/delete')
+async def api_generation_styles_delete(request: Request):
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    try:
+        styles = delete_generation_style(str(payload.get('name') or '').strip())
+    except ValueError as exc:
+        return json_error(str(exc), 400)
+    return JSONResponse({'ok': True, 'styles': styles})
+
+
+@router.post('/api/generation/styles/duplicate')
+async def api_generation_styles_duplicate(request: Request):
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    try:
+        styles = duplicate_generation_style(
+            str(payload.get('source_name') or '').strip(),
+            str(payload.get('new_name') or '').strip(),
+        )
+    except ValueError as exc:
+        return json_error(str(exc), 400)
+    return JSONResponse({'ok': True, 'styles': styles})
+
+
+@router.post('/api/generation/styles/import')
+async def api_generation_styles_import(style_pack: UploadFile | None = File(None)):
+    if not style_pack:
+        return json_error('Pick a CSV style pack first.', 400)
+    raw = await style_pack.read()
+    if not raw:
+        return json_error('The uploaded style pack was empty.', 400)
+    styles = import_generation_styles_csv(raw)
+    return JSONResponse({'ok': True, 'styles': styles})
+
+
+@router.get('/api/generation/styles/export')
+async def api_generation_styles_export():
+    path = export_generation_styles_path()
+    return FileResponse(path, media_type='text/csv', filename='generation_styles.csv')
+
+
+@router.get('/api/generation/wildcards')
+async def api_generation_wildcards(root: str = ''):
+    try:
+        wildcard_root = _resolve_wildcard_root(root)
+        entries = []
+        for fp in sorted(wildcard_root.rglob('*')):
+            if not fp.is_file() or fp.suffix.lower() not in {'.txt', '.json', '.yaml', '.yml'}:
+                continue
+            token = _wildcard_token_for_path(wildcard_root, fp)
+            count = 0
+            try:
+                count = len(_load_wildcard_values_file(fp))
+            except Exception:
+                count = 0
+            entries.append({
+                'token': token,
+                'label': f'__{token}__',
+                'relative_path': str(fp.relative_to(wildcard_root)).replace('\\', '/'),
+                'count': count,
+            })
+        return JSONResponse({'ok': True, 'root': str(wildcard_root), 'entries': entries})
+    except Exception as exc:
+        return json_exception(exc, default_message='Could not load wildcard files.', default_status=500, logger_override=logger, context='generation wildcard load')
+
+
+@router.get('/api/generation/wildcard-values')
+async def api_generation_wildcard_values(root: str = '', token: str = ''):
+    try:
+        wildcard_root = _resolve_wildcard_root(root)
+        clean_token = str(token or '').strip().strip('/')
+        if not clean_token:
+            return json_error('Pick a wildcard token first.', 400)
+        candidate = None
+        for suffix in ('.txt', '.json', '.yaml', '.yml'):
+            fp = (wildcard_root / clean_token).with_suffix(suffix)
+            if fp.exists() and fp.is_file():
+                candidate = fp
+                break
+        if candidate is None:
+            return json_error('Wildcard file not found.', 404)
+        values = _load_wildcard_values_file(candidate)
+        return JSONResponse({
+            'ok': True,
+            'root': str(wildcard_root),
+            'token': clean_token,
+            'label': f'__{clean_token}__',
+            'relative_path': str(candidate.relative_to(wildcard_root)).replace('\\', '/'),
+            'count': len(values),
+            'values': values,
+        })
+    except Exception as exc:
+        return json_exception(exc, default_message='Could not read wildcard file.', default_status=500, logger_override=logger, context='generation wildcard read')
+
+
+@router.get('/api/generation/detailer-models')
+async def api_generation_detailer_models(detector_root: str = '', sam_root: str = ''):
+    payload = list_generation_detailer_models(detector_root=detector_root, sam_root=sam_root)
+    payload['ok'] = True
+    payload['message'] = 'Detailer model scan complete.'
+    return JSONResponse(payload)
+
+
+@router.post('/api/generation/detailer-download-sam')
+async def api_generation_detailer_download_sam(payload: dict):
+    model_key = str((payload or {}).get('model_key') or '').strip()
+    sam_root = str((payload or {}).get('sam_root') or '').strip()
+    if not model_key:
+        return json_error('Pick a SAM preset first.', 400)
+    try:
+        download = download_sam_model(model_key, target_root=sam_root)
+        state = list_generation_detailer_models(detector_root=str((payload or {}).get('detector_root') or '').strip(), sam_root=sam_root)
+        return JSONResponse({'ok': True, 'message': f'SAM model downloaded: {download.get("filename")}', 'download': download, **state})
+    except Exception as exc:
+        return json_exception(exc, default_status=500, logger_override=logger)
+
+
+@router.post('/api/generation/detailer-preview-detections')
+async def api_generation_detailer_preview_detections(
+    image: UploadFile = File(...),
+    provider: str = Form('ultralytics'),
+    mode: str = Form('face'),
+    detector_type: str = Form('bbox'),
+    detector_model: str = Form(''),
+    confidence: float = Form(0.35),
+    top_k: int = Form(0),
+    bbox_grow: int = Form(12),
+    order_mode: str = Form('auto'),
+    start_index: int = Form(1),
+    count: int = Form(1),
+    min_area: int = Form(0),
+    max_area: int = Form(0),
+    custom_classes: str = Form(''),
+    custom_detector_root: str = Form(''),
+    priority_preset: str = Form('respect_pass'),
+    auto_suppress_tiny_faces: str = Form('1'),
+    cluster_merge: str = Form('1'),
+    foreground_bias: str = Form('off'),
+    pinned_boxes: str = Form('[]'),
+    history_boxes: str = Form('[]'),
+    tiny_face_main_ratio: float = Form(0.18),
+    tiny_face_image_floor_pct: float = Form(0.25),
+):
+    try:
+        raw = await image.read()
+        preview = preview_detailer_detections(raw, {
+            'provider': provider,
+            'mode': mode,
+            'detector_type': detector_type,
+            'detector_model': detector_model,
+            'confidence': confidence,
+            'top_k': top_k,
+            'bbox_grow': bbox_grow,
+            'order_mode': order_mode,
+            'start_index': start_index,
+            'count': count,
+            'min_area': min_area,
+            'max_area': max_area,
+            'custom_classes': custom_classes,
+            'custom_detector_root': custom_detector_root,
+            'priority_preset': priority_preset,
+            'auto_suppress_tiny_faces': auto_suppress_tiny_faces,
+            'cluster_merge': cluster_merge,
+            'foreground_bias': foreground_bias,
+            'pinned_boxes': pinned_boxes,
+            'history_boxes': history_boxes,
+            'tiny_face_main_ratio': tiny_face_main_ratio,
+            'tiny_face_image_floor_pct': tiny_face_image_floor_pct,
+        })
+        return JSONResponse(preview)
+    except Exception as exc:
+        return json_exception(exc, default_message='Could not build the detailer preview detections.', default_status=500, logger_override=logger, context='generation detailer preview')
+
+
+@router.get('/api/generation/output-download')
+async def api_generation_output_download(filename: str, subfolder: str = '', file_type: str = 'output'):
+    adapter, _session, error = _image_profile_or_error()
+    if error:
+        return error
+    try:
+        url = adapter.build_view_url(filename, subfolder or '', file_type or 'output')
+        async with httpx.AsyncClient(follow_redirects=True, timeout=max(20, int(adapter.timeout_sec or 30))) as client:
+            response = await client.get(url)
+            response.raise_for_status()
+        content_type = response.headers.get('content-type') or 'application/octet-stream'
+        return Response(content=response.content, media_type=content_type)
+    except Exception as exc:
+        return json_error(f'Could not load the generated output: {exc}', 502)
+
+
+@router.get('/api/generation/output-settings')
+async def api_generation_output_settings_get():
+    settings = load_generation_output_settings()
+    ensure_output_root(settings.get('output_root'))
+    ensure_category_dir(settings.get('output_root') or DEFAULT_OUTPUT_ROOT, settings.get('selected_category') or 'Uncategorized')
+    return JSONResponse({'ok': True, 'settings': _output_settings_response(settings)})
+
+
+@router.post('/api/generation/output-settings')
+async def api_generation_output_settings_save(request: Request):
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    settings = save_generation_output_settings(payload)
+    ensure_output_root(settings.get('output_root'))
+    ensure_category_dir(settings.get('output_root') or DEFAULT_OUTPUT_ROOT, settings.get('selected_category') or 'Uncategorized')
+    return JSONResponse({'ok': True, 'settings': _output_settings_response(settings)})
+
+
+@router.post('/api/generation/output-settings/category')
+async def api_generation_output_settings_add_category(request: Request):
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    name = str(payload.get('name') or '').strip()
+    if not name:
+        return json_error('Add a category name first.', 400)
+    output_root = str(payload.get('output_root') or '').strip() or None
+    settings = add_generation_category(name, output_root=output_root)
+    root = str(settings.get('output_root') or DEFAULT_OUTPUT_ROOT)
+    category = str(settings.get('selected_category') or 'Uncategorized')
+    for folder_name in _MODE_OUTPUT_DIRS.values():
+        ensure_category_dir(Path(root) / folder_name, category)
+    return JSONResponse({'ok': True, 'settings': _output_settings_response(settings)})
+
+
+@router.get('/api/generation/state')
+async def api_generation_state(limit: int = 12):
+    manager_state = get_manager_state()
+    image_session = (manager_state.get('session') or {}).get('image') or {}
+    jobs = list_generation_jobs(limit=limit)
+    refreshed_jobs = []
+    # Phase 10.8: /state uses the same finalization predicate as /job polling
+    # and the background finalizer. No separate persistence rescue path.
+    for job in jobs:
+        if _job_needs_finalization(job):
+            refreshed = await _refresh_generation_job_from_backend(str((job or {}).get('id') or (job or {}).get('job_id') or ''))
+            refreshed_jobs.append(refreshed or job)
+        else:
+            refreshed_jobs.append(job)
+    return JSONResponse({
+        'ok': True,
+        'session': image_session,
+        'jobs': refreshed_jobs,
+        'low_vram_mode': bool((((manager_state.get('settings') or {}).get('settings') or {}).get('low_vram_mode', True))),
+    })
+
+
+
+@router.websocket('/api/generation/progress/ws')
+async def ws_generation_progress(websocket: WebSocket):
+    await websocket.accept()
+    client_id = str(websocket.query_params.get('clientId') or '').strip()
+    adapter, session, error_response = _image_profile_or_error()
+    if error_response:
+        await websocket.send_json({'type': 'error', 'data': {'message': 'Image backend is not connected.'}})
+        await websocket.close(code=1011)
+        return
+    base_url = (adapter.base_url or '').rstrip('/')
+    if not base_url:
+        await websocket.send_json({'type': 'error', 'data': {'message': 'Image backend URL is missing.'}})
+        await websocket.close(code=1011)
+        return
+
+    ws_url = base_url.replace('https://', 'wss://').replace('http://', 'ws://') + f'/ws?clientId={client_id or "neo_studio"}'
+    logger.info('Generation progress proxy connecting | upstream=%s', ws_url)
+    upstream = None
+    try:
+        upstream = await websockets.connect(ws_url, max_size=None, ping_interval=20, ping_timeout=20)
+        await websocket.send_json({'type': 'proxy_open', 'data': {'client_id': client_id or 'neo_studio'}})
+        while True:
+            try:
+                message = await upstream.recv()
+            except websockets.ConnectionClosed:
+                break
+            if isinstance(message, bytes):
+                await websocket.send_bytes(message)
+            else:
+                await websocket.send_text(message)
+    except WebSocketDisconnect:
+        pass
+    except Exception as exc:
+        logger.warning('Generation progress proxy failed | %s', exc)
+        try:
+            await websocket.send_json({'type': 'error', 'data': {'message': f'Progress proxy failed: {exc}'}})
+        except Exception:
+            pass
+    finally:
+        try:
+            if upstream is not None:
+                await upstream.close()
+        except Exception:
+            pass
+        try:
+            await websocket.close()
+        except Exception:
+            pass
+
+
+@router.get('/api/generation/draft')
+async def api_generation_draft_get():
+    try:
+        record = load_draft(GENERATION_DRAFT_PATH, surface='generation', default=None)
+        draft = (record or {}).get('payload') if isinstance(record, dict) else None
+        clean_draft = _sanitize_generation_draft_removed_features(draft) if isinstance(draft, dict) else None
+        if isinstance(record, dict) and clean_draft is not None:
+            record = dict(record)
+            record['payload'] = clean_draft
+        return JSONResponse({'ok': True, 'draft': clean_draft, 'record': record})
+    except Exception as exc:
+        return json_exception(exc, default_message='Could not load generation draft.', default_status=500, logger_override=logger, context='generation draft load')
+
+
+@router.post('/api/generation/draft')
+async def api_generation_draft_save(request: Request):
+    try:
+        payload = await request.json()
+        draft = payload.get('draft') if isinstance(payload, dict) else None
+        if not isinstance(draft, dict):
+          return json_error('Draft payload was invalid.', 400)
+        draft = _sanitize_generation_draft_removed_features(draft)
+        record = save_draft(GENERATION_DRAFT_PATH, surface='generation', payload=draft, family=str(draft.get('family') or ''), draft_id='generation:draft')
+        return JSONResponse({'ok': True, 'record': record})
+    except Exception as exc:
+        return json_exception(exc, default_message='Could not save generation draft.', default_status=500, logger_override=logger, context='generation draft save')
+
+
+
+@router.get('/api/generation/regional/sprint1')
+async def api_generation_regional_sprint1():
+    return JSONResponse({'ok': False, 'removed': True, 'message': 'Regional Prompter was removed in Phase 9.'}, status_code=410)
+
+
+@router.get('/api/generation/regional/sprint4')
+async def api_generation_regional_sprint4():
+    return JSONResponse({'ok': False, 'removed': True, 'message': 'Regional Prompter was removed in Phase 9.'}, status_code=410)
+
+
+@router.get('/api/generation/catalog')
+async def api_generation_catalog():
+    adapter, session, error = _image_profile_or_error()
+    if error:
+        return error
+    try:
+        catalog = await adapter.get_catalog()
+        stats = await adapter.get_system_stats()
+    except Exception as exc:
+        return json_exception(exc, default_message='Could not load ComfyUI catalog.', default_status=502, logger_override=logger, context='generation catalog load')
+    fallback_samplers = [
+        'euler', 'euler_ancestral', 'dpmpp_2m', 'dpmpp_sde', 'dpmpp_2m_sde', 'dpmpp_3m_sde',
+        'lcm', 'lms', 'heun', 'dpm_2', 'res_multistep', 'uni_pc', 'ddim', 'plms',
+    ]
+    fallback_schedulers = [
+        'normal', 'karras', 'exponential', 'polyexponential', 'simple', 'sgm_uniform',
+        'linear_quadratic', 'kl_optimal', 'ddim_uniform', 'beta', 'turbo',
+    ]
+    return JSONResponse({
+        'ok': True,
+        'catalog': {
+            **catalog,
+            'upscale_models': catalog.get('upscale_models') or catalog.get('upscalers') or [],
+            'upscalers': catalog.get('upscale_models') or catalog.get('upscalers') or [],
+            'facerestore_models': catalog.get('facerestore_models') or [],
+            'samplers': catalog.get('samplers') or fallback_samplers,
+            'schedulers': catalog.get('schedulers') or fallback_schedulers,
+        },
+        'system_stats': stats,
+        'session': session,
+    })
+
+
+async def _start_controlnet_aux_map_job(adapter: ComfyBackendAdapter, raw: bytes, mode: str, fallback_name: str, uid: str = 'primary') -> dict:
+    mode = str(mode or '').strip().lower()
+    if mode not in {'openpose', 'depth'}:
+        raise ValueError('Only OpenPose and Depth maps are supported here.')
+
+    candidates = {
+        'openpose': ['DWPreprocessor', 'OpenposePreprocessor'],
+        'depth': ['DepthAnythingV2Preprocessor', 'DepthAnythingPreprocessor', 'MiDaSDepthMapPreprocessor', 'MiDaS-DepthMapPreprocessor', 'ZoeDepthMapPreprocessor', 'Zoe-DepthMapPreprocessor'],
+    }.get(mode, [])
+
+    selected_name = ''
+    selected_info = None
+    for node_name in candidates:
+        try:
+            info = await adapter.get_object_info(node_name)
+        except Exception:
+            info = {}
+        if isinstance(info, dict) and node_name in info:
+            info = info.get(node_name)
+        if isinstance(info, dict) and info:
+            selected_name = node_name
+            selected_info = info
+            break
+    if not selected_name:
+        raise ValueError(f'No {mode} preprocessor node was detected in the connected ComfyUI backend.')
+
+    ensure_generation_dirs()
+    source_name = f'controlmap_{mode}_{safe_name(Path(fallback_name or mode).stem)[:48]}.png'
+    local_path = GENERATION_INPUT_DIR / source_name
+    local_path.write_bytes(raw)
+    remote = await adapter.upload_image(raw, local_path.name)
+    remote_name = _remote_path_from_upload_result(remote, local_path.name)
+
+    graph = {
+        '1': {
+            'class_type': 'LoadImage',
+            'inputs': {
+                'image': remote_name,
+                'upload': 'image',
+            },
+        },
+        '2': {
+            'class_type': selected_name,
+            'inputs': _build_aux_node_inputs(_object_required_inputs(selected_info), ['1', 0], mode),
+        },
+        '3': {
+            'class_type': 'SaveImage',
+            'inputs': {
+                'filename_prefix': f'neo_studio/control_maps/{mode}',
+                'images': ['2', 0],
+            },
+        },
+    }
+
+    queued = await adapter.queue_prompt(graph)
+    prompt_id = str(queued.get('prompt_id') or '').strip()
+    if not prompt_id:
+        raise ValueError('ComfyUI did not return a prompt id for the ControlNet map build.')
+
+    job_id = f'controlmap_{uuid4().hex}'
+    job = create_long_task(CONTROLNET_MAP_NAMESPACE, {
+        'job_id': job_id,
+        'uid': str(uid or 'primary'),
+        'mode': mode,
+        'node_name': selected_name,
+        'prompt_id': prompt_id,
+        'started_at': time.time(),
+        'state': 'queued',
+        'message': f'Queued {mode} map build. First run may download or warm the backend model.',
+        'notes': [f'Queued {mode} map build with {selected_name}.'],
+    }, prefix='controlmap')
+    return job
+
+
+async def _resolve_controlnet_aux_map_job(adapter: ComfyBackendAdapter, job: dict) -> dict:
+    prompt_id = str(job.get('prompt_id') or '').strip()
+    mode = str(job.get('mode') or '').strip().lower()
+    node_name = str(job.get('node_name') or '').strip()
+    elapsed = max(0.0, time.time() - float(job.get('started_at') or time.time()))
+
+    history = await adapter.get_history(prompt_id)
+    history_entry = history.get(prompt_id) if isinstance(history, dict) else None
+    images = _extract_history_images(history_entry)
+    if images:
+        image = images[0]
+        view_url = _build_local_generation_output_url(image.get('filename') or '', image.get('subfolder') or '', image.get('type') or 'output')
+        output_bytes = await _download_output_bytes(view_url, timeout_sec=60)
+        preview_data_url = 'data:image/png;base64,' + base64.b64encode(output_bytes).decode('ascii')
+        job.update({
+            'state': 'completed',
+            'filename': image.get('filename') or f'{mode}_map.png',
+            'preview_data_url': preview_data_url,
+            'message': f'Built {mode} map with {node_name}.',
+            'notes': [f'Built {mode} map with {node_name}.'],
+        })
+        return job
+
+    queue_state = await adapter.get_queue()
+    prompt_state = _queue_prompt_state(queue_state, prompt_id) or ''
+    if prompt_state == 'queued':
+        state = 'queued'
+        message = f'{mode.title()} map is queued in ComfyUI…'
+    elif prompt_state == 'running':
+        state = 'running'
+        message = f'Building {mode} map…'
+    else:
+        state = 'running'
+        message = f'Building {mode} map…'
+
+    if elapsed >= 45:
+        message = f'{mode.title()} map is still running. ComfyUI may be downloading or warming the required model on first run.'
+        state = 'warming'
+    if elapsed >= 150:
+        message = f'{mode.title()} map is taking longer than usual. The backend may still be downloading the model or preparing the node.'
+        state = 'long_running'
+    if elapsed >= 420:
+        message = f'{mode.title()} map is still not ready. Neo stopped waiting, but ComfyUI may still be working in the background.'
+        state = 'timeout'
+
+    job.update({'state': state, 'message': message, 'elapsed': elapsed})
+    return job
+
+
+@router.post('/api/generation/controlnet/build-map/start')
+async def api_generation_controlnet_build_map_start(
+    mode: str = Form(...),
+    uid: str = Form('primary'),
+    image: UploadFile = File(...),
+):
+    adapter, _session, error = _image_profile_or_error()
+    if error:
+        return error
+    try:
+        raw = await image.read()
+        if not raw:
+            return json_error('Upload an image first.', 400)
+        job = await _start_controlnet_aux_map_job(adapter, raw, mode, image.filename or f'{uid or mode}.png', uid=uid)
+        return JSONResponse({
+            'ok': True,
+            'job_id': job.get('job_id') or '',
+            'uid': job.get('uid') or 'primary',
+            'mode': job.get('mode') or '',
+            'state': job.get('state') or 'queued',
+            'message': job.get('message') or '',
+            'notes': job.get('notes') or [],
+        })
+    except Exception as exc:
+        logger.exception('Could not start ControlNet map build')
+        return json_error(f'Could not start ControlNet map build: {exc}', 500)
+
+
+@router.get('/api/generation/controlnet/build-map/status/{job_id}')
+async def api_generation_controlnet_build_map_status(job_id: str):
+    job = get_long_task(CONTROLNET_MAP_NAMESPACE, str(job_id or '').strip())
+    if not job:
+        return json_error('ControlNet map job not found.', 404)
+    adapter, _session, error = _image_profile_or_error()
+    if error:
+        return error
+    try:
+        if str(job.get('state') or '') != 'completed':
+            job = await _resolve_controlnet_aux_map_job(adapter, job)
+        return JSONResponse({
+            'ok': True,
+            'job_id': job.get('job_id') or '',
+            'uid': job.get('uid') or 'primary',
+            'mode': job.get('mode') or '',
+            'state': job.get('state') or 'running',
+            'message': job.get('message') or '',
+            'notes': job.get('notes') or [],
+            'filename': job.get('filename') or '',
+            'preview_data_url': job.get('preview_data_url') or '',
+            'elapsed': job.get('elapsed') or 0,
+        })
+    except Exception as exc:
+        logger.exception('Could not poll ControlNet map job')
+        job.update({'state': 'error', 'message': f'Could not poll ControlNet map job: {exc}'})
+        return json_error(job.get('message') or 'Could not poll ControlNet map job.', 500)
+
+
+async def _start_tag_assist_job(adapter: ComfyBackendAdapter, raw: bytes, threshold: float, filter_tags: str, fallback_name: str) -> dict:
+    candidates = ['DeepDanbooruCaption']
+    selected_name = ''
+    selected_info = None
+    for node_name in candidates:
+        try:
+            info = await adapter.get_object_info(node_name)
+        except Exception:
+            info = {}
+        if isinstance(info, dict) and node_name in info:
+            info = info.get(node_name)
+        if isinstance(info, dict) and info:
+            selected_name = node_name
+            selected_info = info
+            break
+    if not selected_name:
+        raise ValueError('DeepDanbooruCaption was not detected in the connected ComfyUI backend.')
+
+    preview_node_name = ''
+    preview_node_info = None
+    for node_name in ['PreviewAny', 'PreviewTextNode', 'ShowText|pysssss', 'Show Text', 'ShowText']:
+        try:
+            info = await adapter.get_object_info(node_name)
+        except Exception:
+            info = {}
+        if isinstance(info, dict) and node_name in info:
+            info = info.get(node_name)
+        if isinstance(info, dict) and info:
+            preview_node_name = node_name
+            preview_node_info = info
+            break
+    if not preview_node_name:
+        raise ValueError('Neo could not find a text preview/output node in ComfyUI for Tag Assist. Update ComfyUI so PreviewAny is available, or install a text preview node.')
+
+    ensure_generation_dirs()
+    source_name = f'tagassist_{safe_name(Path(fallback_name or "tagassist").stem)[:48]}.png'
+    local_path = GENERATION_INPUT_DIR / source_name
+    local_path.write_bytes(raw)
+    remote = await adapter.upload_image(raw, local_path.name)
+    remote_name = _remote_path_from_upload_result(remote, local_path.name)
+
+    graph = {
+        '1': {
+            'class_type': 'LoadImage',
+            'inputs': {
+                'image': remote_name,
+                'upload': 'image',
+            },
+        },
+        '2': {
+            'class_type': selected_name,
+            'inputs': _tag_assist_inputs(_object_required_inputs(selected_info), ['1', 0], float(threshold), filter_tags),
+        },
+    }
+    if preview_node_name:
+        graph['3'] = {
+            'class_type': preview_node_name,
+            'inputs': _tag_assist_output_inputs(_object_required_inputs(preview_node_info), ['2', 0]),
+        }
+
+    queued = await adapter.queue_prompt(graph)
+    prompt_id = str(queued.get('prompt_id') or '').strip()
+    if not prompt_id:
+        raise ValueError('ComfyUI did not return a prompt id for Tag Assist.')
+
+    return create_long_task(TAG_ASSIST_NAMESPACE, {
+        'job_id': f'tagassist_{uuid4().hex}',
+        'prompt_id': prompt_id,
+        'started_at': time.time(),
+        'state': 'queued',
+        'threshold': float(threshold),
+        'filter_tags': str(filter_tags or '').strip(),
+        'node_name': selected_name,
+        'message': 'Queued Tag Assist. First run may download or warm the caption model.',
+        'notes': [f'Queued Tag Assist with {selected_name}.'],
+        'preview_node_name': preview_node_name,
+    }, prefix='tagassist')
+
+
+async def _resolve_tag_assist_job(adapter: ComfyBackendAdapter, job: dict) -> dict:
+    prompt_id = str(job.get('prompt_id') or '').strip()
+    node_name = str(job.get('node_name') or '').strip()
+    elapsed = max(0.0, time.time() - float(job.get('started_at') or time.time()))
+
+    history = await adapter.get_history(prompt_id)
+    history_entry = history.get(prompt_id) if isinstance(history, dict) else None
+    texts = _extract_history_texts(history_entry)
+    caption = next((item for item in texts if str(item or '').strip()), '')
+    if caption:
+        tags = _parse_tag_caption(caption)
+        job.update({
+            'state': 'completed',
+            'caption': caption,
+            'tags': tags,
+            'message': f'Tag Assist finished with {len(tags)} tag{"s" if len(tags) != 1 else ""}.',
+            'notes': [f'Tag Assist finished with {node_name}.'],
+            'elapsed': elapsed,
+        })
+        return job
+    if isinstance(history_entry, dict) and isinstance(history_entry.get('outputs'), dict):
+        job.update({
+            'state': 'completed',
+            'caption': '',
+            'tags': [],
+            'message': 'Tag Assist finished, but the backend did not return any clean tags.',
+            'notes': [f'Tag Assist finished with {node_name}, but no clean tags were returned.'],
+            'elapsed': elapsed,
+        })
+        return job
+
+    queue_state = await adapter.get_queue()
+    prompt_state = _queue_prompt_state(queue_state, prompt_id) or ''
+    if prompt_state == 'queued':
+        state = 'queued'
+        message = 'Tag Assist is queued in ComfyUI…'
+    else:
+        state = 'running'
+        message = 'Analyzing image tags…'
+
+    if elapsed >= 45:
+        message = 'Tag Assist is still running. ComfyUI may be downloading or warming the caption model on first run.'
+        state = 'warming'
+    if elapsed >= 150:
+        message = 'Tag Assist is taking longer than usual. The backend may still be downloading the tagger model or preparing the node.'
+        state = 'long_running'
+    if elapsed >= 420:
+        message = 'Tag Assist is still not ready. Neo stopped waiting, but ComfyUI may still be working in the background.'
+        state = 'timeout'
+
+    job.update({'state': state, 'message': message, 'elapsed': elapsed})
+    return job
+
+
+@router.post('/api/generation/tag-assist/start')
+async def api_generation_tag_assist_start(
+    threshold: float = Form(0.35),
+    filter_tags: str = Form(''),
+    image: UploadFile = File(...),
+):
+    adapter, _session, error = _image_profile_or_error()
+    if error:
+        return error
+    try:
+        raw = await image.read()
+        if not raw:
+            return json_error('Upload an image first.', 400)
+        job = await _start_tag_assist_job(adapter, raw, float(threshold), filter_tags, image.filename or 'tagassist.png')
+        return JSONResponse({
+            'ok': True,
+            'job_id': job.get('job_id') or '',
+            'state': job.get('state') or 'queued',
+            'message': job.get('message') or '',
+            'notes': job.get('notes') or [],
+        })
+    except Exception as exc:
+        logger.exception('Could not start Tag Assist')
+        return json_error(f'Could not start Tag Assist: {exc}', 500)
+
+
+@router.get('/api/generation/tag-assist/status/{job_id}')
+async def api_generation_tag_assist_status(job_id: str):
+    job = get_long_task(TAG_ASSIST_NAMESPACE, str(job_id or '').strip())
+    if not job:
+        return json_error('Tag Assist job not found.', 404)
+    adapter, _session, error = _image_profile_or_error()
+    if error:
+        return error
+    try:
+        if str(job.get('state') or '') != 'completed':
+            job = await _resolve_tag_assist_job(adapter, job)
+        return JSONResponse({
+            'ok': True,
+            'job_id': job.get('job_id') or '',
+            'state': job.get('state') or 'running',
+            'message': job.get('message') or '',
+            'notes': job.get('notes') or [],
+            'caption': job.get('caption') or '',
+            'tags': job.get('tags') or [],
+            'elapsed': job.get('elapsed') or 0,
+        })
+    except Exception as exc:
+        logger.exception('Could not poll Tag Assist job')
+        job.update({'state': 'error', 'message': f'Could not poll Tag Assist job: {exc}'})
+        return json_error(job.get('message') or 'Could not poll Tag Assist job.', 500)
+
+
+@router.post('/api/generation/dependency-audit')
+async def api_generation_dependency_audit(request: Request):
+    adapter, _session, error = _image_profile_or_error()
+    if error:
+        return error
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    draft = payload.get('draft') if isinstance(payload, dict) and isinstance(payload.get('draft'), dict) else {}
+    try:
+        audit = await build_generation_dependency_audit(adapter, draft)
+    except Exception as exc:
+        logger.exception('Could not build generation dependency audit')
+        return json_error(f'Could not build dependency audit: {exc}', 500)
+    return JSONResponse(audit)
+
+
+@router.get('/api/generation/job/{job_id}')
+async def api_generation_job(job_id: str):
+    job = get_generation_job(job_id)
+    if not job:
+        return json_error('Generation job not found.', 404)
+    refreshed = await _refresh_generation_job_from_backend(job_id) if _job_needs_finalization(job) else job
+    return JSONResponse({'ok': True, 'job': refreshed or job})
+
+
+@router.get('/api/generation/history')
+async def api_generation_history(limit: int = 12):
+    return JSONResponse({'ok': True, 'jobs': list_generation_jobs(limit=limit)})
+
+
+
+
+_RETIRED_GENERATION_FEATURE_PREFIXES = (
+    'regional_',
+    'regionalPrompt',
+    'expression_',
+    'expression_editor_',
+    'expressionEditor',
+    'expression_sample_',
+    'reference_match_',
+    'referenceMatch',
+    'cleanup_prep_',
+    'cleanupPrep',
+)
+
+_RETIRED_GENERATION_FEATURE_KEYS = {
+    'regionalBackendCapabilities',
+    'regional_prompt_regions',
+    'regional_backend_capabilities',
+    'regional_prompt_enabled',
+    'expression_editor_pass',
+    'expression_editor_enabled',
+    'expression_pass',
+    'expression_enabled',
+    'expression_editor',
+    'expressionEditor',
+    'reference_match_enabled',
+    'reference_match',
+    'referenceMatch',
+    'cleanup_prep_enabled',
+    'cleanup_prep',
+    'cleanupPrep',
+}
+
+_RETIRED_PREVIEW_ACTION_TYPES = {
+    'expression',
+    'expression_editor',
+    'reference_match',
+    'cleanup_prep',
+    'regional',
+    'regional_prompt',
+}
+
+
+def _is_retired_generation_key(key: object) -> bool:
+    key_text = str(key)
+    return key_text in _RETIRED_GENERATION_FEATURE_KEYS or any(
+        key_text.startswith(prefix) for prefix in _RETIRED_GENERATION_FEATURE_PREFIXES
+    )
+
+
+def _strip_retired_generation_fields(value):
+    if isinstance(value, dict):
+        cleaned = {}
+        for key, item in value.items():
+            if _is_retired_generation_key(key):
+                continue
+            cleaned[key] = _strip_retired_generation_fields(item)
+        return cleaned
+    if isinstance(value, list):
+        return [_strip_retired_generation_fields(item) for item in value]
+    return value
+
+
+def _sanitize_preview_action_contract(payload: dict) -> None:
+    preview_action = payload.get('_neo_preview_action')
+    if not isinstance(preview_action, dict):
+        return
+    action_type = str(preview_action.get('action_type') or '').strip().lower()
+    if action_type in _RETIRED_PREVIEW_ACTION_TYPES:
+        payload.pop('_neo_preview_action', None)
+        if action_type in {'expression', 'expression_editor'}:
+            payload['detailer_output_pass'] = False
+        return
+    payload['_neo_preview_action'] = _strip_retired_generation_fields(preview_action)
+
+
+def _sanitize_builder_contract(payload: dict) -> None:
+    contract = payload.get('_neo_builder_contract')
+    if not isinstance(contract, dict):
+        return
+    contract = _strip_retired_generation_fields(contract)
+    preview_action = contract.get('preview_action')
+    if isinstance(preview_action, dict):
+        action_type = str(preview_action.get('action_type') or '').strip().lower()
+        if action_type in _RETIRED_PREVIEW_ACTION_TYPES:
+            contract.pop('preview_action', None)
+        else:
+            contract['preview_action'] = _strip_retired_generation_fields(preview_action)
+    payload['_neo_builder_contract'] = contract
+
+
+def _sanitize_generation_payload_removed_features(payload: dict | None) -> dict:
+    """Phase 10.7 backend builder guardrail.
+
+    Retired Image Tab features should not reach workflow compilation. This strips
+    dead section payloads recursively, scrubs retired preview-action contracts,
+    and removes the old Regional compatibility sentinels from new jobs.
+    """
+    if not isinstance(payload, dict):
+        return {}
+    payload = _strip_retired_generation_fields(payload)
+    _sanitize_preview_action_contract(payload)
+    _sanitize_builder_contract(payload)
+    payload['_neo_payload_sanitized'] = True
+    payload['_neo_payload_sanitizer_version'] = 'phase10.7'
+    payload['_neo_backend_builder_cleanup'] = True
+    return payload
+
+
+@router.post('/api/generation/image-upscale')
+async def api_generation_image_upscale(request: Request, background_tasks: BackgroundTasks):
+    adapter, session, error = _image_profile_or_error()
+    if error:
+        return error
+
+    form = await request.form()
+    settings_json = str(form.get('settings_json') or '{}')
+    try:
+        payload = json.loads(settings_json or '{}')
+        if not isinstance(payload, dict):
+            raise ValueError('Payload must be a JSON object.')
+    except Exception as exc:
+        return json_error(f'Invalid image-upscale payload: {exc}', 400)
+
+    payload = _sanitize_generation_payload_removed_features(payload)
+
+    image_files = []
+    for key, value in form.multi_items():
+        if key == 'image_files' and hasattr(value, 'filename'):
+            image_files.append(value)
+    if not image_files:
+        single_image = form.get('image_file')
+        if hasattr(single_image, 'filename'):
+            image_files.append(single_image)
+    if not image_files:
+        return json_error('Pick at least one source image for Image Upscale.', 400)
+
+    restore_assist = str(payload.get('image_upscale_restore_assist') or 'off').strip().lower()
+    restore_model = str(payload.get('image_upscale_restore_model') or '').strip()
+
+    if restore_assist == 'codeformer':
+        if not restore_model:
+            return json_error('Choose a CodeFormer restore model or turn restore assist off.', 400)
+        try:
+            restore_loader = await adapter.get_object_info('FaceRestoreModelLoader')
+            restore_apply = await adapter.get_object_info('FaceRestoreCFWithModel')
+            restore_loader_ok = isinstance(restore_loader, dict) and (restore_loader.get('FaceRestoreModelLoader') or restore_loader)
+            restore_apply_ok = isinstance(restore_apply, dict) and (restore_apply.get('FaceRestoreCFWithModel') or restore_apply)
+            if not (restore_loader_ok and restore_apply_ok):
+                raise ValueError('CodeFormer restore nodes are not available in this ComfyUI backend yet.')
+        except ValueError as exc:
+            return json_error(str(exc), 400)
+        except Exception as exc:
+            return json_error(f'Could not validate CodeFormer restore support: {exc}', 502)
+
+    profile = get_profile('image', session.get('profile_id') or None) or {
+        'backend_type': 'comfyui',
+        'name': session.get('profile_name') or 'ComfyUI',
+        'base_url': session.get('base_url') or '',
+    }
+
+    queued_jobs = []
+    errors = []
+    for index, upload in enumerate(image_files, start=1):
+        try:
+            saved_source = await _save_upload(upload if hasattr(upload, 'filename') else None, f'upscale_{index}')
+            if not saved_source:
+                raise ValueError('Could not read one of the source images.')
+            item_payload = dict(payload)
+            item_payload['source_image_name'] = await _upload_saved(adapter, saved_source)
+            workflow, normalized_payload, compile_notes = build_image_upscale_workflow(item_payload)
+            queued = await adapter.queue_prompt(workflow)
+            job = create_generation_job(
+                payload=normalized_payload,
+                backend_profile=profile,
+                prompt_id=str(queued.get('prompt_id') or ''),
+                queue_number=queued.get('number'),
+                compile_notes=compile_notes,
+                workflow_graph=workflow,
+            )
+            if queued.get('node_errors'):
+                job = update_generation_job(job['id'], {
+                    'state': 'error',
+                    'status_text': 'ComfyUI reported node validation errors.',
+                    'error': json.dumps(queued.get('node_errors'), ensure_ascii=False),
+                }) or job
+            else:
+                background_tasks.add_task(_background_finalize_generation_job, str(job.get('id') or job.get('job_id') or ''))
+            queued_jobs.append(job)
+        except Exception as exc:
+            logger.exception('Could not queue Image Upscale item %s', index)
+            errors.append({'index': index, 'name': getattr(upload, 'filename', f'image_{index}'), 'error': str(exc)})
+
+    if not queued_jobs:
+        return json_error(errors[0]['error'] if errors else 'Could not queue Image Upscale.', 502)
+
+    suffix = '' if len(queued_jobs) == 1 else 's'
+    return JSONResponse({
+        'ok': True,
+        'jobs': queued_jobs,
+        'queued_count': len(queued_jobs),
+        'failed': errors,
+        'message': f'Queued Image Upscale for {len(queued_jobs)} image{suffix}.',
+    })
+
+@router.post('/api/generation/queue')
+async def api_generation_queue(request: Request, background_tasks: BackgroundTasks):
+    adapter, session, error = _image_profile_or_error()
+    if error:
+        return error
+
+    form = await request.form()
+    settings_json = str(form.get('settings_json') or '{}')
+    source_image = form.get('source_image')
+    mask_image = form.get('mask_image')
+    control_image = form.get('control_image')
+    ipadapter_image = form.get('ipadapter_image')
+    dynamic_uploads = {}
+    for key, value in form.multi_items():
+        if key.startswith('ipadapter_image__') and hasattr(value, 'filename'):
+            existing = dynamic_uploads.get(key)
+            if existing is None:
+                dynamic_uploads[key] = [value]
+            elif isinstance(existing, list):
+                existing.append(value)
+            else:
+                dynamic_uploads[key] = [existing, value]
+        elif key.startswith('control_image__') and hasattr(value, 'filename'):
+            dynamic_uploads[key] = value
+        elif key.startswith('source_image__') and hasattr(value, 'filename'):
+            dynamic_uploads[key] = value
+
+    try:
+        payload = json.loads(settings_json or '{}')
+        if not isinstance(payload, dict):
+            raise ValueError('Payload must be a JSON object.')
+    except Exception as exc:
+        return json_error(f'Invalid generation payload: {exc}', 400)
+
+    payload = _sanitize_generation_payload_removed_features(payload)
+    payload, scene_director_notes = scene_director_to_regional_payload(payload)
+
+    logger.info('Generation queue request received | mode=%s | checkpoint=%s | prompt_chars=%s', payload.get('mode') or payload.get('workflow_type') or 'txt2img', payload.get('checkpoint') or '', len(str(payload.get('positive') or '')))
+
+    workflow = None
+    normalized_payload = None
+    compile_notes: list[str] = []
+    pre_compile_notes: list[str] = list(scene_director_notes or [])
+
+    try:
+        if str(payload.get('client_id') or '').strip():
+            adapter.client_id = str(payload.get('client_id')).strip()
+
+        # Phase 10.7: retired feature payloads are stripped before workflow
+        # compilation; legacy upload-only fields are ignored here as well.
+        dynamic_uploads = {k: v for k, v in dynamic_uploads.items() if not str(k).startswith('regional_mask__')}
+
+        saved_source = await _save_upload(source_image if hasattr(source_image, 'filename') else None, 'source')
+        saved_mask = await _save_upload(mask_image if hasattr(mask_image, 'filename') else None, 'mask')
+        saved_control = await _save_upload(control_image if hasattr(control_image, 'filename') else None, 'control')
+        saved_ipadapter = await _save_upload(ipadapter_image if hasattr(ipadapter_image, 'filename') else None, 'ipadapter')
+        saved_source, saved_mask, resize_notes = await _prepare_generation_source_assets(payload, saved_source, saved_mask)
+
+        if saved_source:
+            payload['source_image_name'] = await _upload_saved(adapter, saved_source)
+        for source_key in ('source_image__2', 'source_image__3'):
+            source_upload = dynamic_uploads.get(source_key)
+            saved_extra_source = await _save_upload(source_upload if hasattr(source_upload, 'filename') else None, source_key.replace('__', '_'))
+            if saved_extra_source:
+                payload[f'{source_key}_name'] = await _upload_saved(adapter, saved_extra_source)
+        if saved_mask:
+            payload['mask_image_name'] = await _upload_saved(adapter, saved_mask)
+        if saved_control:
+            payload['control_image_name'] = await _upload_saved(adapter, saved_control)
+        if saved_ipadapter:
+            payload['ipadapter_image_name'] = await _upload_saved(adapter, saved_ipadapter)
+
+        payload = merge_shared_inpaint_payload(payload)
+        inpaint_payload = payload.get('inpaint_payload') if isinstance(payload.get('inpaint_payload'), dict) else {}
+        if inpaint_payload and normalize_generation_mode(payload.get('mode') or payload.get('workflow_type') or 'txt2img') in {'inpaint', 'outpaint'}:
+            composition = inpaint_payload.get('composition') or {}
+            pre_compile_notes.append(
+                f"Shared inpaint payload staged · backend {inpaint_payload.get('backend') or 'standard'} · guide {composition.get('guide_type') or 'none'} · source {composition.get('source_mode') or 'source_image'}."
+            )
+
+        if not pre_compile_notes:
+            pre_compile_notes = list(resize_notes)
+        else:
+            pre_compile_notes = [*resize_notes, *pre_compile_notes]
+        pre_compile_notes.extend(await _prepare_controlnet_units(adapter, payload, dynamic_uploads))
+        pre_compile_notes.extend(await _prepare_ipadapter_units(adapter, payload, dynamic_uploads))
+        pre_compile_notes.extend(await _prepare_scene_director_ipadapter_units(adapter, payload, dynamic_uploads))
+        pre_compile_notes.extend(prepare_detailer_assets_for_payload(payload))
+
+        support_check = validate_generation_support(
+            payload.get('family') or '',
+            normalize_generation_mode(payload.get('mode') or payload.get('workflow_type') or 'txt2img'),
+            normalize_inpaint_backend(payload.get('inpaint_backend') or 'standard'),
+        )
+        if not support_check.get('ok'):
+            raise ValueError(str(support_check.get('message') or 'This family / mode combo is not available in this build.'))
+
+        pre_compile_notes.extend(await _validate_generation_runtime_compatibility(adapter, payload))
+        pre_compile_notes.extend(await _inject_refine_ultimate_runtime_hints(adapter, payload))
+
+        if payload.get('ipadapter_units') or payload.get('scene_director_ipadapter_units'):
+            try:
+                clip_vision_loader = await adapter.get_object_info('CLIPVisionLoader')
+                clip_vision_ok = isinstance(clip_vision_loader, dict) and (clip_vision_loader.get('CLIPVisionLoader') or clip_vision_loader)
+                ip_units = [unit for unit in (payload.get('ipadapter_units') or []) if isinstance(unit, dict)]
+                scene_ip_units = [unit for unit in (payload.get('scene_director_ipadapter_units') or []) if isinstance(unit, dict)]
+                ip_units = [*ip_units, *scene_ip_units]
+                has_faceid = any(str((unit or {}).get('mode') or 'standard').strip().lower() == 'faceid' for unit in ip_units)
+                has_standard = any(str((unit or {}).get('mode') or 'standard').strip().lower() != 'faceid' for unit in ip_units)
+                if has_faceid:
+                    ip_faceid_loader = await adapter.get_object_info('IPAdapterUnifiedLoaderFaceID')
+                    ip_faceid_apply = await adapter.get_object_info('IPAdapterFaceID')
+                    if not (clip_vision_ok and isinstance(ip_faceid_loader, dict) and (ip_faceid_loader.get('IPAdapterUnifiedLoaderFaceID') or ip_faceid_loader) and isinstance(ip_faceid_apply, dict) and (ip_faceid_apply.get('IPAdapterFaceID') or ip_faceid_apply)):
+                        raise ValueError('FaceID mode is enabled, but the backend is missing the FaceID IP-Adapter nodes. Install/update ComfyUI_IPAdapter_plus, make sure insightface is installed, add the FaceID IP-Adapter models + matching LoRA + CLIP Vision model, then restart ComfyUI.')
+                if has_standard:
+                    ip_model_loader = await adapter.get_object_info('IPAdapterModelLoader')
+                    ip_advanced = await adapter.get_object_info('IPAdapterAdvanced')
+                    if not (clip_vision_ok and isinstance(ip_model_loader, dict) and (ip_model_loader.get('IPAdapterModelLoader') or ip_model_loader) and isinstance(ip_advanced, dict) and (ip_advanced.get('IPAdapterAdvanced') or ip_advanced)):
+                        raise ValueError('IPAdapter custom nodes are not available in this ComfyUI backend yet. Install ComfyUI_IPAdapter_plus (or comfyorg/comfyui-ipadapter), add the IP-Adapter models + CLIP Vision models, then restart ComfyUI.')
+            except ValueError:
+                raise
+            except Exception as exc:
+                raise ValueError(f'IPAdapter custom nodes are not ready on this backend: {exc}') from exc
+
+        workflow, normalized_payload, compile_notes = build_generation_workflow(payload)
+        compile_notes = [*pre_compile_notes, *compile_notes]
+        logger.info('Generation workflow compiled | mode=%s | checkpoint=%s | sampler=%s | size=%sx%s', normalized_payload.get('mode') or '', normalized_payload.get('checkpoint') or '', normalized_payload.get('sampler') or '', normalized_payload.get('width') or '', normalized_payload.get('height') or '')
+        queued = await adapter.queue_prompt(workflow)
+        logger.info('Generation prompt queued in ComfyUI | prompt_id=%s | queue_number=%s | node_errors=%s', queued.get('prompt_id') or '', queued.get('number'), bool(queued.get('node_errors')))
+    except ValueError as exc:
+        logger.warning('Generation validation failed: %s', exc)
+        return json_error(str(exc), 400)
+    except Exception as exc:
+        logger.exception('Could not queue the ComfyUI workflow')
+        try:
+            atomic_write_json(GENERATION_REJECTED_WORKFLOW_PATH, {
+                'error': str(exc),
+                'normalized_payload': normalized_payload,
+                'compile_notes': pre_compile_notes + compile_notes,
+                'workflow_graph': workflow,
+            })
+        except Exception:
+            logger.exception('Could not save the rejected ComfyUI workflow debug payload')
+        return json_error(f'Could not queue the ComfyUI workflow: {exc}', 502)
+
+    profile = get_profile('image', session.get('profile_id') or None) or {
+        'backend_type': 'comfyui',
+        'name': session.get('profile_name') or 'ComfyUI',
+        'base_url': session.get('base_url') or '',
+    }
+    job = create_generation_job(
+        payload=normalized_payload,
+        backend_profile=profile,
+        prompt_id=str(queued.get('prompt_id') or ''),
+        queue_number=queued.get('number'),
+        compile_notes=compile_notes,
+        workflow_graph=workflow,
+    )
+    if queued.get('node_errors'):
+        job = update_generation_job(job['id'], {
+            'state': 'error',
+            'status_text': 'ComfyUI reported node validation errors.',
+            'error': json.dumps(queued.get('node_errors'), ensure_ascii=False),
+        }) or job
+    else:
+        background_tasks.add_task(_background_finalize_generation_job, str(job.get('id') or job.get('job_id') or ''))
+    return JSONResponse({
+        'ok': True,
+        'job': job,
+        'queued': queued,
+        'message': f"Queued {normalized_payload.get('mode') or 'workflow'} in ComfyUI.",
+    })
+
+
+@router.post('/api/generation/pause')
+async def api_generation_pause():
+    adapter, _session, error = _image_profile_or_error()
+    if error:
+        return error
+    try:
+        result = await adapter.clear_queue()
+    except Exception as exc:
+        return json_exception(exc, default_message='Could not clear the pending ComfyUI queue.', default_status=502, logger_override=logger, context='generation queue clear')
+    return JSONResponse({
+        'ok': True,
+        'message': 'Pending queue cleared. The current run keeps going because this backend only supports interrupt, not true pause.',
+        'result': result,
+    })
+
+
+@router.post('/api/generation/cancel')
+async def api_generation_cancel(job_id: str = Form(''), prompt_id: str = Form('')):
+    adapter, _session, error = _image_profile_or_error()
+    if error:
+        return error
+    try:
+        result = await adapter.interrupt(str(prompt_id or '').strip() or None)
+    except Exception as exc:
+        return json_exception(exc, default_message='Could not interrupt ComfyUI.', default_status=502, logger_override=logger, context='generation interrupt')
+
+    queue_result = None
+    try:
+        queue_result = await adapter.clear_queue()
+    except Exception:
+        queue_result = None
+
+    if str(job_id or '').strip():
+        update_generation_job(job_id, {
+            'state': 'cancelled',
+            'status_text': 'Stopped from Neo Studio.',
+        })
+    return JSONResponse({
+        'ok': True,
+        'message': 'Stop sent to ComfyUI. Current run interrupted and pending queue cleared.',
+        'result': result,
+        'queue_result': queue_result,
+    })
