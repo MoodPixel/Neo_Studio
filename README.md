@@ -262,12 +262,6 @@ Recommended starting points:
 * Assistant Guide
 * Admin Guide
 
-Internal developer/system documentation is available in:
-
-```text
-neo_system_records/
-```
-
 ---
 
 ## 🧠 Philosophy
