@@ -117,10 +117,10 @@ Neo Studio does **not** include AI models or third-party backends. You must inst
 
 Recommended backends:
 
-| Backend | Used For |
-|---|---|
-| **ComfyUI Portable** | Image generation, workflows, custom nodes | https://github.com/Comfy-Org/ComfyUI
-| **KoboldCPP** | Local LLM/chat/roleplay backend | https://github.com/LostRuins/koboldcpp/releases/tag/v1.112.2
+| Backend | Used For | Link |
+|---|---|---|
+| **ComfyUI Portable** | Image generation, workflows, custom nodes | https://github.com/Comfy-Org/ComfyUI |
+| **KoboldCPP** | Local LLM/chat/roleplay backend | https://github.com/LostRuins/koboldcpp/releases/tag/v1.112.2 |
 
 After installing a backend:
 
