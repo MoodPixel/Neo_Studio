@@ -312,6 +312,6 @@ Neo Studio will continue evolving into a unified creative system, expanding beyo
 
 If you find Neo Studio useful and want to support development:
 
-👉 https://www.buymeacoffee.com/yourname
+👉 [https://ko-fi.com/moodpixel](https://ko-fi.com/moodpixel)
 
 Support is optional, but always appreciated 💙
