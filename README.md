@@ -275,8 +275,10 @@ Neo Studio is built as a **system, not just a tool**.
 
 ## 📜 License
 
-MIT
+Neo Studio is licensed under the GNU General Public License (GPL).
 
+This allows free use, modification, and distribution,
+but all derived works must remain open source under the same license.
 ---
 
 ## 🚀 Future Direction
