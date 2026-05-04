@@ -307,3 +307,11 @@ Neo Studio will continue evolving into a unified creative system, expanding beyo
 * Advanced automation
 
 ---
+
+## ☕ Support the Project
+
+If you find Neo Studio useful and want to support development:
+
+👉 https://www.buymeacoffee.com/yourname
+
+Support is optional, but always appreciated 💙
