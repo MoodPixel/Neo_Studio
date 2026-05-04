@@ -1,8 +1,10 @@
 # Neo Studio
 
-**Neo Studio** is a local-first AI creative workspace designed to bring multiple workflows—image generation, prompt engineering, roleplay systems, and assistant tools—into one structured environment.
+**Neo Studio** is a local-first AI creative workspace and frontend control system designed to connect multiple AI backends—such as ComfyUI, KoboldCPP, and other local tools—into one structured environment.
 
-Instead of juggling separate tools, Neo Studio organizes everything into clear, connected systems so creators can focus on building, not managing chaos.
+Neo Studio does not include AI models or backend engines by itself. Instead, it provides an organized interface for managing creative workflows like image generation, prompt engineering, roleplay systems, assistant tools, and backend launching.
+
+Instead of juggling separate tools manually, Neo Studio helps connect and organize them so creators can focus on building, testing, and refining their workflows.
 
 ![Image](docs/Assets/Image/Main.png)
 ---
