@@ -1,0 +1,12 @@
+# Neo Studio optional / feature-expansion requirements
+# Install these only if you need the related features.
+
+# Detector preview / YOLO-based utilities
+ultralytics
+
+# Legacy / classic library UI script (neo_library_classic.py)
+gradio
+
+# Roleplay V2 local retrieval backends
+sentence-transformers
+transformers

@@ -1,0 +1,14 @@
+# Neo Studio core app requirements
+# Chosen from current neo_studio_v1 imports + planned memory stack
+fastapi
+uvicorn[standard]
+jinja2
+python-multipart
+httpx
+pillow
+numpy
+opencv-python
+websockets
+PyYAML
+chromadb
+json5
