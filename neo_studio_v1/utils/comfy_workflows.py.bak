@@ -1,0 +1,1558 @@
+from __future__ import annotations
+
+import random
+import re
+from typing import Any, Dict, Tuple
+
+from ..contracts.generation_families import normalize_generation_mode, normalize_inpaint_backend, validate_generation_support
+from ..contracts.inpaint_payloads import merge_shared_inpaint_payload, get_shared_inpaint_payload
+from ..config.feature_flags import REGIONAL_ENABLE_NODE_BACKEND, REGIONAL_ENABLE_DENSE_DIFFUSION, REGIONAL_ENABLE_EXPERIMENTAL
+
+VALID_SAMPLERS = {
+    'euler',
+    'euler_ancestral',
+    'heun',
+    'dpm_2',
+    'dpm_2_ancestral',
+    'lms',
+    'dpm_fast',
+    'dpm_adaptive',
+    'dpmpp_2s_ancestral',
+    'dpmpp_sde',
+    'dpmpp_sde_gpu',
+    'dpmpp_2m',
+    'dpmpp_2m_sde',
+    'dpmpp_2m_sde_gpu',
+    'dpmpp_3m_sde',
+    'res_multistep',
+    'ddim',
+    'uni_pc',
+    'uni_pc_bh2',
+    'lcm',
+    'plms',
+}
+
+SAMPLER_ALIASES = {
+    'euler a': 'euler_ancestral',
+    'euler_a': 'euler_ancestral',
+    'dpm++ 2m': 'dpmpp_2m',
+    'dpmpp_2m': 'dpmpp_2m',
+    'unipc': 'uni_pc',
+    'uni_pc': 'uni_pc',
+}
+
+VALID_LANPAINT_SAMPLERS = {
+    'euler',
+    'euler_ancestral',
+    'heun',
+    'dpm_2',
+    'dpm_2_ancestral',
+    'lms',
+    'dpm_fast',
+    'dpm_adaptive',
+    'dpmpp_2s_ancestral',
+    'dpmpp_sde',
+    'dpmpp_sde_gpu',
+    'dpmpp_2m',
+    'dpmpp_2m_sde',
+    'dpmpp_2m_sde_gpu',
+    'dpmpp_3m_sde',
+    'ddim',
+    'uni_pc',
+    'uni_pc_bh2',
+    'lcm',
+    'plms',
+}
+
+VALID_LANPAINT_SCHEDULERS = {
+    'normal',
+    'karras',
+    'exponential',
+    'sgm_uniform',
+    'simple',
+    'ddim_uniform',
+    'beta',
+}
+
+PROMPT_WEIGHT_PATTERN = re.compile(r'[\(\[]\s*([^\(\)\[\]]+?)\s*:\s*(-?\d*\.?\d+)\s*[\)\]]')
+
+
+def normalize_sampler_name(value: str) -> str:
+    text = str(value or '').strip().lower()
+    text = SAMPLER_ALIASES.get(text, text)
+    return text or 'euler'
+
+
+def normalize_scheduler_name(value: str) -> str:
+    text = str(value or '').strip().lower()
+    aliases = {
+        'sgm uniform': 'sgm_uniform',
+        'linear quadratic': 'linear_quadratic',
+        'kl optimal': 'kl_optimal',
+        'ddim uniform': 'ddim_uniform',
+        'align your steps': 'align_your_steps',
+        'polyexponential': 'polyexponential',
+    }
+    return aliases.get(text, text or 'normal')
+
+
+def parse_seed(value: Any) -> int:
+    text = str(value or '').strip()
+    if not text or text == '-1':
+        return random.randint(1, 2**63 - 1)
+    try:
+        parsed = int(float(text))
+    except Exception:
+        parsed = random.randint(1, 2**63 - 1)
+    return max(1, min(parsed, 2**63 - 1))
+
+
+def _clamp_int(value: Any, default: int, lo: int, hi: int) -> int:
+    try:
+        parsed = int(float(value))
+    except Exception:
+        parsed = default
+    return max(lo, min(parsed, hi))
+
+
+def _clamp_float(value: Any, default: float, lo: float, hi: float) -> float:
+    try:
+        parsed = float(value)
+    except Exception:
+        parsed = default
+    return max(lo, min(parsed, hi))
+
+
+def _merge_prompt(main_text: str, style_text: str) -> str:
+    chunks = [str(main_text or '').strip(), str(style_text or '').strip()]
+    return ', '.join([chunk for chunk in chunks if chunk])
+
+
+def _merge_prompt_parts(*parts: Any) -> str:
+    chunks = [str(part or '').strip() for part in parts]
+    return ', '.join([chunk for chunk in chunks if chunk])
+
+
+def _normalize_pass_target(value: Any, default: str = 'both') -> str:
+    target = str(value or default).strip().lower() or default
+    return target if target in {'both', 'base', 'finish'} else default
+
+
+def _normalize_prompt_conditioning_mode(value: Any) -> str:
+    mode = str(value or 'raw').strip().lower() or 'raw'
+    return mode if mode in {'raw', 'soft_clamp', 'balanced'} else 'raw'
+
+
+def _supports_clip_skip(payload: Dict[str, Any]) -> bool:
+    model_source = str(payload.get('model_source') or 'checkpoint').strip().lower() or 'checkpoint'
+    if model_source == 'checkpoint':
+        return True
+    if model_source != 'gguf':
+        return False
+    clip_mode = str(payload.get('gguf_clip_mode') or 'dual').strip().lower() or 'dual'
+    clip_type = str(payload.get('gguf_clip_type') or 'flux').strip().lower() or 'flux'
+    if clip_mode == 'single' and clip_type == 'qwen_image':
+        return False
+    return clip_type in {'stable_diffusion', 'sdxl', 'sd3'}
+
+
+def _normalize_clip_skip(value: Any) -> int:
+    try:
+        parsed = int(float(value))
+    except Exception:
+        parsed = 1
+    return max(1, min(parsed, 4))
+
+
+def _condition_prompt_text(text: Any, mode: str) -> str:
+    raw = str(text or '')
+    conditioning_mode = _normalize_prompt_conditioning_mode(mode)
+    if not raw or conditioning_mode == 'raw':
+        return raw
+    if conditioning_mode == 'soft_clamp':
+        min_weight, max_weight = 0.4, 1.6
+    else:
+        min_weight, max_weight = 0.5, 1.45
+
+    def repl(match: re.Match[str]) -> str:
+        body = ' '.join(str(match.group(1) or '').split()) if conditioning_mode == 'balanced' else str(match.group(1) or '').strip()
+        try:
+            weight = float(match.group(2) or 1.0)
+        except Exception:
+            weight = 1.0
+        weight = max(min_weight, min(max_weight, weight))
+        normalized = f'{weight:.2f}'.rstrip('0').rstrip('.')
+        return f'({body}:{normalized})'
+
+    conditioned = PROMPT_WEIGHT_PATTERN.sub(repl, raw)
+    if conditioning_mode == 'balanced':
+        conditioned = re.sub(r'\s*,\s*,+', ', ', conditioned)
+        conditioned = re.sub(r'\s{2,}', ' ', conditioned)
+        conditioned = conditioned.strip(' ,')
+    return conditioned
+
+
+def _build_pass_prompt_pair(payload: Dict[str, Any], pass_name: str = 'base') -> tuple[str, str]:
+    pass_key = 'finish' if str(pass_name or '').strip().lower() == 'finish' else 'base'
+    style_positive_key = 'refine_style_positive' if pass_key == 'finish' else 'style_positive'
+    style_negative_key = 'refine_style_negative' if pass_key == 'finish' else 'style_negative'
+    ti_positive_key = 'ti_finish_positive' if pass_key == 'finish' else 'ti_base_positive'
+    ti_negative_key = 'ti_finish_negative' if pass_key == 'finish' else 'ti_base_negative'
+    positive_text = _merge_prompt_parts(payload.get('positive') or '', payload.get(style_positive_key) or '', payload.get(ti_positive_key) or '')
+    negative_text = _merge_prompt_parts(payload.get('negative') or '', payload.get(style_negative_key) or '', payload.get(ti_negative_key) or '')
+    conditioning_mode = _normalize_prompt_conditioning_mode(payload.get('prompt_conditioning_mode'))
+    return _condition_prompt_text(positive_text, conditioning_mode), _condition_prompt_text(negative_text, conditioning_mode)
+
+
+def _select_lora_units_for_pass(units: list[dict[str, Any]], pass_name: str) -> list[dict[str, Any]]:
+    wanted = 'finish' if str(pass_name or '').strip().lower() == 'finish' else 'base'
+    filtered: list[dict[str, Any]] = []
+    for unit in units or []:
+        target = _normalize_pass_target(unit.get('target') if isinstance(unit, dict) else 'both', 'both')
+        if target in {'both', wanted}:
+            filtered.append(unit)
+    return filtered
+
+
+def _apply_lora_stack(graph: Dict[str, Any], next_id: int, model_ref, clip_ref, units: list[dict[str, Any]]):
+    for unit in units or []:
+        next_id, model_ref, clip_ref = _apply_optional_lora(
+            graph,
+            next_id,
+            model_ref,
+            clip_ref,
+            unit.get('name') or '',
+            unit.get('strength') or 0.8,
+        )
+    return next_id, model_ref, clip_ref
+
+
+def _apply_ipadapter_stack(graph: Dict[str, Any], next_id: int, model_ref, units: list[dict[str, Any]]):
+    for unit in units or []:
+        next_id, model_ref = _apply_optional_ipadapter(graph, next_id, model_ref, unit)
+    return next_id, model_ref
+
+
+def _encode_prompt_pair(
+    graph: Dict[str, Any],
+    next_id: int,
+    clip_ref,
+    positive_text: str,
+    negative_text: str,
+    *,
+    flux_mode: bool = False,
+    qwen_mode: bool = False,
+    guidance: float = 3.5,
+    vae_ref = None,
+    qwen_image_refs: list[Any] | None = None,
+    qwen_target_latent_ref = None,
+    qwen_images_on_negative: bool = False,
+):
+    positive_id = next_id
+    if qwen_mode:
+        positive_inputs = {
+            'prompt': positive_text,
+            'clip': list(clip_ref),
+        }
+        negative_inputs = {
+            'prompt': negative_text,
+            'clip': list(clip_ref),
+        }
+        if vae_ref is not None:
+            positive_inputs['vae'] = list(vae_ref)
+            negative_inputs['vae'] = list(vae_ref)
+        if qwen_target_latent_ref is not None:
+            positive_inputs['target_latent'] = list(qwen_target_latent_ref)
+            negative_inputs['target_latent'] = list(qwen_target_latent_ref)
+        for index, image_ref in enumerate((qwen_image_refs or [])[:4], start=1):
+            if image_ref is None:
+                continue
+            positive_inputs[f'image{index}'] = list(image_ref)
+            if qwen_images_on_negative:
+                negative_inputs[f'image{index}'] = list(image_ref)
+        graph[str(positive_id)] = {
+            'class_type': 'TextEncodeQwenImageEditPlus',
+            'inputs': positive_inputs,
+        }
+        graph[str(next_id + 1)] = {
+            'class_type': 'TextEncodeQwenImageEditPlus',
+            'inputs': negative_inputs,
+        }
+    elif flux_mode:
+        graph[str(positive_id)] = {
+            'class_type': 'CLIPTextEncodeFlux',
+            'inputs': {
+                'clip_l': positive_text,
+                't5xxl': positive_text,
+                'guidance': guidance,
+                'clip': list(clip_ref),
+            },
+        }
+        graph[str(next_id + 1)] = {
+            'class_type': 'CLIPTextEncode',
+            'inputs': {
+                'text': negative_text,
+                'clip': list(clip_ref),
+            },
+        }
+    else:
+        graph[str(positive_id)] = {
+            'class_type': 'CLIPTextEncode',
+            'inputs': {
+                'text': positive_text,
+                'clip': list(clip_ref),
+            },
+        }
+        graph[str(next_id + 1)] = {
+            'class_type': 'CLIPTextEncode',
+            'inputs': {
+                'text': negative_text,
+                'clip': list(clip_ref),
+            },
+        }
+    return next_id + 2, [str(positive_id), 0], [str(next_id + 1), 0]
+
+
+def _apply_clip_skip(graph: Dict[str, Any], next_id: int, clip_ref, clip_skip: int):
+    skip = _normalize_clip_skip(clip_skip)
+    if skip <= 1:
+        return next_id, clip_ref
+    graph[str(next_id)] = {
+        'class_type': 'CLIPSetLastLayer',
+        'inputs': {
+            'clip': list(clip_ref),
+            'stop_at_clip_layer': -skip,
+        },
+    }
+    return next_id + 1, [str(next_id), 0]
+
+
+def _apply_controlnet_stack(graph: Dict[str, Any], next_id: int, positive_ref, negative_ref, vae_ref, units: list[dict[str, Any]]):
+    for unit in units or []:
+        next_id, positive_ref, negative_ref = _apply_optional_controlnet(
+            graph,
+            next_id,
+            positive_ref,
+            negative_ref,
+            vae_ref,
+            unit.get('model') or '',
+            unit.get('image_name') or '',
+            unit.get('strength') or 1.0,
+        )
+    return next_id, positive_ref, negative_ref
+
+
+def _apply_flux_sampling_patch(graph: Dict[str, Any], next_id: int, model_ref, width: int, height: int):
+    graph[str(next_id)] = {
+        'class_type': 'ModelSamplingFlux',
+        'inputs': {
+            'max_shift': 1.15,
+            'base_shift': 0.5,
+            'width': width,
+            'height': height,
+            'model': list(model_ref),
+        },
+    }
+    return next_id + 1, [str(next_id), 0]
+
+
+
+def _apply_qwen_sampling_patch(graph: Dict[str, Any], next_id: int, model_ref, shift: float = 3.0, cfgnorm_strength: float = 1.0):
+    graph[str(next_id)] = {
+        'class_type': 'ModelSamplingAuraFlow',
+        'inputs': {
+            'shift': round(float(shift), 4),
+            'model': list(model_ref),
+        },
+    }
+    aura_ref = [str(next_id), 0]
+    graph[str(next_id + 1)] = {
+        'class_type': 'CFGNorm',
+        'inputs': {
+            'model': list(aura_ref),
+            'strength': round(float(cfgnorm_strength), 4),
+        },
+    }
+    return next_id + 2, [str(next_id + 1), 0]
+
+
+def _prepare_qwen_conditioning_images(
+    graph: Dict[str, Any],
+    next_id: int,
+    payload: Dict[str, Any],
+    mode: str,
+    *,
+    outpaint_left: int = 0,
+    outpaint_top: int = 0,
+    outpaint_right: int = 0,
+    outpaint_bottom: int = 0,
+    outpaint_feather: int = 24,
+):
+    normalized_mode = normalize_generation_mode(mode)
+    if normalized_mode == 'txt2img':
+        return next_id, []
+
+    inpaint_payload = get_shared_inpaint_payload(payload)
+    source_images_row = (inpaint_payload.get('source_images') or {}) if isinstance(inpaint_payload, dict) else {}
+    composition_row = (inpaint_payload.get('composition') or {}) if isinstance(inpaint_payload, dict) else {}
+
+    base_image_name = str(source_images_row.get('base_image_name') or payload.get('source_image_name') or '').strip()
+    reference_image_2_name = str(source_images_row.get('reference_image_2_name') or payload.get('source_image__2_name') or '').strip()
+    composition_image_name = str(source_images_row.get('composition_image_name') or payload.get('source_image__3_name') or '').strip()
+    composition_source_mode = str(composition_row.get('source_mode') or payload.get('composition_source_mode') or 'source_image').strip().lower()
+    composition_guide_type = str(composition_row.get('guide_type') or payload.get('composition_guide_type') or 'none').strip().lower()
+
+    composition_slot_name = composition_image_name if composition_source_mode == 'composition_image' and composition_image_name else base_image_name
+    source_names = [base_image_name, reference_image_2_name, composition_slot_name]
+    if not any(source_names):
+        raise ValueError('Qwen Image Edit needs a source image.')
+
+    qwen_refs = []
+    for index, source_image in enumerate(source_names):
+        if not source_image:
+            qwen_refs.append(None)
+            continue
+        load_id = next_id
+        graph[str(load_id)] = {
+            'class_type': 'LoadImage',
+            'inputs': {
+                'image': source_image,
+                'upload': 'image',
+            },
+        }
+        current_ref = [str(load_id), 0]
+        next_id += 1
+
+        if index == 0 and normalized_mode == 'outpaint':
+            if outpaint_left + outpaint_top + outpaint_right + outpaint_bottom <= 0:
+                raise ValueError('Outpaint needs padding on at least one side.')
+            pad_id = next_id
+            graph[str(pad_id)] = {
+                'class_type': 'ImagePadForOutpaint',
+                'inputs': {
+                    'image': list(current_ref),
+                    'left': outpaint_left,
+                    'top': outpaint_top,
+                    'right': outpaint_right,
+                    'bottom': outpaint_bottom,
+                    'feathering': outpaint_feather,
+                },
+            }
+            current_ref = [str(pad_id), 0]
+            next_id += 1
+
+        if index == 2 and composition_guide_type in {'depth', 'pose'}:
+            if composition_guide_type == 'depth':
+                guide_class = str(payload.get('composition_depth_node_class') or 'DepthAnythingV2Preprocessor').strip() or 'DepthAnythingV2Preprocessor'
+                guide_id = next_id
+                guide_inputs = {
+                    'image': list(current_ref),
+                }
+                if guide_class == 'DepthAnythingV2Preprocessor':
+                    guide_inputs['ckpt_name'] = str(payload.get('composition_depth_ckpt_name') or 'depth_anything_v2_vitl.pth').strip() or 'depth_anything_v2_vitl.pth'
+                    guide_inputs['resolution'] = _clamp_int(payload.get('composition_depth_resolution') or 512, 512, 64, 4096)
+                elif guide_class in {'DepthAnythingPreprocessor', 'MiDaSDepthMapPreprocessor', 'MiDaS-DepthMapPreprocessor', 'ZoeDepthMapPreprocessor', 'Zoe-DepthMapPreprocessor'}:
+                    guide_inputs['resolution'] = _clamp_int(payload.get('composition_depth_resolution') or 512, 512, 64, 4096)
+                graph[str(guide_id)] = {
+                    'class_type': guide_class,
+                    'inputs': guide_inputs,
+                }
+                current_ref = [str(guide_id), 0]
+                next_id += 1
+            elif composition_guide_type == 'pose':
+                guide_class = str(payload.get('composition_pose_node_class') or 'DWPreprocessor').strip() or 'DWPreprocessor'
+                guide_id = next_id
+                guide_inputs = {
+                    'image': list(current_ref),
+                }
+                if guide_class == 'DWPreprocessor':
+                    guide_inputs.update({
+                        'detect_hand': 'enable',
+                        'detect_body': 'enable',
+                        'detect_face': 'enable',
+                        'resolution': _clamp_int(payload.get('composition_pose_resolution') or 1024, 1024, 64, 4096),
+                        'bbox_detector': str(payload.get('composition_pose_bbox_detector') or 'yolox_l.onnx').strip() or 'yolox_l.onnx',
+                        'pose_estimator': str(payload.get('composition_pose_estimator') or 'dw-ll_ucoco_384_bs5.torchscript.pt').strip() or 'dw-ll_ucoco_384_bs5.torchscript.pt',
+                        'scale_stick_for_xinsr_cn': 'disable',
+                    })
+                elif guide_class == 'OpenposePreprocessor':
+                    guide_inputs['resolution'] = _clamp_int(payload.get('composition_pose_resolution') or 1024, 1024, 64, 4096)
+                graph[str(guide_id)] = {
+                    'class_type': guide_class,
+                    'inputs': guide_inputs,
+                }
+                current_ref = [str(guide_id), 0]
+                next_id += 1
+
+        qwen_refs.append(list(current_ref))
+
+    return next_id, qwen_refs
+
+
+
+def _build_qwen_sampler_input(
+    graph: Dict[str, Any],
+    next_id: int,
+    payload: Dict[str, Any],
+    mode: str,
+    *,
+    width: int,
+    height: int,
+    batch_size: int,
+    vae_ref=None,
+    inpaint_target: str = 'masked',
+    outpaint_left: int = 0,
+    outpaint_top: int = 0,
+    outpaint_right: int = 0,
+    outpaint_bottom: int = 0,
+    outpaint_feather: int = 24,
+):
+    normalized_mode = normalize_generation_mode(mode)
+    if normalized_mode == 'inpaint':
+        inpaint_payload = get_shared_inpaint_payload(payload)
+        source_images_row = (inpaint_payload.get('source_images') or {}) if isinstance(inpaint_payload, dict) else {}
+        mask_row = (inpaint_payload.get('mask') or {}) if isinstance(inpaint_payload, dict) else {}
+        output_row = (inpaint_payload.get('output') or {}) if isinstance(inpaint_payload, dict) else {}
+        source_image = str(source_images_row.get('base_image_name') or payload.get('source_image_name') or '').strip()
+        mask_image = str(mask_row.get('mask_image_name') or payload.get('mask_image_name') or '').strip()
+        if not source_image or not mask_image:
+            raise ValueError('Qwen inpaint needs both a source image and a mask image.')
+        if vae_ref is None:
+            raise ValueError('Qwen inpaint needs a VAE reference before building the LanPaint lane.')
+
+        load_id = next_id
+        graph[str(load_id)] = {
+            'class_type': 'LoadImage',
+            'inputs': {
+                'image': source_image,
+                'upload': 'image',
+            },
+        }
+        next_id += 1
+        image_ref = [str(load_id), 0]
+
+        megapixels = _clamp_float(output_row.get('megapixels') if output_row.get('megapixels') is not None else payload.get('megapixels') or 0.0, 0.0, 0.0, 16.0)
+        if megapixels > 0:
+            scale_id = next_id
+            graph[str(scale_id)] = {
+                'class_type': 'ImageScaleToTotalPixels',
+                'inputs': {
+                    'image': list(image_ref),
+                    'upscale_method': 'lanczos',
+                    'megapixels': round(megapixels, 4),
+                    'resolution_steps': 1,
+                },
+            }
+            image_ref = [str(scale_id), 0]
+            next_id += 1
+
+        size_id = next_id
+        graph[str(size_id)] = {
+            'class_type': 'GetImageSize',
+            'inputs': {
+                'image': list(image_ref),
+            },
+        }
+        next_id += 1
+
+        mask_id = next_id
+        graph[str(mask_id)] = {
+            'class_type': 'LoadImageMask',
+            'inputs': {
+                'image': mask_image,
+                'channel': 'red',
+            },
+        }
+        next_id += 1
+        active_mask_ref = [str(mask_id), 0]
+
+        grow_by = _clamp_int(mask_row.get('grow_mask_by') if mask_row.get('grow_mask_by') is not None else payload.get('grow_mask_by') or 6, 6, 0, 256)
+        blur_by = _clamp_float(mask_row.get('blur_mask_by') if mask_row.get('blur_mask_by') is not None else payload.get('blur_mask_by') or payload.get('mask_blur') or 0.0, 0.0, 0.0, 256.0)
+        if grow_by > 0 or blur_by > 0:
+            grow_id = next_id
+            graph[str(grow_id)] = {
+                'class_type': 'GrowMaskWithBlur',
+                'inputs': {
+                    'mask': list(active_mask_ref),
+                    'expand': grow_by,
+                    'incremental_expandrate': 0,
+                    'tapered_corners': True,
+                    'flip_input': False,
+                    'blur_radius': round(blur_by, 4),
+                    'lerp_alpha': 1,
+                    'decay_factor': 1,
+                    'fill_holes': False,
+                },
+            }
+            active_mask_ref = [str(grow_id), 0]
+            next_id += 1
+
+        mask_to_image_id = next_id
+        graph[str(mask_to_image_id)] = {
+            'class_type': 'MaskToImage',
+            'inputs': {
+                'mask': list(active_mask_ref),
+            },
+        }
+        next_id += 1
+
+        scale_mask_id = next_id
+        graph[str(scale_mask_id)] = {
+            'class_type': 'ImageScale',
+            'inputs': {
+                'image': [str(mask_to_image_id), 0],
+                'upscale_method': 'nearest-exact',
+                'width': [str(size_id), 0],
+                'height': [str(size_id), 1],
+                'crop': 'center',
+            },
+        }
+        next_id += 1
+
+        image_to_mask_id = next_id
+        graph[str(image_to_mask_id)] = {
+            'class_type': 'ImageToMask',
+            'inputs': {
+                'image': [str(scale_mask_id), 0],
+                'channel': 'red',
+            },
+        }
+        next_id += 1
+        active_mask_ref = [str(image_to_mask_id), 0]
+
+        if inpaint_target == 'unmasked':
+            invert_id = next_id
+            graph[str(invert_id)] = {
+                'class_type': 'InvertMask',
+                'inputs': {
+                    'mask': list(active_mask_ref),
+                },
+            }
+            active_mask_ref = [str(invert_id), 0]
+            next_id += 1
+
+        encode_id = next_id
+        graph[str(encode_id)] = {
+            'class_type': 'VAEEncode',
+            'inputs': {
+                'pixels': list(image_ref),
+                'vae': list(vae_ref),
+            },
+        }
+        next_id += 1
+
+        noise_mask_id = next_id
+        graph[str(noise_mask_id)] = {
+            'class_type': 'SetLatentNoiseMask',
+            'inputs': {
+                'samples': [str(encode_id), 0],
+                'mask': list(active_mask_ref),
+            },
+        }
+        next_id += 1
+        return next_id, [str(noise_mask_id), 0], list(image_ref)
+
+    if normalized_mode not in {'txt2img', 'img2img'}:
+        raise ValueError('Qwen Image Edit in Neo does not expose this mode in the live workspace yet.')
+    latent_id = next_id
+    graph[str(latent_id)] = {
+        'class_type': 'EmptyLatentImage',
+        'inputs': {
+            'width': width,
+            'height': height,
+            'batch_size': batch_size,
+        },
+    }
+    next_id += 1
+    sampler_input = [str(latent_id), 0]
+    return next_id, sampler_input, None
+
+
+def _apply_optional_lora(graph: Dict[str, Any], next_id: int, model_ref, clip_ref, lora_name: str, strength: float):
+    if not str(lora_name or '').strip():
+        return next_id, model_ref, clip_ref
+    graph[str(next_id)] = {
+        'class_type': 'LoraLoader',
+        'inputs': {
+            'lora_name': str(lora_name).strip(),
+            'strength_model': round(float(strength), 4),
+            'strength_clip': round(float(strength), 4),
+            'model': list(model_ref),
+            'clip': list(clip_ref),
+        },
+    }
+    return next_id + 1, [str(next_id), 0], [str(next_id), 1]
+
+
+def _apply_optional_controlnet(graph: Dict[str, Any], next_id: int, positive_ref, negative_ref, vae_ref, controlnet_name: str, control_image_name: str, strength: float) -> Tuple[int, Any, Any]:
+    if not str(controlnet_name or '').strip() or not str(control_image_name or '').strip():
+        return next_id, positive_ref, negative_ref
+    load_image_id = next_id
+    graph[str(load_image_id)] = {
+        'class_type': 'LoadImage',
+        'inputs': {
+            'image': str(control_image_name).strip(),
+            'upload': 'image',
+        },
+    }
+    loader_id = next_id + 1
+    graph[str(loader_id)] = {
+        'class_type': 'ControlNetLoader',
+        'inputs': {
+            'control_net_name': str(controlnet_name).strip(),
+        },
+    }
+    apply_id = next_id + 2
+    graph[str(apply_id)] = {
+        'class_type': 'ControlNetApplyAdvanced',
+        'inputs': {
+            'strength': round(float(strength), 4),
+            'start_percent': 0,
+            'end_percent': 1,
+            'positive': list(positive_ref),
+            'negative': list(negative_ref),
+            'control_net': [str(loader_id), 0],
+            'image': [str(load_image_id), 0],
+            'vae': list(vae_ref),
+        },
+    }
+    return next_id + 3, [str(apply_id), 0], [str(apply_id), 1]
+
+
+
+def _normalize_ipadapter_image_names(unit: dict[str, Any]) -> list[str]:
+    names: list[str] = []
+    raw_names = unit.get('image_names')
+    if isinstance(raw_names, list):
+        names.extend(str(item or '').strip() for item in raw_names if str(item or '').strip())
+    elif isinstance(raw_names, str) and raw_names.strip():
+        names.append(raw_names.strip())
+    fallback_name = str(unit.get('image_name') or '').strip()
+    if fallback_name and fallback_name not in names:
+        names.insert(0, fallback_name)
+    return names
+
+
+def _build_ipadapter_image_ref(graph: Dict[str, Any], next_id: int, image_names: list[str]):
+    cleaned = [str(name or '').strip() for name in image_names if str(name or '').strip()]
+    if not cleaned:
+        return next_id, None
+    load_id = next_id
+    graph[str(load_id)] = {
+        'class_type': 'LoadImage',
+        'inputs': {
+            'image': cleaned[0],
+            'upload': 'image',
+        },
+    }
+    next_id += 1
+    current_ref = [str(load_id), 0]
+    for image_name in cleaned[1:]:
+        extra_load_id = next_id
+        graph[str(extra_load_id)] = {
+            'class_type': 'LoadImage',
+            'inputs': {
+                'image': image_name,
+                'upload': 'image',
+            },
+        }
+        batch_id = next_id + 1
+        graph[str(batch_id)] = {
+            'class_type': 'ImageBatch',
+            'inputs': {
+                'image1': list(current_ref),
+                'image2': [str(extra_load_id), 0],
+            },
+        }
+        current_ref = [str(batch_id), 0]
+        next_id += 2
+    return next_id, current_ref
+
+
+
+def _apply_optional_ipadapter_standard(graph: Dict[str, Any], next_id: int, model_ref, unit: dict[str, Any]):
+    ipadapter_name = str(unit.get('model') or '').strip()
+    clip_vision_name = str(unit.get('clip_vision') or '').strip()
+    image_names = _normalize_ipadapter_image_names(unit)
+    if not ipadapter_name or not clip_vision_name or not image_names:
+        return next_id, model_ref
+    next_id, image_ref = _build_ipadapter_image_ref(graph, next_id, image_names)
+    if not image_ref:
+        return next_id, model_ref
+    loader_id = next_id
+    graph[str(loader_id)] = {
+        'class_type': 'IPAdapterModelLoader',
+        'inputs': {
+            'ipadapter_file': ipadapter_name,
+        },
+    }
+    clip_loader_id = next_id + 1
+    graph[str(clip_loader_id)] = {
+        'class_type': 'CLIPVisionLoader',
+        'inputs': {
+            'clip_name': clip_vision_name,
+        },
+    }
+    apply_id = next_id + 2
+    graph[str(apply_id)] = {
+        'class_type': 'IPAdapterAdvanced',
+        'inputs': {
+            'model': list(model_ref),
+            'ipadapter': [str(loader_id), 0],
+            'image': list(image_ref),
+            'weight': round(float(unit.get('weight') or 1.0), 4),
+            'weight_type': str(unit.get('weight_type') or 'linear').strip() or 'linear',
+            'combine_embeds': str(unit.get('combine_embeds') or 'concat').strip() or 'concat',
+            'start_at': round(float(unit.get('start_at') or 0.0), 4),
+            'end_at': round(float(unit.get('end_at') or 1.0), 4),
+            'embeds_scaling': str(unit.get('embeds_scaling') or 'V only').strip() or 'V only',
+            'clip_vision': [str(clip_loader_id), 0],
+        },
+    }
+    return next_id + 3, [str(apply_id), 0]
+
+
+
+def _apply_optional_ipadapter_faceid(graph: Dict[str, Any], next_id: int, model_ref, unit: dict[str, Any]):
+    clip_vision_name = str(unit.get('clip_vision') or '').strip()
+    image_name = str(unit.get('image_name') or '').strip()
+    if not clip_vision_name or not image_name:
+        return next_id, model_ref
+    preset = str(unit.get('faceid_preset') or 'FACEID PLUS V2').strip() or 'FACEID PLUS V2'
+    provider = str(unit.get('faceid_provider') or 'CUDA').strip() or 'CUDA'
+    load_image_id = next_id
+    graph[str(load_image_id)] = {
+        'class_type': 'LoadImage',
+        'inputs': {
+            'image': image_name,
+            'upload': 'image',
+        },
+    }
+    loader_id = next_id + 1
+    graph[str(loader_id)] = {
+        'class_type': 'IPAdapterUnifiedLoaderFaceID',
+        'inputs': {
+            'model': list(model_ref),
+            'preset': preset,
+            'lora_strength': round(float(unit.get('faceid_lora_strength') or 0.75), 4),
+            'provider': provider,
+        },
+    }
+    clip_loader_id = next_id + 2
+    graph[str(clip_loader_id)] = {
+        'class_type': 'CLIPVisionLoader',
+        'inputs': {
+            'clip_name': clip_vision_name,
+        },
+    }
+    apply_id = next_id + 3
+    graph[str(apply_id)] = {
+        'class_type': 'IPAdapterFaceID',
+        'inputs': {
+            'model': [str(loader_id), 0],
+            'ipadapter': [str(loader_id), 1],
+            'image': [str(load_image_id), 0],
+            'weight': round(float(unit.get('weight') or 1.0), 4),
+            'weight_faceidv2': round(float(unit.get('weight_faceidv2') or unit.get('weight') or 1.0), 4),
+            'weight_type': str(unit.get('weight_type') or 'linear').strip() or 'linear',
+            'combine_embeds': str(unit.get('combine_embeds') or 'concat').strip() or 'concat',
+            'start_at': round(float(unit.get('start_at') or 0.0), 4),
+            'end_at': round(float(unit.get('end_at') or 1.0), 4),
+            'embeds_scaling': str(unit.get('embeds_scaling') or 'V only').strip() or 'V only',
+            'clip_vision': [str(clip_loader_id), 0],
+        },
+    }
+    return next_id + 4, [str(apply_id), 0]
+
+
+
+def _apply_optional_ipadapter(graph: Dict[str, Any], next_id: int, model_ref, unit: dict[str, Any]):
+    mode = str(unit.get('mode') or 'standard').strip().lower() or 'standard'
+    if mode == 'faceid':
+        return _apply_optional_ipadapter_faceid(graph, next_id, model_ref, unit)
+    return _apply_optional_ipadapter_standard(graph, next_id, model_ref, unit)
+
+
+
+def _normalize_lora_units(payload: Dict[str, Any]) -> list[dict[str, Any]]:
+    units: list[dict[str, Any]] = []
+    raw_units = payload.get('loras')
+    if isinstance(raw_units, list):
+        for unit in raw_units:
+            if not isinstance(unit, dict):
+                continue
+            name = str(unit.get('name') or unit.get('lora_name') or '').strip()
+            if not name:
+                continue
+            units.append({
+                'name': name,
+                'strength': _clamp_float(unit.get('strength') or unit.get('lora_strength') or 0.8, 0.8, -4.0, 4.0),
+                'target': _normalize_pass_target(unit.get('target') or unit.get('pass_target') or 'both', 'both'),
+            })
+    if units:
+        return units
+    name = str(payload.get('lora_name') or '').strip()
+    if name:
+        units.append({
+            'name': name,
+            'strength': _clamp_float(payload.get('lora_strength') or 0.8, 0.8, -4.0, 4.0),
+            'target': _normalize_pass_target(payload.get('lora_target') or 'both', 'both'),
+        })
+    return units
+
+
+def _normalize_controlnet_units(payload: Dict[str, Any]) -> list[dict[str, Any]]:
+    units: list[dict[str, Any]] = []
+    raw_units = payload.get('controlnet_units')
+    if isinstance(raw_units, list):
+        for unit in raw_units:
+            if not isinstance(unit, dict):
+                continue
+            model_name = str(unit.get('model') or unit.get('controlnet_name') or '').strip()
+            if not model_name:
+                continue
+            units.append({
+                'model': model_name,
+                'image_name': str(unit.get('image_name') or unit.get('control_image_name') or '').strip(),
+                'strength': _clamp_float(unit.get('strength') or unit.get('controlnet_strength') or 1.0, 1.0, 0.0, 2.0),
+                'preprocessor': str(unit.get('preprocessor') or 'none').strip().lower() or 'none',
+            })
+    if units:
+        return units
+    model_name = str(payload.get('controlnet_name') or '').strip()
+    if model_name:
+        units.append({
+            'model': model_name,
+            'image_name': str(payload.get('control_image_name') or '').strip(),
+            'strength': _clamp_float(payload.get('controlnet_strength') or 1.0, 1.0, 0.0, 2.0),
+            'preprocessor': str(payload.get('controlnet_preprocessor') or 'none').strip().lower() or 'none',
+        })
+    return units
+
+
+
+
+def _normalize_ipadapter_units(payload: Dict[str, Any]) -> list[dict[str, Any]]:
+    units: list[dict[str, Any]] = []
+    raw_units = payload.get('ipadapter_units')
+    if isinstance(raw_units, list):
+        for unit in raw_units:
+            if not isinstance(unit, dict):
+                continue
+            mode = str(unit.get('mode') or 'standard').strip().lower() or 'standard'
+            model_name = str(unit.get('model') or unit.get('ipadapter_name') or '').strip()
+            clip_vision_name = str(unit.get('clip_vision') or unit.get('clip_vision_name') or '').strip()
+            if not clip_vision_name:
+                continue
+            if mode != 'faceid' and not model_name:
+                continue
+            image_names = unit.get('image_names') if isinstance(unit.get('image_names'), list) else []
+            image_names = [str(item or '').strip() for item in image_names if str(item or '').strip()]
+            image_name = str(unit.get('image_name') or '').strip()
+            if image_name and image_name not in image_names:
+                image_names.insert(0, image_name)
+            units.append({
+                'mode': mode,
+                'model': model_name,
+                'clip_vision': clip_vision_name,
+                'image_name': image_name,
+                'image_names': image_names,
+                'weight': _clamp_float(unit.get('weight') or 1.0, 1.0, -1.0, 5.0),
+                'weight_faceidv2': _clamp_float(unit.get('weight_faceidv2') or unit.get('weight') or 1.0, 1.0, -1.0, 5.0),
+                'weight_type': str(unit.get('weight_type') or 'linear').strip() or 'linear',
+                'combine_embeds': str(unit.get('combine_embeds') or 'concat').strip() or 'concat',
+                'start_at': _clamp_float(unit.get('start_at') or 0.0, 0.0, 0.0, 1.0),
+                'end_at': _clamp_float(unit.get('end_at') or 1.0, 1.0, 0.0, 1.0),
+                'embeds_scaling': str(unit.get('embeds_scaling') or 'V only').strip() or 'V only',
+                'faceid_preset': str(unit.get('faceid_preset') or 'FACEID PLUS V2').strip() or 'FACEID PLUS V2',
+                'faceid_provider': str(unit.get('faceid_provider') or 'CUDA').strip() or 'CUDA',
+                'faceid_lora_strength': _clamp_float(unit.get('faceid_lora_strength') or 0.75, 0.75, 0.0, 2.0),
+            })
+    if units:
+        return units
+    mode = str(payload.get('ipadapter_mode') or 'standard').strip().lower() or 'standard'
+    model_name = str(payload.get('ipadapter_name') or '').strip()
+    clip_vision_name = str(payload.get('ipadapter_clip_vision') or '').strip()
+    if clip_vision_name and (mode == 'faceid' or model_name):
+        payload_image_names = payload.get('ipadapter_image_names') if isinstance(payload.get('ipadapter_image_names'), list) else []
+        payload_image_names = [str(item or '').strip() for item in payload_image_names if str(item or '').strip()]
+        payload_image_name = str(payload.get('ipadapter_image_name') or '').strip()
+        if payload_image_name and payload_image_name not in payload_image_names:
+            payload_image_names.insert(0, payload_image_name)
+        units.append({
+            'mode': mode,
+            'model': model_name,
+            'clip_vision': clip_vision_name,
+            'image_name': payload_image_name,
+            'image_names': payload_image_names,
+            'weight': _clamp_float(payload.get('ipadapter_weight') or 1.0, 1.0, -1.0, 5.0),
+            'weight_faceidv2': _clamp_float(payload.get('ipadapter_weight_faceidv2') or payload.get('ipadapter_weight') or 1.0, 1.0, -1.0, 5.0),
+            'weight_type': str(payload.get('ipadapter_weight_type') or 'linear').strip() or 'linear',
+            'combine_embeds': str(payload.get('ipadapter_combine_embeds') or 'concat').strip() or 'concat',
+            'start_at': _clamp_float(payload.get('ipadapter_start_at') or 0.0, 0.0, 0.0, 1.0),
+            'end_at': _clamp_float(payload.get('ipadapter_end_at') or 1.0, 1.0, 0.0, 1.0),
+            'embeds_scaling': str(payload.get('ipadapter_embeds_scaling') or 'V only').strip() or 'V only',
+            'faceid_preset': str(payload.get('ipadapter_faceid_preset') or 'FACEID PLUS V2').strip() or 'FACEID PLUS V2',
+            'faceid_provider': str(payload.get('ipadapter_faceid_provider') or 'CUDA').strip() or 'CUDA',
+            'faceid_lora_strength': _clamp_float(payload.get('ipadapter_faceid_lora_strength') or 0.75, 0.75, 0.0, 2.0),
+        })
+    return units
+
+
+
+def _normalize_detailer_passes(payload: Dict[str, Any]) -> list[dict[str, Any]]:
+    units: list[dict[str, Any]] = []
+    raw_units = payload.get('detailer_passes')
+    if isinstance(raw_units, list):
+        for unit in raw_units:
+            if not isinstance(unit, dict):
+                continue
+            model_name = str(unit.get('detector_model') or unit.get('model') or '').strip()
+            enabled = bool(unit.get('enabled', True))
+            if not enabled or not model_name:
+                continue
+            units.append({
+                'uid': str(unit.get('uid') or '').strip(),
+                'provider': str(unit.get('provider') or 'ultralytics').strip().lower() or 'ultralytics',
+                'mode': str(unit.get('mode') or 'face').strip().lower() or 'face',
+                'detector_type': str(unit.get('detector_type') or 'bbox').strip().lower() or 'bbox',
+                'detector_model': model_name,
+                'sam_model': str(unit.get('sam_model') or '').strip(),
+                'custom_classes': str(unit.get('custom_classes') or '').strip(),
+                'confidence': _clamp_float(unit.get('confidence') or 0.35, 0.35, 0.01, 1.0),
+                'top_k': _clamp_int(unit.get('top_k') or 0, 0, 0, 50),
+                'bbox_grow': _clamp_int(unit.get('bbox_grow') or 12, 12, 0, 512),
+                'mask_blur': _clamp_int(unit.get('mask_blur') or 4, 4, 0, 128),
+                'denoise': _clamp_float(unit.get('denoise') or 0.35, 0.35, 0.01, 1.0),
+                'steps': _clamp_int(unit.get('steps') or 12, 12, 1, 150),
+                'use_main_prompt': bool(unit.get('use_main_prompt', True)),
+                'force_inpaint': bool(unit.get('force_inpaint', True)),
+                'positive': str(unit.get('positive') or '').strip(),
+                'negative': str(unit.get('negative') or '').strip(),
+                'order_mode': str(unit.get('order_mode') or unit.get('order') or 'auto').strip().lower() or 'auto',
+                'start_index': _clamp_int(unit.get('start_index') or 1, 1, 1, 99),
+                'count': _clamp_int(unit.get('count') or 1, 1, 0, 99),
+                'min_area': _clamp_int(unit.get('min_area') or 0, 0, 0, 100000000),
+                'max_area': _clamp_int(unit.get('max_area') or 0, 0, 0, 100000000),
+                'reference_lock': str(unit.get('reference_lock') or 'none').strip().lower() or 'none',
+                'target_mode': str(unit.get('target_mode') or 'auto_detect').strip().lower() or 'auto_detect',
+                'manual_boxes': str(unit.get('manual_boxes') or '').strip(),
+            })
+    if units:
+        return units
+    detailer = payload.get('detailer')
+    if isinstance(detailer, dict) and bool(detailer.get('enabled')) and str(detailer.get('detector_model') or '').strip():
+        units.append({
+            'uid': 'primary',
+            'provider': str(detailer.get('provider') or 'ultralytics').strip().lower() or 'ultralytics',
+            'mode': str(detailer.get('mode') or 'face').strip().lower() or 'face',
+            'detector_type': str(detailer.get('detector_type') or 'bbox').strip().lower() or 'bbox',
+            'detector_model': str(detailer.get('detector_model') or '').strip(),
+            'sam_model': str(detailer.get('sam_model') or '').strip(),
+            'custom_classes': str(detailer.get('custom_classes') or '').strip(),
+            'confidence': _clamp_float(detailer.get('confidence') or 0.35, 0.35, 0.01, 1.0),
+            'top_k': _clamp_int(detailer.get('top_k') or 0, 0, 0, 50),
+            'bbox_grow': _clamp_int(detailer.get('bbox_grow') or 12, 12, 0, 512),
+            'mask_blur': _clamp_int(detailer.get('mask_blur') or 4, 4, 0, 128),
+            'denoise': _clamp_float(detailer.get('denoise') or 0.35, 0.35, 0.01, 1.0),
+            'steps': _clamp_int(detailer.get('steps') or 12, 12, 1, 150),
+            'use_main_prompt': bool(detailer.get('use_main_prompt', True)),
+            'force_inpaint': bool(detailer.get('force_inpaint', True)),
+            'positive': str(detailer.get('positive') or '').strip(),
+            'negative': str(detailer.get('negative') or '').strip(),
+            'order_mode': str(detailer.get('order_mode') or detailer.get('order') or 'auto').strip().lower() or 'auto',
+            'start_index': _clamp_int(detailer.get('start_index') or 1, 1, 1, 99),
+            'count': _clamp_int(detailer.get('count') or 1, 1, 0, 99),
+            'min_area': _clamp_int(detailer.get('min_area') or 0, 0, 0, 100000000),
+            'max_area': _clamp_int(detailer.get('max_area') or 0, 0, 0, 100000000),
+            'reference_lock': str(detailer.get('reference_lock') or 'none').strip().lower() or 'none',
+            'target_mode': str(detailer.get('target_mode') or 'auto_detect').strip().lower() or 'auto_detect',
+            'manual_boxes': str(detailer.get('manual_boxes') or '').strip(),
+        })
+    return units
+
+
+def _detailer_uses_segs_routing(unit: dict[str, Any]) -> bool:
+    return (
+        str(unit.get('order_mode') or 'auto') != 'auto'
+        or int(unit.get('start_index') or 1) != 1
+        or int(unit.get('count') or 1) not in (0, 1)
+        or int(unit.get('min_area') or 0) > 0
+        or int(unit.get('max_area') or 0) > 0
+        or str(unit.get('target_mode') or 'auto_detect') == 'manual_boxes'
+        or str(unit.get('reference_lock') or 'none') != 'none'
+    )
+
+
+def _detailer_order_filter_config(order_mode: str) -> tuple[str, bool] | None:
+    mode = str(order_mode or 'auto').strip().lower() or 'auto'
+    mapping = {
+        'left_to_right': ('x1', False),
+        'right_to_left': ('x1', True),
+        'top_to_bottom': ('y1', False),
+        'bottom_to_top': ('y1', True),
+        'largest_first': ('area(=w*h)', True),
+        'smallest_first': ('area(=w*h)', False),
+    }
+    return mapping.get(mode)
+
+
+def _build_detailer_detector_provider(graph: Dict[str, Any], next_id: int, unit: dict[str, Any]):
+    provider = str(unit.get('provider') or 'ultralytics').strip().lower() or 'ultralytics'
+    detector_model = str(unit.get('detector_model') or '').strip()
+    if not detector_model:
+        return next_id, None, None, None, "no detector model selected"
+
+    if provider == 'ultralytics':
+        detector_model_for_provider = detector_model if '/' in detector_model else f"{'segm' if unit.get('detector_type') == 'segm' else 'bbox'}/{detector_model}"
+        detector_class_type = 'UltralyticsDetectorProvider'
+    elif provider == 'onnx':
+        detector_model_for_provider = detector_model
+        detector_class_type = 'ONNXDetectorProvider'
+    else:
+        return next_id, None, None, None, f"provider '{provider}' is not wired in the workflow compiler yet"
+
+    detector_id = next_id
+    graph[str(detector_id)] = {
+        'class_type': detector_class_type,
+        'inputs': {
+            'model_name': detector_model_for_provider,
+        },
+    }
+    return next_id + 1, detector_id, detector_model_for_provider, provider, None
+
+
+def _build_detailer_prompt_refs(graph: Dict[str, Any], next_id: int, clip_ref, unit: dict[str, Any], default_positive_ref, default_negative_ref):
+    pass_positive_ref = default_positive_ref
+    pass_negative_ref = default_negative_ref
+    if not bool(unit.get('use_main_prompt', True)) and (str(unit.get('positive') or '').strip() or str(unit.get('negative') or '').strip()):
+        pass_positive_id = next_id
+        graph[str(pass_positive_id)] = {
+            'class_type': 'CLIPTextEncode',
+            'inputs': {
+                'text': str(unit.get('positive') or '').strip() or '',
+                'clip': list(clip_ref),
+            },
+        }
+        pass_negative_id = next_id + 1
+        graph[str(pass_negative_id)] = {
+            'class_type': 'CLIPTextEncode',
+            'inputs': {
+                'text': str(unit.get('negative') or '').strip() or '',
+                'clip': list(clip_ref),
+            },
+        }
+        pass_positive_ref = [str(pass_positive_id), 0]
+        pass_negative_ref = [str(pass_negative_id), 0]
+        next_id += 2
+    return next_id, pass_positive_ref, pass_negative_ref
+
+
+def _parse_detailer_manual_boxes(raw_value: Any, width: int, height: int) -> list[dict[str, float]]:
+    raw_text = str(raw_value or '').strip()
+    if not raw_text or width <= 0 or height <= 0:
+        return []
+
+    def _parse_component(token: str, base: int) -> float:
+        value = str(token or '').strip()
+        if not value:
+            raise ValueError('empty coordinate')
+        if value.endswith('%'):
+            return max(0.0, min(1.0, float(value[:-1]) / 100.0))
+        return max(0.0, float(value) / float(base))
+
+    boxes: list[dict[str, float]] = []
+    for line in raw_text.splitlines():
+        cleaned = line.strip()
+        if not cleaned:
+            continue
+        mode = 'xywh'
+        lowered = cleaned.lower()
+        if lowered.startswith('xyxy:'):
+            mode = 'xyxy'
+            cleaned = cleaned.split(':', 1)[1]
+        elif lowered.startswith('xywh:'):
+            cleaned = cleaned.split(':', 1)[1]
+        parts = [part.strip() for part in cleaned.split(',') if part.strip()]
+        if len(parts) != 4:
+            continue
+        try:
+            if mode == 'xyxy':
+                x1 = _parse_component(parts[0], width)
+                y1 = _parse_component(parts[1], height)
+                x2 = _parse_component(parts[2], width)
+                y2 = _parse_component(parts[3], height)
+                x = min(x1, x2)
+                y = min(y1, y2)
+                w = abs(x2 - x1)
+                h = abs(y2 - y1)
+            else:
+                x = _parse_component(parts[0], width)
+                y = _parse_component(parts[1], height)
+                w = _parse_component(parts[2], width)
+                h = _parse_component(parts[3], height)
+            w = max(0.0, min(1.0 - x, w))
+            h = max(0.0, min(1.0 - y, h))
+            if w <= 0.0 or h <= 0.0:
+                continue
+            boxes.append({'x': round(x, 6), 'y': round(y, 6), 'w': round(w, 6), 'h': round(h, 6)})
+        except Exception:
+            continue
+    return boxes
+
+
+def _build_manual_detailer_segs(graph: Dict[str, Any], next_id: int, width: int, height: int, manual_box: dict[str, float], unit: dict[str, Any] | None = None):
+    unit = unit or {}
+    next_id, mask_layers, _ = _build_rect_mask_layers(graph, next_id, width, height, {**manual_box, 'falloff': 0.0})
+    mask_ref = list(mask_layers[0][0]) if mask_layers else None
+    if not mask_ref:
+        return next_id, None
+    mask_to_segs_id = next_id
+    graph[str(mask_to_segs_id)] = {
+        'class_type': 'MaskToSEGS',
+        'inputs': {
+            'mask': list(mask_ref),
+            'combined': False,
+            'crop_factor': 1.12,
+            'bbox_fill': False,
+            'drop_size': 1,
+            'contour_fill': False,
+        },
+    }
+    segs_ref = [str(mask_to_segs_id), 0]
+    next_id += 1
+
+    dilation = max(0, int(unit.get('bbox_grow') or 0))
+    if dilation > 0:
+        dilate_id = next_id
+        graph[str(dilate_id)] = {
+            'class_type': 'ImpactDilateMaskInSEGS',
+            'inputs': {
+                'segs': list(segs_ref),
+                'dilation': dilation,
+            },
+        }
+        segs_ref = [str(dilate_id), 0]
+        next_id += 1
+
+    blur_value = max(0, int(unit.get('mask_blur') or 0))
+    if blur_value > 0:
+        kernel_size = max(3, blur_value * 2 + 1)
+        if kernel_size % 2 == 0:
+            kernel_size += 1
+        blur_id = next_id
+        graph[str(blur_id)] = {
+            'class_type': 'ImpactGaussianBlurMaskInSEGS',
+            'inputs': {
+                'segs': list(segs_ref),
+                'kernel_size': kernel_size,
+                'sigma': max(1.0, round(blur_value / 2.0, 2)),
+            },
+        }
+        segs_ref = [str(blur_id), 0]
+        next_id += 1
+    return next_id, segs_ref
+
+
+def _apply_detailer_reference_lock_model(graph: Dict[str, Any], next_id: int, model_ref, payload: Dict[str, Any], reference_lock: str):
+    notes: list[str] = []
+    detailer_model_ref = model_ref
+    if reference_lock in ('ipadapter', 'both'):
+        ipadapter_units = _normalize_ipadapter_units(payload)
+        ip_unit = next((item for item in ipadapter_units if item.get('clip_vision') and _normalize_ipadapter_image_names(item) and (str(item.get('mode') or 'standard').strip().lower() == 'faceid' or item.get('model'))), None)
+        if ip_unit:
+            mode = str(ip_unit.get('mode') or 'standard').strip().lower() or 'standard'
+            notes.append('reusing the main faceid-conditioned model for the detail pass' if mode == 'faceid' else 'reusing the main ipadapter-conditioned model for the detail pass')
+        else:
+            notes.append('ipadapter-lock requested but no eligible IP-Adapter / FaceID unit was available')
+    return next_id, detailer_model_ref, notes
+
+
+def _apply_detailer_segs_pass(graph: Dict[str, Any], next_id: int, current_image_ref, model_ref, clip_ref, vae_ref, payload: Dict[str, Any], unit: dict[str, Any], seed: int, cfg: float, sampler_name: str, scheduler_name: str, pass_positive_ref, pass_negative_ref, detector_id: int | None, provider: str | None):
+    detector_type = str(unit.get('detector_type') or 'bbox').strip().lower() or 'bbox'
+    threshold = _clamp_float(unit.get('confidence') or 0.35, 0.35, 0.01, 1.0)
+    dilation = _clamp_int(unit.get('bbox_grow') or 12, 12, -512, 512)
+    crop_factor = 2.0
+    drop_size = 10
+    width = _clamp_int(payload.get('width') or 1024, 1024, 256, 4096)
+    height = _clamp_int(payload.get('height') or 1024, 1024, 256, 4096)
+    manual_box = unit.get('manual_box') if isinstance(unit.get('manual_box'), dict) else None
+
+    if manual_box is not None:
+        next_id, segs_ref = _build_manual_detailer_segs(graph, next_id, width, height, manual_box, unit)
+        if segs_ref is None:
+            return next_id, current_image_ref, ['manual box could not be converted into a SEGS target']
+    else:
+        if detector_type == 'segm' and provider == 'ultralytics':
+            detector_segs_id = next_id
+            graph[str(detector_segs_id)] = {
+                'class_type': 'SegmDetectorSEGS',
+                'inputs': {
+                    'segm_detector': [str(detector_id), 1],
+                    'image': list(current_image_ref),
+                    'threshold': threshold,
+                    'dilation': dilation,
+                    'crop_factor': crop_factor,
+                    'drop_size': drop_size,
+                },
+            }
+        else:
+            detector_segs_id = next_id
+            graph[str(detector_segs_id)] = {
+                'class_type': 'BboxDetectorSEGS',
+                'inputs': {
+                    'bbox_detector': [str(detector_id), 0],
+                    'image': list(current_image_ref),
+                    'threshold': threshold,
+                    'dilation': dilation,
+                    'crop_factor': crop_factor,
+                    'drop_size': drop_size,
+                },
+            }
+        segs_ref = [str(detector_segs_id), 0]
+        next_id += 1
+
+    order_config = _detailer_order_filter_config(str(unit.get('order_mode') or 'auto'))
+    if order_config is not None or int(unit.get('start_index') or 1) != 1 or int(unit.get('count') or 1) not in (0, 1):
+        target, descending = order_config or ('none', True)
+        ordered_filter_id = next_id
+        graph[str(ordered_filter_id)] = {
+            'class_type': 'ImpactSEGSOrderedFilter',
+            'inputs': {
+                'segs': list(segs_ref),
+                'target': target,
+                'order': bool(descending),
+                'take_start': max(0, int(unit.get('start_index') or 1) - 1),
+                'take_count': int(unit.get('count') or 0) if int(unit.get('count') or 0) > 0 else 9999,
+            },
+        }
+        segs_ref = [str(ordered_filter_id), 0]
+        next_id += 1
+
+    min_area = int(unit.get('min_area') or 0)
+    max_area = int(unit.get('max_area') or 0)
+    if min_area > 0 or max_area > 0:
+        range_filter_id = next_id
+        graph[str(range_filter_id)] = {
+            'class_type': 'ImpactSEGSRangeFilter',
+            'inputs': {
+                'segs': list(segs_ref),
+                'target': 'area(=w*h)',
+                'mode': True,
+                'min_value': max(0, min_area),
+                'max_value': max_area if max_area > 0 else 67108864,
+            },
+        }
+        segs_ref = [str(range_filter_id), 0]
+        next_id += 1
+
+    controlnet_units = _normalize_controlnet_units(payload)
+    reference_lock = str(unit.get('reference_lock') or 'none').strip().lower() or 'none'
+    reference_notes: list[str] = []
+    if reference_lock in ('controlnet', 'both'):
+        if controlnet_units:
+            reference_notes.append('reusing the main controlnet-conditioned prompts for the detail pass')
+        else:
+            reference_notes.append('controlnet-lock requested but no ControlNet units are configured')
+
+    next_id, detailer_model_ref, ipadapter_reference_notes = _apply_detailer_reference_lock_model(graph, next_id, model_ref, payload, reference_lock)
+    reference_notes.extend(ipadapter_reference_notes)
+
+    basic_pipe_id = next_id
+    graph[str(basic_pipe_id)] = {
+        'class_type': 'ToBasicPipe',
+        'inputs': {
+            'model': list(detailer_model_ref),
+            'clip': list(clip_ref),
+            'vae': list(vae_ref),
+            'positive': list(pass_positive_ref),
+            'negative': list(pass_negative_ref),
+        },
+    }
+    segs_detailer_id = next_id + 1
+    graph[str(segs_detailer_id)] = {
+        'class_type': 'SEGSDetailer',
+        'inputs': {
+            'image': list(current_image_ref),
+            'segs': list(segs_ref),
+            'guide_size': 512.0,
+            'guide_size_for': True,
+            'max_size': float(max(width, height, 1024)),
+            'seed': max(1, seed),
+            'steps': _clamp_int(unit.get('steps') or 12, 12, 1, 150),
+            'cfg': cfg,
+            'sampler_name': sampler_name,
+            'scheduler': scheduler_name,
+            'denoise': _clamp_float(unit.get('denoise') or 0.35, 0.35, 0.01, 1.0),
+            'noise_mask': True,
+            'force_inpaint': bool(unit.get('force_inpaint', True)),
+            'basic_pipe': [str(basic_pipe_id), 0],
+            'refiner_ratio': 0.2,
+            'batch_size': 1,
+            'cycle': 1,
+            'inpaint_model': False,
+            'noise_mask_feather': _clamp_int(unit.get('mask_blur') or 4, 4, 0, 128),
+        },
+    }
+    paste_id = next_id + 2
+    graph[str(paste_id)] = {
+        'class_type': 'SEGSPaste',
+        'inputs': {
+            'image': list(current_image_ref),
+            'segs': [str(segs_detailer_id), 0],
+            'feather': _clamp_int(unit.get('mask_blur') or 4, 4, 0, 128),
+            'alpha': 255,
+        },
+    }
+    return next_id + 3, [str(paste_id), 0], reference_notes
+
+
+def _apply_optional_detailers(graph: Dict[str, Any], next_id: int, image_ref, model_ref, clip_ref, vae_ref, payload: Dict[str, Any], seed: int, cfg: float, sampler_name: str, scheduler_name: str, default_positive_ref, default_negative_ref) -> Tuple[int, Any, list[str]]:
+    units = _normalize_detailer_passes(payload)
+    if not units:
+        return next_id, image_ref, []
+
+    notes: list[str] = ['Experimental Impact Pack detailer graph enabled.']
+    current_image_ref = image_ref
+    width = _clamp_int(payload.get('width') or 1024, 1024, 256, 4096)
+    height = _clamp_int(payload.get('height') or 1024, 1024, 256, 4096)
+    for index, unit in enumerate(units, start=1):
+        manual_boxes = _parse_detailer_manual_boxes(unit.get('manual_boxes'), width, height) if str(unit.get('target_mode') or 'auto_detect') == 'manual_boxes' else []
+        run_units = [{**unit, 'manual_box': box} for box in manual_boxes] if manual_boxes else [unit]
+        if str(unit.get('target_mode') or 'auto_detect') == 'manual_boxes' and not manual_boxes:
+            notes.append(f'Detailer pass {index} skipped: manual boxes mode was enabled but no valid boxes were provided.')
+            continue
+
+        for box_index, run_unit in enumerate(run_units, start=1):
+            detector_id = None
+            detector_model_for_provider = 'manual boxes'
+            provider = None
+            if run_unit.get('manual_box') is None:
+                next_id, detector_id, detector_model_for_provider, provider, detector_error = _build_detailer_detector_provider(graph, next_id, run_unit)
+                if detector_error:
+                    notes.append(f'Detailer pass {index} skipped: {detector_error}.')
+                    break
+
+            next_id, pass_positive_ref, pass_negative_ref = _build_detailer_prompt_refs(
+                graph,
+                next_id,
+                clip_ref,
+                run_unit,
+                default_positive_ref,
+                default_negative_ref,
+            )
+
+            pass_seed = max(1, seed + index + box_index - 1)
+            pass_label = f'Detailer pass {index}' if len(run_units) == 1 else f'Detailer pass {index}.{box_index}'
+
+            if _detailer_uses_segs_routing(run_unit):
+                next_id, current_image_ref, reference_notes = _apply_detailer_segs_pass(
+                    graph,
+                    next_id,
+                    current_image_ref,
+                    model_ref,
+                    clip_ref,
+                    vae_ref,
+                    payload,
+                    run_unit,
+                    pass_seed,
+                    cfg,
+                    sampler_name,
+                    scheduler_name,
+                    pass_positive_ref,
+                    pass_negative_ref,
+                    detector_id,
+                    provider,
+                )
+                if run_unit.get('manual_box') is not None:
+                    notes.append(f'{pass_label} queued with manual target boxes via SEGS routing.')
+                else:
+                    notes.append(f"{pass_label} queued with SEGS routing using {detector_model_for_provider} ({run_unit.get('mode') or 'face'} / {run_unit.get('detector_type') or 'bbox'}).")
+                notes.append(f'{pass_label} now applies manual/order/count/area target filters before paste-back.')
+                for reference_note in reference_notes:
+                    notes.append(f'{pass_label}: {reference_note}.')
+                continue
+
+            sam_ref = None
+            sam_model_name = str(run_unit.get('sam_model') or '').strip()
+            if sam_model_name:
+                sam_loader_id = next_id
+                graph[str(sam_loader_id)] = {
+                    'class_type': 'SAMLoader',
+                    'inputs': {
+                        'model_name': sam_model_name,
+                        'device_mode': 'AUTO',
+                    },
+                }
+                sam_ref = [str(sam_loader_id), 0]
+                next_id += 1
+
+            face_detailer_inputs = {
+                'image': list(current_image_ref),
+                'model': list(model_ref),
+                'clip': list(clip_ref),
+                'vae': list(vae_ref),
+                'guide_size': 512.0,
+                'guide_size_for': True,
+                'max_size': float(max(width, height, 1024)),
+                'seed': pass_seed,
+                'steps': _clamp_int(run_unit.get('steps') or 12, 12, 1, 150),
+                'cfg': cfg,
+                'sampler_name': sampler_name,
+                'scheduler': scheduler_name,
+                'positive': list(pass_positive_ref),
+                'negative': list(pass_negative_ref),
+                'denoise': _clamp_float(run_unit.get('denoise') or 0.35, 0.35, 0.01, 1.0),
+                'feather': _clamp_int(run_unit.get('mask_blur') or 4, 4, 0, 128),
+                'noise_mask': True,
+                'force_inpaint': bool(run_unit.get('force_inpaint', True)),
+                'bbox_threshold': _clamp_float(run_unit.get('confidence') or 0.35, 0.35, 0.01, 1.0),
+                'bbox_dilation': _clamp_int(run_unit.get('bbox_grow') or 12, 12, 0, 512),
+                'bbox_crop_factor': 2.0,
+                'sam_detection_hint': 'center-1',
+                'sam_dilation': _clamp_int(run_unit.get('bbox_grow') or 12, 12, 0, 512),
+                'sam_threshold': 0.88,
+                'sam_bbox_expansion': _clamp_int(run_unit.get('bbox_grow') or 12, 12, 0, 512),
+                'sam_mask_hint_threshold': 0.70,
+                'sam_mask_hint_use_negative': 'False',
+                'drop_size': 10,
+                'bbox_detector': [str(detector_id), 0],
+                'wildcard': '',
+                'cycle': 1,
+                'inpaint_model': False,
+                'noise_mask_feather': _clamp_int(run_unit.get('mask_blur') or 4, 4, 0, 128),
+            }
+            if provider == 'ultralytics' and run_unit.get('detector_type') == 'segm':
+                face_detailer_inputs['segm_detector_opt'] = [str(detector_id), 1]
+            if sam_ref is not None:
+                face_detailer_inputs['sam_model_opt'] = list(sam_ref)
+
+            detailer_id = next_id
+            graph[str(detailer_id)] = {
+                'class_type': 'FaceDetailer',
+                'inputs': face_detailer_inputs,
+            }
+            current_image_ref = [str(detailer_id), 0]
+            next_id += 1
+            notes.append(f"{pass_label} queued with {detector_model_for_provider} ({run_unit.get('mode') or 'face'} / {run_unit.get('detector_type') or 'bbox'}).")
+            if str(run_unit.get('reference_lock') or 'none') != 'none':
+                notes.append(f'{pass_label}: reference lock remains staged on the legacy FaceDetailer path.')
+
+    return next_id, current_image_ref, notes
+
+def _normalize_refine_resize_method(method: Any, refine_mode: str, refine_strategy: str = 'standard', qwen_mode: bool = False) -> str:
+    raw = str(method or '').strip().lower()
+    image_allowed = {'nearest-exact', 'bilinear', 'area', 'bicubic', 'lanczos'}
+    latent_allowed = {'nearest-exact', 'bilinear', 'area', 'bicubic', 'bislerp'}
+    # Qwen re-edit uses ImageScaleBy on decoded images before re-encoding.
+    # ImageScaleBy in the user's Comfy build does not accept bislerp, so force image-safe methods.
+    if qwen_mode and refine_strategy == 'qwen_reedit':
+        return raw if raw in image_allowed else 'lanczos'
+    if refine_mode == 'image_upscale':
+        return raw if raw in image_allowed else 'lanczos'
+    if raw == 'lanczos':
+        return 'bislerp'
+    return raw if raw in latent_allowed else 'bislerp'
+
+
+def _maybe_refi
