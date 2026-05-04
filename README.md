@@ -149,24 +149,24 @@ Recommended ComfyUI custom nodes:
 
 | Node | Purpose |
 |---|---|
-| `comfyui-art-venture` | Extra workflow utilities | https://github.com/sipherxyz/comfyui-art-venture.git
-| `comfyui-essentials` | Common utility nodes | https://github.com/comfyorg/comfyui-essentials.git
-| `ComfyUI-GGUF` | GGUF model support | https://github.com/city96/ComfyUI-GGUF.git
-| `ComfyUI-Impact-Pack` | Detection, detailing, masks, and utility workflows | https://github.com/ltdrdata/ComfyUI-Impact-Pack.git
-| `ComfyUI-Impact-Subpack` | Support package for Impact Pack | https://github.com/ltdrdata/ComfyUI-Impact-Subpack.git
-| `ComfyUI-Inspire-Pack` | Workflow helpers and utility nodes | https://github.com/ltdrdata/ComfyUI-Inspire-Pack.git
-| `ComfyUI-KJNodes` | Advanced utility and video/image helpers | https://github.com/kijai/ComfyUI-KJNodes.git
-| `ComfyUI-SUPIR` | SUPIR upscaling/restoration support | https://github.com/kijai/ComfyUI-SUPIR.git
-| `ComfyUI-WanVideoWrapper` | Wan video workflow support (Experimental)| https://github.com/kijai/ComfyUI-WanVideoWrapper.git
-| `comfyui_controlnet_aux` | ControlNet preprocessors | https://github.com/Fannovel16/comfyui_controlnet_aux.git
-| `ComfyUI_IPAdapter_plus` | IPAdapter workflows and identity/reference support | https://github.com/cubiq/ComfyUI_IPAdapter_plus.git
-| `ComfyUI_UltimateSDUpscale` | Tiled upscale workflow support | https://github.com/ssitu/ComfyUI_UltimateSDUpscale.git
-| `sd-dynamic-thresholding` | CFG Fix / Dynamic Thresholding support | https://github.com/mcmonkeyprojects/sd-dynamic-thresholding
-| `gguf` | GGUF utility support | https://github.com/calcuis/gguf.git
-| `LanPaint` | LanPaint/inpaint workflow support | https://github.com/scraed/LanPaint.git
-| `RES4LYF` | RES4LYF sampler support | https://github.com/ClownsharkBatwing/RES4LYF
-| `rgthree-comfy` | Workflow utility nodes | https://github.com/rgthree/rgthree-comfy.git
-| `neo_scene_director` | Neo Studio Scene Director node support | Included in the repo Move "neo_scene_director" to the comfy custom node folder
+| `comfyui-art-venture` | Extra workflow utilities | https://github.com/sipherxyz/comfyui-art-venture.git |
+| `comfyui-essentials` | Common utility nodes | https://github.com/comfyorg/comfyui-essentials.git |
+| `ComfyUI-GGUF` | GGUF model support | https://github.com/city96/ComfyUI-GGUF.git |
+| `ComfyUI-Impact-Pack` | Detection, detailing, masks, and utility workflows | https://github.com/ltdrdata/ComfyUI-Impact-Pack.git |
+| `ComfyUI-Impact-Subpack` | Support package for Impact Pack | https://github.com/ltdrdata/ComfyUI-Impact-Subpack.git |
+| `ComfyUI-Inspire-Pack` | Workflow helpers and utility nodes | https://github.com/ltdrdata/ComfyUI-Inspire-Pack.git |
+| `ComfyUI-KJNodes` | Advanced utility and video/image helpers | https://github.com/kijai/ComfyUI-KJNodes.git |
+| `ComfyUI-SUPIR` | SUPIR upscaling/restoration support | https://github.com/kijai/ComfyUI-SUPIR.git |
+| `ComfyUI-WanVideoWrapper` | Wan video workflow support (Experimental)| https://github.com/kijai/ComfyUI-WanVideoWrapper.git |
+| `comfyui_controlnet_aux` | ControlNet preprocessors | https://github.com/Fannovel16/comfyui_controlnet_aux.git |
+| `ComfyUI_IPAdapter_plus` | IPAdapter workflows and identity/reference support | https://github.com/cubiq/ComfyUI_IPAdapter_plus.git |
+| `ComfyUI_UltimateSDUpscale` | Tiled upscale workflow support | https://github.com/ssitu/ComfyUI_UltimateSDUpscale.git |
+| `sd-dynamic-thresholding` | CFG Fix / Dynamic Thresholding support | https://github.com/mcmonkeyprojects/sd-dynamic-thresholding |
+| `gguf` | GGUF utility support | https://github.com/calcuis/gguf.git |
+| `LanPaint` | LanPaint/inpaint workflow support | https://github.com/scraed/LanPaint.git |
+| `RES4LYF` | RES4LYF sampler support | https://github.com/ClownsharkBatwing/RES4LYF |
+| `rgthree-comfy` | Workflow utility nodes | https://github.com/rgthree/rgthree-comfy.git |
+| `neo_scene_director` | Neo Studio Scene Director node support | Included in the repo Move "neo_scene_director" to the comfy custom node folder |
 
 ### Installing nodes with Neo Node Manager
 
