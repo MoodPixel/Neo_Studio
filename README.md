@@ -8,7 +8,7 @@ Instead of juggling separate tools, Neo Studio organizes everything into clear, 
 
 ## ✨ Features
 
-* 🎨 **Image Tab**
+* 🎨 **[Image Tab](docs/IMAGE_TAB_GUIDE.md)**
 
   * Structured workflows for image generation and refinement
   * Supports ControlNet, ADetailer, IPAdapter, Scene Director, RES4LYF, LanPaint, and advanced pipelines
