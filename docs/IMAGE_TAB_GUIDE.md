@@ -12,8 +12,9 @@ Launch Backend > Connect Backend
 ### Model family selector:
 Select the Model family (SDXL/SD 1.5), use the same
 
-### Image workspace: 
-which pipeline you are working on, txt2img, img2img, inpaint, or outpain
+### Image workspace: which pipeline you are working on, txt2img, img2img, inpaint, or outpaint
+which pipeline you are working on, txt2img, img2img, inpaint, or outpaint
+
 ---
 
 ## 🧱 Workflow Structure
