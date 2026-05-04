@@ -1,0 +1,73 @@
+{
+  "schema_version": 1,
+  "id": "image.scene_director",
+  "extension_id": "image.scene_director",
+  "name": "Image · Scene Director",
+  "title": "Image · Scene Director",
+  "version": "0.5.2",
+  "author": "Neo Studio",
+  "description": "Built-in Neo-native regional prompting for SDXL and SD 1.5 image generation, with Scene Director workflow packs and IPAdapter-ready region planning.",
+  "built_in": true,
+  "enabled": true,
+  "enabled_default": true,
+  "source": "built_in_extension",
+  "target_surface": "image",
+  "surface": "image",
+  "target_tab": "assets",
+  "target_subtab": "assets",
+  "workspace": "assets",
+  "mount_type": "panel",
+  "mount_point": "image.panel",
+  "panel_title": "Scene Director",
+  "families": ["sdxl_sd", "sdxl", "sd", "sd15", "sd1.5"],
+  "allowed_families": ["sdxl_sd", "sdxl", "sd", "sd15", "sd1.5", "sd_1_5", "sd1_5"],
+  "blocked_families": ["flux", "qwen", "qwen_image_edit", "zimage"],
+  "disabled_families": ["flux", "qwen", "qwen_image_edit", "zimage"],
+  "injects_sections": ["assets"],
+  "injects_actions": ["before_image_generation"],
+  "ui_entry": "static/scene_director.js",
+  "entry_js": "static/scene_director.js",
+  "backend_routes": "backend/routes.py",
+  "adapter": "neo_studio_v1.extensions.image.scene_director.adapter:patch_workflow",
+  "requires_backends": ["image"],
+  "requires_nodes": ["NeoSceneDirectorV052", "IPAdapterModelLoader", "IPAdapterAdvanced", "CLIPVisionLoader"],
+  "workflow_folder": "workflows/test_workflows",
+  "frontend": {
+    "entry_js": "static/scene_director.js",
+    "entry_css": "",
+    "mount_id": "scene-director-panel"
+  },
+  "backend": {
+    "routes": "backend/routes.py",
+    "adapter": "neo_studio_v1.extensions.image.scene_director.adapter:patch_workflow",
+    "healthcheck": "/api/scene-director/status"
+  },
+  "comfy": {
+    "custom_nodes": "",
+    "workflows": "workflows/test_workflows",
+    "requires_nodes": ["NeoSceneDirectorV052", "IPAdapterModelLoader", "IPAdapterAdvanced", "CLIPVisionLoader"]
+  },
+  "workflows": {
+    "folder": "workflows/test_workflows",
+    "target_surface": "image",
+    "target_tab": "assets",
+    "backend_role": "image",
+    "family": "sdxl_sd",
+    "tags": ["scene-director", "regional-prompting", "ipadapter"]
+  },
+  "dependencies": {
+    "python": [],
+    "npm": [],
+    "neo_extensions": [],
+    "providers": ["image"],
+    "comfy_nodes": ["NeoSceneDirectorV052", "IPAdapterModelLoader", "IPAdapterAdvanced", "CLIPVisionLoader"],
+    "models": ["SDXL or SD 1.5 checkpoint", "Optional IPAdapter model", "Optional CLIP Vision model"],
+    "external_apps": ["ComfyUI"],
+    "notes": ["Install the bundled ComfyUI node pack into ComfyUI custom_nodes before using Scene Director workflows."]
+  },
+  "permissions": ["provider_access", "comfy_access", "frontend_injection", "backend_routes", "filesystem_read", "filesystem_write", "logs_read"],
+  "compatibility": {
+    "min_neo_version": "1.0.0",
+    "max_neo_version": ""
+  }
+}
