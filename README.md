@@ -4,6 +4,7 @@
 
 Instead of juggling separate tools, Neo Studio organizes everything into clear, connected systems so creators can focus on building, not managing chaos.
 
+![Image](Assets/Image/Main.png)
 ---
 
 ## ✨ Features
