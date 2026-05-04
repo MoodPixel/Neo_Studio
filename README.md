@@ -229,6 +229,22 @@ You can choose any folder path. Do **not** use hardcoded paths from another mach
 7. Restart or reload the Roleplay system if needed.
 
 ---
+## 🎥 Setup Guide (Video)
+
+Watch the full setup guide here:
+
+[![Neo Studio Setup Guide](https://img.youtube.com/vi/WN-Abk-jSvE/0.jpg)](https://youtu.be/WN-Abk-jSvE)
+
+This video covers:
+
+- Installing Neo Studio  
+- Setting up the Python environment  
+- Connecting ComfyUI backend  
+- Connecting KoboldCPP backend  
+- Basic system overview  
+
+More detailed guides for individual sections will be added as separate videos.
+---
 
 ## 📚 Documentation
 
