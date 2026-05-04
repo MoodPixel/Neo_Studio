@@ -1,0 +1,19 @@
+/* Legacy Roleplay V1 shell file retained for migration/reference only. Not included in the active index shell. New roleplay shell work belongs in roleplay_v2_shell.js. */
+(function(){
+  const KEY = 'neo-roleplay-setup-shell-open';
+  function $(id){ return document.getElementById(id); }
+  function chip(label, value, tone='neutral'){ return `<span class="surface-setup-shell-summary-chip" data-ui-tone="${tone}">${label} · ${value}</span>`; }
+  function currentBackendState(){ const c=$('surface-backend-roleplay-state'); const cls=Array.from(c?.classList||[]); const sc=cls.find(n=>n.startsWith('state-'))||'state-offline'; return sc.replace('state-',''); }
+  function truncate(label, max=26){ const text=String(label||'').trim(); if(!text) return 'default'; return text.length>max?`${text.slice(0,max-1)}…`:text; }
+  function currentModelLabel(){ return $('model-select')?.selectedOptions?.[0]?.textContent?.trim() || $('model-select')?.value || 'default'; }
+  function currentModelTone(){ const clean=String(currentModelLabel()).toLowerCase(); return ['vision','vl','llava','qwen2.5-vl','qwen-vl','pixtral','molmo','omni','multimodal'].some(h=>clean.includes(h)) ? 'specialty' : 'primary'; }
+  function currentPresetLabel(){ return $('roleplay-shell-preset-select')?.selectedOptions?.[0]?.textContent?.trim() || 'Manual setup'; }
+  function currentPresetTone(){ return $('roleplay-preset-active-badge')?.dataset.uiTone || 'neutral'; }
+  function currentModeLabel(){ const preset=$('roleplay-output-preset')?.selectedOptions?.[0]?.textContent?.trim() || 'Roleplay'; const interaction=$('roleplay-interaction-mode')?.selectedOptions?.[0]?.textContent?.trim() || 'Roleplay'; return `${preset} · ${interaction}`; }
+  function currentModeTone(){ const v=$('roleplay-output-preset')?.value || 'roleplay'; if(v==='roleplay') return 'primary'; if(v==='short_story') return 'recovery'; if(v==='novel') return 'specialty'; if(v==='cinematic') return 'warning'; return 'neutral'; }
+  function renderSummary(){ const strip=$('roleplay-setup-shell-summary-strip'); if(!strip) return; const state=currentBackendState(); const label=$('surface-backend-roleplay-state')?.textContent?.trim()||'Offline'; strip.innerHTML=`<span class="surface-setup-shell-summary-label">Current setup</span><span class="backend-chip state-${state}">${label}</span>${chip('Engine', truncate(currentModelLabel()), currentModelTone())}${chip('Workspace', truncate(currentModeLabel(),30), currentModeTone())}${chip('Preset', currentPresetLabel(), currentPresetTone())}`; }
+  function apply(open){ const h=$('roleplay-setup-shell-header'), c=$('roleplay-setup-shell-content'), p=$('roleplay-setup-shell-panel'), s=$('roleplay-setup-shell-summary-strip'), t=$('roleplay-setup-shell-toggle-copy'); if(!c||!p) return; const o=!!open; renderSummary(); c.style.display=o?'':'none'; p.classList.toggle('is-collapsed',!o); h?.setAttribute('aria-expanded',o?'true':'false'); s?.classList.toggle('hidden',o); if(t) t.textContent=o?'Collapse setup':'Expand setup'; try{window.sessionStorage.setItem(KEY,o?'true':'false');}catch(_){} }
+  function toggle(){ const c=$('roleplay-setup-shell-content'); apply(!!(c&&c.style.display==='none')); }
+  function bind(){ const h=$('roleplay-setup-shell-header'); const saved=(()=>{try{return window.sessionStorage.getItem(KEY);}catch(_){return null;}})(); apply(saved===null?true:saved==='true'); h?.addEventListener('click',toggle); h?.addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); toggle(); }}); document.addEventListener('neo-backend-state',renderSummary); document.addEventListener('neo-manager-model-changed',renderSummary); document.addEventListener('neo-roleplay-mode-changed',renderSummary); document.addEventListener('neo-roleplay-preset-changed',renderSummary); }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',bind,{once:true}); else bind();
+})();

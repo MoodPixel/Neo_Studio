@@ -1,0 +1,40 @@
+.neo-extension-slot {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0;
+}
+.neo-extension-slot--fallback {
+  position: relative;
+  z-index: 1;
+  padding: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.72);
+}
+.neo-extension-slot__header,
+.neo-extension-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+  opacity: 0.82;
+}
+.neo-extension-panel {
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 14px;
+  padding: 12px;
+  background: rgba(2, 6, 23, 0.42);
+}
+.neo-extension-panel__body {
+  margin-top: 10px;
+}
+.neo-extension-toolbar-button,
+.neo-extension-sidebar-item {
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 999px;
+  padding: 7px 12px;
+  background: rgba(15, 23, 42, 0.86);
+  color: inherit;
+  cursor: pointer;
+}
