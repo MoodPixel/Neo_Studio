@@ -122,7 +122,7 @@ Recommended backends:
 | **ComfyUI Portable** | Image generation, workflows, custom nodes | https://github.com/Comfy-Org/ComfyUI |
 | **KoboldCPP** | Local LLM/chat/roleplay backend | https://github.com/LostRuins/koboldcpp/releases/tag/v1.112.2 |
 
-After installing a backend:
+After downloading backends Extract/move/install them inside a easy folder Sample > "F:\Backends\", 
 
 1. Open **Neo Studio**.
 2. Go to **Admin > Providers & Profiles**. check if the backend details are correct (Only image/Text/Video backends are currently supported)
