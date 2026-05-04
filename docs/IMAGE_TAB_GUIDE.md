@@ -6,6 +6,8 @@ The **Image Tab** is designed to simplify complex image generation workflows by 
 
 Instead of managing everything in one place, Neo Studio organizes the process into stages—from building the image to refining and exporting it.
 
+### Image backend: Launch Backend > Connect Backend
+### Image backend: 
 ---
 
 ## 🧱 Workflow Structure
