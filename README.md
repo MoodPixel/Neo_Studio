@@ -13,21 +13,21 @@ Instead of juggling separate tools, Neo Studio organizes everything into clear, 
 
   * Structured workflows for image generation and refinement
   * Supports ControlNet, ADetailer, IPAdapter, Scene Director, RES4LYF, LanPaint, and advanced pipelines
-* 🧩 **Board**
+* 🧩 **[Board](docs/BOARD_TAB_GUIDE.md)**
 
   * Visual canvas for planning ideas and workflows
   * Sticky notes, media cards, checklist linking
-* ✍️ **Caption & Prompt**
+* ✍️ **[Caption & Prompt](docs/PROMPT_CAPTION.md)**
 
   * Generate, refine, and manage prompts and captions
   * Bridge outputs directly into assistant workflows
-* 🎭 **Roleplay System**
+* 🎭 **[Roleplay System](docs/ROLEPLAY_GUIDE.md)**
 
   * **Forge** – Create characters, worlds, universes, legends, and structured entities
   * **Scene** – Live roleplay and novel-writing environment
   * **Stories** – Workspace, storyline, archive, and inspector tools
   * **Studio** – Guide, Project, Source, Assist, Advanced, Libraries, Compile, Runtime, Engine, and Inspector controls
-* 🤖 **Assistant**
+* 🤖 **[Assistant](docs/ASSISTANT_GUIDE.md)**
 
   * Chat-based workflow with memory and context support
 * ⚙️ **Admin**
