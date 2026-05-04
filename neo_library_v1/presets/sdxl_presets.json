@@ -1,0 +1,110 @@
+{
+  "version": 1,
+  "presets": [
+    {
+      "id": "solo_editorial",
+      "label": "Solo — Male Editorial (tasteful)",
+      "moment_library": "Solo Male Editorial Sensual Poses.md",
+      "default_subject": "adult man, masculine fashion model",
+      "family_safe": false
+    },
+    {
+      "id": "couple_wedding",
+      "label": "Couple — Wedding (SFW)",
+      "moment_library": "Couple Moments — Wedding (SFW, Romantic).md",
+      "default_subject": "two adult men, couple",
+      "family_safe": false
+    },
+    {
+      "id": "couple_action",
+      "label": "Couple — Action / Protective (SFW)",
+      "moment_library": "Couple Moments — Action, Protective, Fight Vibe (SFW, Cinematic).md",
+      "default_subject": "two adult men, couple",
+      "family_safe": false
+    },
+    {
+      "id": "couple_sensual_modern",
+      "label": "Couple — Sensual (tasteful / non-explicit)",
+      "moment_library": "Couple Moments — Sensual (Tasteful,Non-Explicit).md",
+      "default_subject": "two adult men, couple",
+      "family_safe": false
+    },
+    {
+      "id": "couple_cozy_only",
+      "label": "Couple — Cozy Vibes Only (SFW)",
+      "moment_library": "Couple Moments — Cozy Vibes Only (SFW).md",
+      "default_subject": "two adult men, couple",
+      "family_safe": false
+    },
+    {
+      "id": "couple_cozy_fantasy",
+      "label": "Couple — Cozy Vibes (Fantasy Era) (SFW)",
+      "moment_library": "Couple Moments — Cozy Vibes (Fantasy Era) (SFW).md",
+      "default_subject": "two adult men, couple, fantasy era",
+      "family_safe": false
+    },
+    {
+      "id": "couple_dating_modern",
+      "label": "Couple — Dating Vibe (SFW)",
+      "moment_library": "Couple Moments — Dating-Vibe (SFW).md",
+      "default_subject": "two adult men, couple",
+      "family_safe": false
+    },
+    {
+      "id": "couple_dating_fantasy",
+      "label": "Couple — Dating Vibe (Fantasy Era) (SFW)",
+      "moment_library": "Couple Moments — Dating Vibe (Fantasy Era) (SFW).md",
+      "default_subject": "two adult men, couple, fantasy era",
+      "family_safe": false
+    },
+    {
+      "id": "couple_day_to_day",
+      "label": "Couple — Day-to-Day Life (SFW)",
+      "moment_library": "Couple Moments — Day-to-Day Life (SFW).md",
+      "default_subject": "two adult men, couple",
+      "family_safe": false
+    },
+    {
+      "id": "couple_games",
+      "label": "Couple — Playing Games Together (SFW)",
+      "moment_library": "Couple Moments — Playing Games Together (SFW).md",
+      "default_subject": "two adult men, couple",
+      "family_safe": false
+    },
+    {
+      "id": "couple_sports",
+      "label": "Couple — Playing Sports Together (SFW)",
+      "moment_library": "Couple Moments — Playing Sports Together (SFW).md",
+      "default_subject": "two adult men, couple",
+      "family_safe": false
+    },
+    {
+      "id": "couple_pregnant",
+      "label": "Couple — Pregnant (SFW / Sweet)",
+      "moment_library": "Couple Moments — Pregnant (SFW, Sweet, Supportive).md",
+      "default_subject": "two adult men, couple, expecting a baby, family photo",
+      "family_safe": true
+    },
+    {
+      "id": "couple_proposing",
+      "label": "Couple — Proposing (SFW / Romantic)",
+      "moment_library": "Couple Moments — Proposing (SFW, Romantic).md",
+      "default_subject": "two adult men, couple",
+      "family_safe": false
+    },
+    {
+      "id": "couple_sensual_fantasy",
+      "label": "Couple — Sensual (Fantasy Era) (tasteful)",
+      "moment_library": "Couple Moments — Sensual (Fantasy Era) (Tasteful, Non-Explicit).md",
+      "default_subject": "two adult men, couple, fantasy era",
+      "family_safe": false
+    },
+    {
+      "id": "family_two_dads_child",
+      "label": "Family — Two Dads + Child (SFW)",
+      "moment_library": "Family Moments — Two Dads + Child (~10 yrs) (SFW, Happy).md",
+      "default_subject": "two adult men with their child (SFW family photo)",
+      "family_safe": true
+    }
+  ]
+}
