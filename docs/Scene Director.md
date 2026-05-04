@@ -392,7 +392,7 @@ Person 02 "1boy, a tall chineese boy, skinny, Joong char, fair light skin, color
 Flower "rose flower"
 Hoodie "Pink Jacket"
 
-![Image](assets/Image/ss06.png)
-![Image](assets/Image/ss05.png)
+![Image](Assets/Image/ss06.png)
+![Image](Assets/Image/ss05.png)
 
 ---
