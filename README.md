@@ -147,8 +147,8 @@ Admin → Neo Node Manager
 
 Recommended ComfyUI custom nodes:
 
-| Node | Purpose |
-|---|---|
+| Node | Purpose | Link |
+|---|---|---|
 | `comfyui-art-venture` | Extra workflow utilities | https://github.com/sipherxyz/comfyui-art-venture.git |
 | `comfyui-essentials` | Common utility nodes | https://github.com/comfyorg/comfyui-essentials.git |
 | `ComfyUI-GGUF` | GGUF model support | https://github.com/city96/ComfyUI-GGUF.git |
