@@ -143,6 +143,24 @@ This is the final stage of the workflow.
 * Selecting best results
 * Exporting or reusing images
 
+## 🎥 Image Tab Guide (Video)
+
+Learn how to use the full Image Tab workflow in Neo Studio:
+
+[![Neo Studio Image Tab Guide](https://img.youtube.com/vi/yyIaZ-ZTu-0/0.jpg)](https://youtu.be/yyIaZ-ZTu-0)
+
+This guide covers:
+
+- Prompt Stack  
+- Image Preview  
+- Build settings  
+- Scene Director (region-based prompting)  
+- Reference (ControlNet workflows)  
+- Finish (upscale & fixes)  
+- Results  
+
+More detailed section-by-section guides will be added as separate videos.
+
 ---
 
 ## 🔄 Common Workflows
