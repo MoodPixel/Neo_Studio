@@ -56,6 +56,35 @@ Ongoing improvements focus on:
 
 ---
 
+## 🛠️ Recent Image Tab Fixes
+
+This update includes several stability and workflow fixes for the Image Tab:
+
+* ✅ **Tag Assist startup fix**
+
+  * Fixed a backend startup issue where Tag Assist could fail because its options state was not initialized correctly.
+
+* ✅ **Style Stack CSV loading fix**
+
+  * Improved the Style Stack CSV decoder so user style files load more reliably, including files with non-standard text encoding.
+
+* ✅ **Caption Browser handoff fix**
+
+  * Fixed prompt handoff from Caption Browser to the main Positive Prompt field.
+  * Added a safer draft merge lock so injected prompts are not immediately overwritten by preset or draft refresh logic.
+
+* ✅ **ControlNet layout fix**
+
+  * Fixed extra ControlNet units added with **+ Add ControlNet** so they no longer collapse into a narrow left-side column.
+  * Improved ControlNet unit wrapping, card width, and panel layout behavior.
+
+* ✅ **Scene Director + IPAdapter workflow fix**
+
+  * Improved Scene Director workflow handling so global IPAdapter can be suppressed before graph build when Scene Director uses its own reference/identity logic.
+  * Helps prevent duplicate IPAdapter conditioning when Scene Director, ControlNet, and IPAdapter features are used together.
+
+---
+
 ## 🛣️ Roadmap (Planned)
 
 * 🎬 Video workflow integration
