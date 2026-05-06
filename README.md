@@ -57,7 +57,7 @@ Ongoing improvements focus on:
 ---
 
 ## 🛠️ Recent Image Tab Fixes
-
+May/06/2026
 This update includes several stability and workflow fixes for the Image Tab:
 
 * ✅ **Tag Assist startup fix**
