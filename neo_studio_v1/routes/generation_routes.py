@@ -3028,10 +3028,19 @@ async def _prepare_ipadapter_units(adapter: ComfyBackendAdapter, payload: dict, 
     if bound_slots or suppress_global_scene_ip:
         payload['scene_director_bound_ipadapter_units_source'] = [dict(unit, _neo_slot_index=index + 1) for index, unit in enumerate(normalized_units)]
         if suppress_global_scene_ip:
+            # Scene Director owns region-bound IPAdapter/FaceID application. Keep
+            # the prepared slot source above so regional bindings can still reuse
+            # the user's native IPAdapter settings, but mark the global lane as
+            # suppressed before the Comfy graph builder can fall back to legacy
+            # scalar fields such as ipadapter_name/ipadapter_image_name.
             suppressed_count = len(normalized_units)
+            payload['ipadapter_global_suppressed_by_scene_director'] = True
+            payload['ipadapter_global_suppression_reason'] = 'scene_director_region_bound_ipadapter'
             normalized_units = []
             if suppressed_count:
                 compile_notes.append(f"Scene Director suppressed {suppressed_count} global IPAdapter slot(s); only region-bound IPAdapter slots will be applied.")
+            else:
+                compile_notes.append('Scene Director global IPAdapter suppression is active; legacy global IPAdapter fields will not be compiled into the base model.')
         else:
             normalized_units = [unit for index, unit in enumerate(normalized_units) if (index + 1) not in bound_slots]
             if normalized_units:
