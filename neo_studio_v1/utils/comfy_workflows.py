@@ -1319,7 +1319,23 @@ def _normalize_controlnet_units(payload: Dict[str, Any]) -> list[dict[str, Any]]
 
 
 
+def _scene_director_suppresses_global_ipadapter(payload: Dict[str, Any]) -> bool:
+    """Return True when Scene Director must own IPAdapter application.
+
+    The request payload may still contain legacy scalar global IPAdapter fields
+    because Scene Director region bindings reuse those values as their source.
+    Those scalar fields must not be allowed to rebuild a global IPAdapter stack
+    after the route layer has intentionally emptied ipadapter_units.
+    """
+    return bool(
+        payload.get('scene_director_suppress_global_ipadapter')
+        or payload.get('ipadapter_global_suppressed_by_scene_director')
+    )
+
+
 def _normalize_ipadapter_units(payload: Dict[str, Any]) -> list[dict[str, Any]]:
+    if _scene_director_suppresses_global_ipadapter(payload):
+        return []
     units: list[dict[str, Any]] = []
     raw_units = payload.get('ipadapter_units')
     if isinstance(raw_units, list):

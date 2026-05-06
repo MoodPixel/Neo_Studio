@@ -5,10 +5,32 @@ import io
 from pathlib import Path
 from typing import Dict, List
 
+STYLE_CSV_ENCODINGS = ('utf-8-sig', 'utf-8', 'cp1252', 'latin-1')
+
 from .library_constants import USER_DATA_DIR
 
 STYLE_FIELDS = ['name', 'prompt', 'negative_prompt']
 GENERATION_STYLES_PATH = USER_DATA_DIR / 'generation_styles.csv'
+
+
+def _decode_style_csv_bytes(content: bytes) -> str:
+    """Decode user style CSV content without silently dropping characters.
+
+    Existing user CSV files may contain Windows-encoded smart punctuation or
+    accented characters, so UTF-8-only reads can break Style Stack loading.
+    Try strict common encodings first, then fall back to UTF-8 replacement so
+    the UI can still load and the user can resave a clean UTF-8 file.
+    """
+    for encoding in STYLE_CSV_ENCODINGS:
+        try:
+            return content.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return content.decode('utf-8', errors='replace')
+
+
+def _read_style_csv_text(path: Path) -> str:
+    return _decode_style_csv_bytes(path.read_bytes())
 
 
 def _normalize_style_row(row: dict) -> dict:
@@ -31,12 +53,12 @@ def ensure_generation_styles_file() -> Path:
 def load_generation_styles() -> List[Dict[str, str]]:
     path = ensure_generation_styles_file()
     rows: List[Dict[str, str]] = []
-    with path.open('r', encoding='utf-8-sig', newline='') as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            clean = _normalize_style_row(row or {})
-            if clean['name']:
-                rows.append(clean)
+    text = _read_style_csv_text(path)
+    reader = csv.DictReader(io.StringIO(text))
+    for row in reader:
+        clean = _normalize_style_row(row or {})
+        if clean['name']:
+            rows.append(clean)
     return rows
 
 
@@ -102,10 +124,7 @@ def duplicate_generation_style(source_name: str, new_name: str) -> List[Dict[str
 
 
 def import_generation_styles_csv(content: bytes) -> List[Dict[str, str]]:
-    try:
-        text = content.decode('utf-8-sig')
-    except Exception:
-        text = content.decode('utf-8', errors='ignore')
+    text = _decode_style_csv_bytes(content)
     reader = csv.DictReader(io.StringIO(text))
     imported: List[Dict[str, str]] = []
     for row in reader:
