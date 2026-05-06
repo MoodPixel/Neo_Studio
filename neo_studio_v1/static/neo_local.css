@@ -577,6 +577,82 @@ body.modal-open{overflow:hidden}
 .generation-size-preset-row{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;align-items:center}
 .generation-icon-btn{min-width:40px;padding:8px 10px}
 .generation-unit-card{position:relative;overflow:hidden}
+/* ControlNet layout stability: ControlNet preview/build lanes are large, so they must not be clipped by the generic unit-card overflow rule. */
+.generation-unit-card-controlnet,
+.generation-controlnet-row{overflow:visible;min-width:0;width:100%;box-sizing:border-box;align-items:start}
+#generation-controlnet-extra-list{width:100%;min-width:0;overflow:visible}
+#generation-controlnet-extra-list .generation-controlnet-row,
+.generation-unit-card-controlnet[data-primary="true"]{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,170px),1fr)) !important;gap:12px}
+.generation-controlnet-build-lane,
+.generation-controlnet-preview-first,
+.generation-controlnet-controls-panel,
+.generation-controlnet-preview-panel{min-width:0;width:100%;max-width:100%;box-sizing:border-box;overflow:visible !important}
+.generation-controlnet-map-settings{grid-template-columns:repeat(auto-fit,minmax(min(100%,170px),1fr)) !important;min-width:0}
+.generation-controlnet-preview-panel > .grid,
+.generation-controlnet-preview-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr)) !important;gap:14px;align-items:stretch;min-width:0;width:100%}
+.generation-controlnet-preview-panel .generation-unit-preview-card{min-width:0;width:100%;box-sizing:border-box}
+.generation-controlnet-preview-panel .generation-unit-preview-image{max-width:100%;height:auto}
+@media (max-width:720px){
+  #generation-controlnet-extra-list .generation-controlnet-row,
+  .generation-unit-card-controlnet[data-primary="true"]{grid-template-columns:1fr !important}
+  .generation-controlnet-preview-panel > .grid,
+  .generation-controlnet-preview-grid{grid-template-columns:1fr !important}
+}
+
+/* ControlNet extra-unit full-width repair: added units live inside a dynamic stack and must never shrink into a left rail beside the Add button. */
+[data-accordion-id="generation-controlnet-settings"] .accordion-body{
+  min-width:0;
+}
+[data-accordion-id="generation-controlnet-settings"] .accordion-body > #generation-controlnet-extra-list,
+#generation-controlnet-extra-list{
+  display:flex !important;
+  flex-direction:column !important;
+  align-items:stretch !important;
+  width:100% !important;
+  max-width:none !important;
+  min-width:0 !important;
+  grid-column:1 / -1 !important;
+  clear:both !important;
+}
+#generation-controlnet-extra-list > .generation-controlnet-row{
+  flex:1 1 auto !important;
+  align-self:stretch !important;
+  width:100% !important;
+  max-width:none !important;
+  min-width:0 !important;
+  box-sizing:border-box !important;
+  display:grid !important;
+  grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr)) !important;
+  overflow:visible !important;
+}
+#generation-controlnet-extra-list > .generation-controlnet-row > *,
+.generation-unit-card-controlnet > *{
+  min-width:0;
+}
+#generation-controlnet-extra-list .generation-controlnet-preset-wrap{
+  width:100% !important;
+  min-width:0 !important;
+  grid-column:1 / -1 !important;
+  grid-template-columns:minmax(min(100%,220px),360px) minmax(0,1fr) !important;
+}
+#generation-controlnet-extra-list .generation-controlnet-preset-hint{
+  min-width:0 !important;
+  max-width:100% !important;
+  white-space:normal !important;
+  overflow-wrap:break-word !important;
+}
+#btn-generation-add-controlnet{align-self:flex-start}
+#btn-generation-add-controlnet.closest-row-fallback{}
+[data-accordion-id="generation-controlnet-settings"] .accordion-body > .row:has(#btn-generation-add-controlnet){
+  width:100% !important;
+  grid-column:1 / -1 !important;
+  clear:both !important;
+  justify-content:flex-start !important;
+}
+@media (max-width:760px){
+  #generation-controlnet-extra-list .generation-controlnet-preset-wrap{grid-template-columns:1fr !important}
+}
+
 .generation-unit-card.is-disabled{opacity:.72;border-color:rgba(148,163,184,.08);background:rgba(15,23,42,.16)}
 .generation-unit-topbar{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:10px;flex-wrap:wrap}
 .generation-unit-heading{display:flex;gap:10px;align-items:flex-start;min-width:0}

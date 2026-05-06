@@ -758,12 +758,74 @@ function createGenerationLoraRow(values={}) {
   return row;
 }
 
+
+function normalizeGenerationControlnetExtraLayout(row=null) {
+  const list = $('generation-controlnet-extra-list');
+  if (list) {
+    list.style.width = '100%';
+    list.style.maxWidth = 'none';
+    list.style.minWidth = '0';
+    list.style.display = 'flex';
+    list.style.flexDirection = 'column';
+    list.style.alignItems = 'stretch';
+    list.style.gap = '12px';
+    list.style.gridColumn = '1 / -1';
+    list.style.clear = 'both';
+    if (list.parentElement) {
+      list.parentElement.style.minWidth = list.parentElement.style.minWidth || '0';
+    }
+  }
+  const addBtn = $('btn-generation-add-controlnet');
+  const addRow = addBtn?.closest?.('.row');
+  if (addRow) {
+    addRow.style.gridColumn = '1 / -1';
+    addRow.style.width = '100%';
+    addRow.style.clear = 'both';
+    addRow.style.justifyContent = 'flex-start';
+  }
+  const rows = row ? [row] : Array.from(document.querySelectorAll('#generation-controlnet-extra-list .generation-controlnet-row'));
+  rows.filter(Boolean).forEach(unit => {
+    unit.classList.add('generation-unit-card-controlnet');
+    unit.style.width = '100%';
+    unit.style.maxWidth = 'none';
+    unit.style.minWidth = '0';
+    unit.style.boxSizing = 'border-box';
+    unit.style.alignSelf = 'stretch';
+    unit.style.gridColumn = '1 / -1';
+    unit.style.gridTemplateColumns = 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))';
+    unit.querySelectorAll('.generation-unit-topbar, .generation-controlnet-build-lane, .generation-unit-summary').forEach(el => {
+      el.style.gridColumn = '1 / -1';
+      el.style.minWidth = '0';
+      el.style.width = el.classList.contains('generation-unit-topbar') ? '' : '100%';
+    });
+    unit.querySelectorAll('.generation-controlnet-preset-wrap').forEach(wrap => {
+      wrap.style.gridColumn = '1 / -1';
+      wrap.style.width = '100%';
+      wrap.style.minWidth = '0';
+      wrap.style.display = 'grid';
+      wrap.style.gridTemplateColumns = 'minmax(min(100%, 220px), 360px) minmax(0, 1fr)';
+      wrap.querySelectorAll('.generation-controlnet-preset-hint, .mini-note').forEach(note => {
+        note.style.minWidth = '0';
+        note.style.maxWidth = '100%';
+        note.style.whiteSpace = 'normal';
+        note.style.overflowWrap = 'break-word';
+      });
+    });
+    unit.querySelectorAll('.generation-controlnet-preview-panel > .grid').forEach(grid => {
+      grid.classList.add('generation-controlnet-preview-grid');
+      grid.style.gridTemplateColumns = 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))';
+      grid.style.width = '100%';
+      grid.style.minWidth = '0';
+    });
+  });
+}
+
 function createGenerationControlnetRow(values={}) {
   generationControlnetRowCounter += 1;
   const uid = values.uid || `control_${generationControlnetRowCounter}`;
   const row = document.createElement('div');
-  row.className = 'grid grid-5 generation-dynamic-row generation-controlnet-row generation-unit-card';
-  row.style.gridTemplateColumns = 'repeat(auto-fit,minmax(150px,1fr))';
+  row.className = 'grid grid-5 generation-dynamic-row generation-controlnet-row generation-unit-card generation-unit-card-controlnet';
+  row.style.gridTemplateColumns = 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))';
   row.dataset.uid = uid;
   row.innerHTML = `
     <div class="generation-unit-topbar" style="grid-column:1 / -1;">
@@ -826,7 +888,7 @@ function createGenerationControlnetRow(values={}) {
           <div class="mini-note generation-controlnet-settings-hint" style="margin-top:8px;">Real map controls: timing affects generation, detect/Canny/OpenPose affects preview map quality, fit controls how the image is prepared for ControlNet.</div>
         </div>
         <div class="generation-controlnet-preview-panel" style="width:100%; margin-top:14px; overflow:hidden;">
-          <div class="grid grid-2" style="gap:14px; grid-template-columns:repeat(2,minmax(260px,1fr)); align-items:stretch;">
+          <div class="grid grid-2 generation-controlnet-preview-grid" style="gap:14px; grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr)); align-items:stretch;">
             <div class="generation-unit-preview-card" style="min-height:460px; overflow:hidden; display:flex; align-items:center; justify-content:center;">
               <div class="generation-unit-preview-empty generation-controlnet-source-preview-empty">No source preview yet.</div>
               <img class="generation-unit-preview-image generation-controlnet-source-preview hidden" alt="ControlNet source preview" style="width:100%; max-height:620px; object-fit:contain;" />
@@ -874,6 +936,7 @@ function createGenerationControlnetRow(values={}) {
   refreshGenerationControlnetModelFilterForRow(row);
   if (values.model) row.querySelector('.generation-controlnet-name').value = values.model;
   updateGenerationControlnetRowSummary(row);
+  normalizeGenerationControlnetExtraLayout(row);
   return row;
 }
 
@@ -1578,7 +1641,10 @@ function addGenerationLoraRow(values={}) {
 }
 
 function addGenerationControlnetRow(values={}) {
-  $('generation-controlnet-extra-list')?.appendChild(createGenerationControlnetRow(values));
+  const list = $('generation-controlnet-extra-list');
+  const row = createGenerationControlnetRow(values);
+  list?.appendChild(row);
+  normalizeGenerationControlnetExtraLayout(row);
   updateGenerationUnitIndices();
   scheduleGenerationDraftSave();
 }
@@ -3814,6 +3880,7 @@ setTimeout(bindGenerationControlnetPreviewFirstButtons, 250);
   function injectAll(){
     injectPresetControls(qs(document, '.generation-unit-card-controlnet[data-primary="true"]'));
     qsa(document, '#generation-controlnet-extra-list .generation-controlnet-row').forEach(injectPresetControls);
+    try { if (typeof normalizeGenerationControlnetExtraLayout === 'function') normalizeGenerationControlnetExtraLayout(); } catch(_) {}
   }
 
   // Add a compact preset API for later workflow buttons / Scene Director hooks.

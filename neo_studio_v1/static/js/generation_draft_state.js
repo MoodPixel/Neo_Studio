@@ -45,6 +45,22 @@ function sanitizeGenerationDraftState(draft) {
 }
 window.sanitizeGenerationDraftState = sanitizeGenerationDraftState;
 
+
+function getGenerationPromptMergeLockForDraftApply() {
+  const lock = window.__neoGenerationPromptMergeLock || null;
+  if (!lock || !lock.positive || !lock.expiresAt || Date.now() > Number(lock.expiresAt || 0)) return null;
+  return lock;
+}
+
+function mergeGenerationPromptForDraftApply(base, incoming) {
+  const current = String(base || '').trim();
+  const prompt = String(incoming || '').trim();
+  if (!prompt) return current;
+  if (!current) return prompt;
+  if (current.toLowerCase().includes(prompt.toLowerCase())) return current;
+  return `${current}, ${prompt}`;
+}
+
 const NEO_RES4LYF_SAFE_SAMPLERS = new Set(['res_2m', 'res_3s', 'res_5s']);
 const NEO_RES4LYF_SAMPLER_PRESET_KEYS = {
   res_2m: 'balanced',
@@ -504,7 +520,13 @@ window.NeoGenerationDraftState.applyGenerationDraft = function applyGenerationDr
     if ($('generation-denoise')) $('generation-denoise').value = draft.denoise || '1.0';
     if ($('generation-denoise-range')) $('generation-denoise-range').value = draft.denoise || '1.0';
     if ($('generation-seed')) $('generation-seed').value = draft.seed || '-1';
-    if ($('generation-positive')) $('generation-positive').value = draft.positive || '';
+    const promptMergeLock = getGenerationPromptMergeLockForDraftApply();
+    if ($('generation-positive')) {
+      const restoredPositive = draft.positive || '';
+      $('generation-positive').value = promptMergeLock
+        ? mergeGenerationPromptForDraftApply(restoredPositive, promptMergeLock.positive)
+        : restoredPositive;
+    }
     if ($('generation-negative')) $('generation-negative').value = draft.negative || '';
     if ($('generation-prompt-conditioning-mode')) $('generation-prompt-conditioning-mode').value = draft.prompt_conditioning_mode || 'raw';
     if ($('generation-clip-skip')) $('generation-clip-skip').value = draft.clip_skip || '1';

@@ -668,27 +668,85 @@ function neoLibraryDispatchGenerationInput(id) {
   el.dispatchEvent(new Event('change', { bubbles:true }));
 }
 
+function neoLibraryNormalizePromptText(value) {
+  return String(value || '').trim();
+}
+
+function neoLibraryPromptAlreadyContains(base, insert) {
+  const haystack = neoLibraryNormalizePromptText(base).toLowerCase();
+  const needle = neoLibraryNormalizePromptText(insert).toLowerCase();
+  return !!needle && haystack === needle || (!!needle && haystack.includes(needle));
+}
+
+function neoLibraryMergePromptText(base, insert, separator=', ') {
+  const current = neoLibraryNormalizePromptText(base);
+  const incoming = neoLibraryNormalizePromptText(insert);
+  if (!incoming) return current;
+  if (!current) return incoming;
+  if (neoLibraryPromptAlreadyContains(current, incoming)) return current;
+  return `${current}${separator}${incoming}`;
+}
+
+function neoLibraryAcquireGenerationPromptMergeLock(promptText='', ttlMs=6500) {
+  const prompt = neoLibraryNormalizePromptText(promptText);
+  if (!prompt) return null;
+  const lock = {
+    source: 'caption_browser',
+    target: 'generation-positive',
+    positive: prompt,
+    mode: 'merge_append',
+    createdAt: Date.now(),
+    expiresAt: Date.now() + Math.max(1000, Number(ttlMs) || 6500),
+  };
+  window.__neoGenerationPromptMergeLock = lock;
+  window.__neoPendingGenerationPositive = prompt;
+  window.__neoPendingGenerationPositiveExpiresAt = lock.expiresAt;
+  return lock;
+}
+
+function neoLibraryGetGenerationPromptMergeLock() {
+  const lock = window.__neoGenerationPromptMergeLock || null;
+  if (!lock || !lock.positive || !lock.expiresAt || Date.now() > Number(lock.expiresAt || 0)) {
+    window.__neoGenerationPromptMergeLock = null;
+    return null;
+  }
+  return lock;
+}
+
+function neoLibraryClearGenerationPromptMergeLockIfSatisfied() {
+  const lock = neoLibraryGetGenerationPromptMergeLock();
+  if (!lock) return;
+  const current = $('generation-positive')?.value || '';
+  if (neoLibraryPromptAlreadyContains(current, lock.positive)) {
+    window.__neoGenerationPromptMergeLock = null;
+    neoLibraryClearPendingGenerationPrompt();
+  }
+}
+
 function neoLibraryAppendToGenerationPositive(text) {
-  const prompt = trim(text || '');
+  const prompt = neoLibraryNormalizePromptText(text || '');
   if (!prompt) return false;
   const el = $('generation-positive');
   if (!el) throw new Error('Could not find the generation positive prompt box.');
-  if (typeof appendTextToGenerationPromptField === 'function') {
-    el.value = '';
-    appendTextToGenerationPromptField('generation-positive', prompt, ', ');
-  } else {
-    el.value = prompt;
-    neoLibraryDispatchGenerationInput('generation-positive');
-  }
-  return trim(el.value || '') === prompt;
+  neoLibraryAcquireGenerationPromptMergeLock(prompt);
+  el.value = neoLibraryMergePromptText(el.value || '', prompt, ', ');
+  neoLibraryDispatchGenerationInput('generation-positive');
+  try {
+    document.dispatchEvent(new CustomEvent('neo-caption-browser-prompt-handoff', {
+      detail: { source:'caption_browser', target:'generation-positive', mode:'merge_append' }
+    }));
+  } catch (_) {}
+  return neoLibraryPromptAlreadyContains(el.value || '', prompt);
 }
 
 function neoLibraryGetPendingGenerationPromptState() {
-  const text = trim(window.__neoPendingGenerationPositive || '');
-  const expiresAt = Number(window.__neoPendingGenerationPositiveExpiresAt || 0);
+  const lock = neoLibraryGetGenerationPromptMergeLock();
+  const text = trim((lock?.positive || window.__neoPendingGenerationPositive) || '');
+  const expiresAt = Number((lock?.expiresAt || window.__neoPendingGenerationPositiveExpiresAt) || 0);
   if (!text || !expiresAt || Date.now() > expiresAt) {
     window.__neoPendingGenerationPositive = '';
     window.__neoPendingGenerationPositiveExpiresAt = 0;
+    window.__neoGenerationPromptMergeLock = null;
     return null;
   }
   return { text, expiresAt };
@@ -710,12 +768,12 @@ function neoLibraryEnsurePendingGenerationPrompt(promptText='', attempts=8, dela
     try {
       const ok = neoLibraryAppendToGenerationPositive(prompt);
       const current = trim($('generation-positive')?.value || '');
-      if (ok || current === prompt) {
+      if (ok || neoLibraryPromptAlreadyContains(current, prompt)) {
         window.setTimeout(() => {
           const latest = trim($('generation-positive')?.value || '');
           const pending = neoLibraryGetPendingGenerationPromptState();
           if (!pending || pending.text !== prompt) return;
-          if (latest === prompt) neoLibraryClearPendingGenerationPrompt();
+          if (neoLibraryPromptAlreadyContains(latest, prompt)) { neoLibraryClearPendingGenerationPrompt(); window.__neoGenerationPromptMergeLock = null; }
         }, Math.max(180, Number(delayMs) || 120));
         return;
       }
@@ -731,8 +789,7 @@ function neoLibraryEnsurePendingGenerationPrompt(promptText='', attempts=8, dela
 function neoLibraryFlushPendingGenerationPrompt(promptText='', attempts=8) {
   const prompt = trim(promptText || '');
   if (!prompt) return;
-  window.__neoPendingGenerationPositive = prompt;
-  window.__neoPendingGenerationPositiveExpiresAt = Date.now() + 5000;
+  neoLibraryAcquireGenerationPromptMergeLock(prompt, 7000);
   neoLibraryEnsurePendingGenerationPrompt(prompt, attempts, 120);
 }
 
@@ -789,11 +846,15 @@ function bindNeoLibraryGenerationHandoffGuards() {
     const pending = neoLibraryGetPendingGenerationPromptState();
     if (!pending) return;
     const current = trim(target.value || '');
-    if (current === pending.text) neoLibraryClearPendingGenerationPrompt();
+    if (neoLibraryPromptAlreadyContains(current, pending.text)) { neoLibraryClearPendingGenerationPrompt(); window.__neoGenerationPromptMergeLock = null; }
   }, true);
 }
 
 bindNeoLibraryGenerationHandoffGuards();
+
+window.NeoLibraryGenerationPromptHandoff = window.NeoLibraryGenerationPromptHandoff || {};
+window.NeoLibraryGenerationPromptHandoff.getLock = neoLibraryGetGenerationPromptMergeLock;
+window.NeoLibraryGenerationPromptHandoff.mergePromptText = neoLibraryMergePromptText;
 
 async function neoLibraryUseGenerationPayload(options={}) {
   const promptText = trim(options.promptText || '');
