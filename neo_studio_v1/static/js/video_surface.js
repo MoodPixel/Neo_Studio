@@ -1117,7 +1117,7 @@
 
   function renderVideoOutputs(outputs, job){
     const card = $('video-output-results');
-    if (!card || !assetCard) return;
+    if (!card) return;
     const rows = Array.isArray(outputs) ? outputs.filter(item => item && typeof item === 'object') : [];
     const manifestUrl = job?.video_runtime?.manifest_url || '';
     const workflowType = String(job?.payload?.workflow_type || '').trim() || 'video_generation';

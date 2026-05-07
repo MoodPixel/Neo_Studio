@@ -109,9 +109,60 @@ function setGenerationPreviewActionTarget(target) {
   updateGenerationPreviewActionState();
 }
 
-function clearGenerationLivePreview(resetText=false) {
+function getGenerationPreviewLifecycleState() {
+  if (!window.__neoPreviewLifecycleState) {
+    window.__neoPreviewLifecycleState = {
+      active: false,
+      finalizing: false,
+      failed: false,
+      socket_open: false,
+      binary_frames: 0,
+      preview_frames: 0,
+      dropped_binary_frames: 0,
+      last_event_type: '',
+      last_error: '',
+      client_id: '',
+      prompt_id: ''
+    };
+  }
+  return window.__neoPreviewLifecycleState;
+}
+
+function beginGenerationPreviewLifecycle(meta={}) {
+  const state = getGenerationPreviewLifecycleState();
+  state.active = true;
+  state.finalizing = false;
+  state.failed = false;
+  state.client_id = String(meta?.client_id || state.client_id || generationProgressClientId || '').trim();
+  state.prompt_id = String(meta?.prompt_id || state.prompt_id || generationProgressPromptId || '').trim();
+}
+
+function markGenerationPreviewFinalizing() {
+  const state = getGenerationPreviewLifecycleState();
+  state.active = true;
+  state.finalizing = true;
+}
+
+function markGenerationPreviewTerminal(failed=false) {
+  const state = getGenerationPreviewLifecycleState();
+  state.active = false;
+  state.finalizing = false;
+  state.failed = !!failed;
+  state.socket_open = false;
+}
+
+function shouldHoldGenerationPreview() {
+  const state = getGenerationPreviewLifecycleState();
+  return !!(state.active || state.finalizing);
+}
+
+function clearGenerationLivePreview(resetText=false, options={}) {
   const img = $('generation-live-preview');
   if (!img) return;
+
+  if (!options.force && shouldHoldGenerationPreview()) {
+    return;
+  }
   if (generationLivePreviewUrl && generationLivePreviewUrl.startsWith('blob:')) {
     try { URL.revokeObjectURL(generationLivePreviewUrl); } catch (_) {}
   }
@@ -189,8 +240,14 @@ function detectGenerationPreviewImagePayload(buffer) {
 }
 
 function applyGenerationPreviewBuffer(buffer) {
+  const state = getGenerationPreviewLifecycleState();
+  state.binary_frames = Number(state.binary_frames || 0) + 1;
   const payload = detectGenerationPreviewImagePayload(buffer);
-  if (!payload) return;
+  if (!payload) {
+    state.dropped_binary_frames = Number(state.dropped_binary_frames || 0) + 1;
+    return;
+  }
+  state.preview_frames = Number(state.preview_frames || 0) + 1;
   const blob = new Blob([buffer.slice(payload.offset)], { type: payload.mime || 'image/jpeg' });
   const objectUrl = URL.createObjectURL(blob);
   if (generationLivePreviewUrl && generationLivePreviewUrl.startsWith('blob:')) {
@@ -226,7 +283,23 @@ function ensureGenerationFinalizationPoll(reason='finalizing') {
 
 function handleGenerationProgressMessage(message) {
   const type = String(message?.type || '').toLowerCase();
+  const state = getGenerationPreviewLifecycleState();
+  state.last_event_type = type || state.last_event_type || '';
   const rawData = (message && typeof message.data === 'object' && message.data) ? message.data : message || {};
+  if (type === 'proxy_diag' || type === 'proxy_open') {
+    const diag = rawData || {};
+    state.proxy_diag = diag;
+    state.proxy_text_frames = Number(diag.text_frames || state.proxy_text_frames || 0);
+    state.proxy_binary_frames = Number(diag.binary_frames || state.proxy_binary_frames || 0);
+    state.proxy_forwarded_binary_frames = Number(diag.forwarded_binary_frames || state.proxy_forwarded_binary_frames || 0);
+    state.proxy_json_types = diag.json_types || state.proxy_json_types || {};
+    state.ws_mode = 'proxy';
+    if (diag.client_id) state.client_id = String(diag.client_id || '');
+    if ($('generation-preview-state') && type === 'proxy_diag' && state.proxy_binary_frames <= 0) {
+      $('generation-preview-state').textContent = `Live preview proxy connected — text ${state.proxy_text_frames || 0}, binary ${state.proxy_binary_frames || 0}`;
+    }
+    return;
+  }
   const promptId = String(rawData?.prompt_id || message?.prompt_id || '');
   if (generationProgressPromptId && promptId && promptId !== generationProgressPromptId) return;
 
@@ -238,6 +311,7 @@ function handleGenerationProgressMessage(message) {
     return;
   }
   if (type === 'execution_start') {
+    beginGenerationPreviewLifecycle({ prompt_id: promptId });
     generationProgressStartedAt = Date.now();
     if (promptId) generationProgressPromptId = promptId;
     generationLastProgressPercent = 3;
@@ -279,16 +353,19 @@ function handleGenerationProgressMessage(message) {
     return;
   }
   if (type === 'execution_success') {
+    markGenerationPreviewFinalizing();
     setGenerationProgress(99, 'Finishing…', 'ETA 00:00');
     ensureGenerationFinalizationPoll('finalizing');
     return;
   }
   if (type === 'execution_error') {
+    markGenerationPreviewTerminal(true);
     setGenerationProgress(100, 'Generation failed', 'ETA —');
     closeGenerationProgressSocket();
     return;
   }
   if (type === 'execution_interrupted') {
+    markGenerationPreviewTerminal(true);
     setGenerationProgress(0, 'Generation interrupted', 'ETA —');
     closeGenerationProgressSocket();
     return;
@@ -301,7 +378,8 @@ function startGenerationProgressSocket(clientId, promptId='') {
   generationProgressClientId = clientId;
   generationProgressPromptId = String(promptId || '').trim();
   generationProgressStartedAt = Date.now();
-  setGenerationProgress(2, 'Connecting to Comfy progress…', 'ETA calculating…');
+  beginGenerationPreviewLifecycle({ client_id: clientId, prompt_id: generationProgressPromptId });
+  setGenerationProgress(2, 'Connecting to Comfy live preview…', 'ETA calculating…');
   try {
     generationProgressSocket = new WebSocket(buildGenerationWsUrl(imageSession.base_url, clientId));
     generationProgressSocket.binaryType = 'arraybuffer';
@@ -311,7 +389,10 @@ function startGenerationProgressSocket(clientId, promptId='') {
     return;
   }
   generationProgressSocket.addEventListener('open', () => {
-    setGenerationProgress(4, 'Connected to Comfy progress stream…', 'ETA calculating…');
+    const state = getGenerationPreviewLifecycleState();
+    state.socket_open = true;
+    state.last_error = '';
+    setGenerationProgress(4, 'Connected to Comfy live preview stream…', 'ETA calculating…');
   });
   generationProgressSocket.addEventListener('message', async event => {
     try {
@@ -325,18 +406,29 @@ function startGenerationProgressSocket(clientId, promptId='') {
       }
       if (event.data instanceof Blob) {
         applyGenerationPreviewBuffer(await event.data.arrayBuffer());
+        return;
       }
     } catch (_) {}
   });
   generationProgressSocket.addEventListener('close', () => {
+    const state = getGenerationPreviewLifecycleState();
+    state.socket_open = false;
     generationProgressSocket = null;
     const pct = Number(generationLastProgressPercent || 0);
     if (pct >= 90 && pct < 100) ensureGenerationFinalizationPoll('socket_close');
   });
   generationProgressSocket.addEventListener('error', () => {
-    setGenerationProgress(Math.max(5, Number($('generation-progress-bar')?.style.width?.replace('%','') || 0)), 'Queued. Waiting for progress updates…', 'ETA —');
+    const state = getGenerationPreviewLifecycleState();
+    state.socket_open = false;
+    state.last_error = 'Live preview websocket error';
+    setGenerationProgress(Math.max(5, Number($('generation-progress-bar')?.style.width?.replace('%','') || 0)), 'Queued. Waiting for live preview/progress updates…', 'ETA —');
   });
 }
+
+window.getNeoGenerationPreviewDebugState = function getNeoGenerationPreviewDebugState() {
+  try { return JSON.parse(JSON.stringify(getGenerationPreviewLifecycleState())); }
+  catch (_) { return getGenerationPreviewLifecycleState(); }
+};
 
 function setSelectOptionsForElement(el, items, placeholder='None', keepValue=true, forceFirst=false) {
   if (!el) return;

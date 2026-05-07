@@ -131,7 +131,17 @@ async function queueGenerationShell(options={}) {
     if (data.job?.payload?.seed) generationLastUsedSeed = String(data.job.payload.seed || '');
     scheduleGenerationDraftSave();
     generationProgressPromptId = String(data.job?.prompt_id || '');
-    if (generationProgressSocket && generationProgressPromptId) setGenerationProgress(6, 'Queued in ComfyUI…', 'ETA calculating…');
+    if (generationProgressSocket && generationProgressPromptId) {
+      const state = typeof getGenerationPreviewLifecycleState === 'function' ? getGenerationPreviewLifecycleState() : null;
+      if (state) {
+        state.prompt_id = generationProgressPromptId;
+        state.client_id = String(payload.client_id || state.client_id || '').trim();
+      }
+      setGenerationProgress(6, 'Queued in ComfyUI…', 'ETA calculating…');
+    } else if (payload.client_id && typeof startGenerationProgressSocket === 'function') {
+      // Fallback only: normal path opens the socket before queueing so Comfy preview frames are not missed.
+      startGenerationProgressSocket(payload.client_id, generationProgressPromptId);
+    }
     if (!options.suppressSuccessStatus) {
       if (Array.isArray(data.job?.compile_notes) && data.job.compile_notes.length) {
         announceGenerationStatus(`${data.message} ${data.job.compile_notes.join(' ')}`);
