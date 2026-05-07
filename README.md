@@ -67,7 +67,6 @@ Ongoing improvements focus on:
 | ControlNet | ✅ Layout Fix | Fixed extra ControlNet units added with **+ Add ControlNet** so they no longer collapse into a narrow left-side column. Improved unit wrapping, card width, and layout behavior. |
 | Scene Director + IPAdapter | ✅ Workflow Routing Fix | Improved Scene Director workflow handling so global IPAdapter can be suppressed before graph build when Scene Director uses its own identity/reference routing. Helps prevent duplicate IPAdapter conditioning conflicts. |
 | Workspace Presets | ✅ Backend Storage Migration | Workspace Presets are now routed into `neo_library_data` instead of browser localStorage. Removes stale browser-side state dependency and makes preset handling cleaner and more portable. |
-| Workspace Presets | ✅ Clean Restore Behavior | Preset loading now avoids stale hidden state mixing from older runtime memory. Helps keep Scene Director, IPAdapter, and generation state more predictable between sessions. |
 | Output Reuse | ✅ Output Root Folder Sync | Fixed Output Reuse scanning so it now respects the custom **Output root folder** path defined inside **Rescue and save details** instead of silently defaulting back to the ComfyUI output folder. |
 | Scene Director | ✅ User Repo Runtime Fix | Fixed an issue where Scene Director appeared functional inside the developer environment but failed to properly apply regions inside the normal user repo/runtime environment. |
 
