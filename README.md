@@ -245,6 +245,81 @@ You can choose any folder path. Do **not** use hardcoded paths from another mach
 7. Restart or reload the Roleplay system if needed.
 
 ---
+## 🧩 Backend Notes & Troubleshooting
+---
+
+### ⚠️ InsightFace / IPAdapter FaceID Setup Note (Python 3.13)
+
+If you are using the newer ComfyUI portable builds with **Python 3.13**, normal:
+
+```bash
+pip install insightface
+```
+
+may fail with errors like:
+
+```txt
+No module named 'insightface'
+fatal error C1083: Cannot open include file: 'Python.h'
+```
+
+This happens because PyPI may try to build InsightFace from source instead of using a compatible wheel.
+
+#### ✅ Recommended Fix (Python 3.13)
+
+Install the prebuilt `cp313` wheel directly:
+
+```bash
+python -m pip install --force-reinstall https://github.com/Gourieff/Assets/raw/main/Insightface/insightface-0.7.3-cp313-cp313-win_amd64.whl
+```
+
+Then install/update ONNX Runtime GPU:
+
+```bash
+python -m pip install --upgrade onnxruntime-gpu
+```
+
+#### ✅ Verify Installation
+
+```bash
+python -c "import insightface; print('insightface ok')"
+```
+
+Expected result:
+
+```txt
+insightface ok
+```
+
+#### ✅ Verify CUDA Provider
+
+```bash
+python -c "import onnxruntime as ort; print(ort.get_available_providers())"
+```
+
+Expected providers should include:
+
+```txt
+CUDAExecutionProvider
+```
+
+#### ⚠️ Important
+
+Do **not** rely on:
+
+```bash
+pip install insightface
+```
+
+for Python 3.13 portable builds unless you intentionally want to compile from source with full Visual Studio C++ Build Tools installed.
+
+This mainly affects:
+- IPAdapter FaceID
+- Scene Director identity routing
+- ReActor / Face swap systems
+- InsightFace-based workflows
+
+---
 ## 🎥 Setup Guide (Video)
 
 Watch the full setup guide here:
@@ -343,3 +418,5 @@ If you find Neo Studio useful and want to support development:
 👉 [https://ko-fi.com/moodpixel](https://ko-fi.com/moodpixel)
 
 Support is optional, but always appreciated 💙
+
+---
