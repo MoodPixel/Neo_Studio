@@ -648,6 +648,312 @@ def _build_res4lyf_core_fallback_payload(payload: dict) -> dict:
     fallback['res4lyf_fallback_applied'] = True
     return fallback
 
+
+_APPEARANCE_LOCK_ALLOWED_MODES = {'off', 'none', 'disabled', 'hair_focus_soft', 'hair_focus_strong'}
+_APPEARANCE_LOCK_DEFAULTS = {
+    'enabled': False,
+    'mode': 'hair_focus_soft',
+    'gain': 0.35,
+    'height': 0.34,
+    'feather': 18,
+}
+
+_APPEARANCE_LOCK_MODE_LABELS = {
+    'hair_focus_soft': 'Appearance Focus Soft',
+    'hair_focus_strong': 'Appearance Focus Strong',
+    'off': 'Off',
+}
+_APPEARANCE_LOCK_SUPPORTED_GENERATION_MODES = {'txt2img', 'img2img', 'inpaint'}
+
+
+
+def _coerce_optional_bool(value, default=None):
+    if value is None:
+        return default
+    if isinstance(value, str):
+        raw = value.strip().lower()
+        if raw in {'1', 'true', 'yes', 'on', 'enabled'}:
+            return True
+        if raw in {'0', 'false', 'no', 'off', 'disabled', 'none'}:
+            return False
+        return default
+    return bool(value)
+
+
+def _coerce_float_range(value, default: float, min_value: float, max_value: float) -> tuple[float, bool]:
+    try:
+        parsed = float(value)
+    except Exception:
+        return float(default), value is not None
+    clamped = max(min_value, min(max_value, parsed))
+    return float(clamped), clamped != parsed
+
+
+def _coerce_int_range(value, default: int, min_value: int, max_value: int) -> tuple[int, bool]:
+    try:
+        parsed = int(float(value))
+    except Exception:
+        return int(default), value is not None
+    clamped = max(min_value, min(max_value, parsed))
+    return int(clamped), clamped != parsed
+
+
+def _normalize_scene_director_appearance_lock_payload(payload: dict) -> list[str]:
+    """Normalize Appearance Lock payload keys before node selection.
+
+    This is Phase 2 payload work only: it makes raw/effective state explicit and
+    keeps V053 selection driven by visible payload keys. It does not enable UI
+    controls and does not inject negatives or mutate scene_json traits.
+    """
+    notes: list[str] = []
+    if not isinstance(payload, dict):
+        return notes
+
+    raw = {
+        'enabled': payload.get('scene_director_appearance_lock_enabled'),
+        'mode': payload.get('scene_director_appearance_lock_mode'),
+        'gain': payload.get('scene_director_appearance_lock_gain'),
+        'height': payload.get('scene_director_appearance_lock_height'),
+        'feather': payload.get('scene_director_appearance_lock_feather'),
+    }
+
+    # Backward-compatible aliases are accepted for direct API/workflow tests, but
+    # the canonical Scene Director payload keys are always written back below.
+    if raw['mode'] is None and payload.get('appearance_lock_mode') is not None:
+        raw['mode'] = payload.get('appearance_lock_mode')
+    if raw['gain'] is None and payload.get('appearance_lock_gain') is not None:
+        raw['gain'] = payload.get('appearance_lock_gain')
+    if raw['height'] is None and payload.get('appearance_lock_height') is not None:
+        raw['height'] = payload.get('appearance_lock_height')
+    if raw['feather'] is None and payload.get('appearance_lock_feather') is not None:
+        raw['feather'] = payload.get('appearance_lock_feather')
+
+    scene_director_enabled = _coerce_optional_bool(payload.get('scene_director_enabled'), default=False)
+    workflow_mode = normalize_generation_mode(payload.get('mode') or payload.get('workflow_type') or 'txt2img')
+
+    explicit_enabled = _coerce_optional_bool(raw.get('enabled'), default=None)
+    raw_mode = str(raw.get('mode') or '').strip().lower()
+    if not raw_mode:
+        raw_mode = _APPEARANCE_LOCK_DEFAULTS['mode']
+    mode = raw_mode
+    if mode not in _APPEARANCE_LOCK_ALLOWED_MODES:
+        notes.append(f"Scene Director Appearance Lock mode '{raw_mode}' is not supported; using Appearance Focus Soft.")
+        mode = 'hair_focus_soft'
+
+    mode_disables = mode in {'off', 'none', 'disabled'}
+    enabled = bool(explicit_enabled) if explicit_enabled is not None else False
+    if mode_disables:
+        enabled = False
+        mode = 'off'
+
+    guardrails: list[dict[str, str]] = []
+    if enabled and not scene_director_enabled:
+        enabled = False
+        guardrails.append({
+            'code': 'appearance_lock_disabled_without_scene_director',
+            'action': 'auto_fixed',
+            'message': 'Appearance Lock was turned off because Scene Director is disabled.',
+        })
+        notes.append('Appearance Lock was turned off because Scene Director is disabled.')
+    if enabled and workflow_mode not in _APPEARANCE_LOCK_SUPPORTED_GENERATION_MODES:
+        enabled = False
+        guardrails.append({
+            'code': 'appearance_lock_unsupported_generation_mode',
+            'action': 'auto_fixed',
+            'message': f'Appearance Lock is only supported for txt2img, img2img, and inpaint. It was disabled for {workflow_mode}.',
+        })
+        notes.append(f'Appearance Lock is only supported for txt2img, img2img, and inpaint. It was disabled for {workflow_mode}.')
+
+    gain, gain_clamped = _coerce_float_range(raw.get('gain'), _APPEARANCE_LOCK_DEFAULTS['gain'], 0.0, 1.0)
+    height, height_clamped = _coerce_float_range(raw.get('height'), _APPEARANCE_LOCK_DEFAULTS['height'], 0.05, 0.80)
+    feather, feather_clamped = _coerce_int_range(raw.get('feather'), _APPEARANCE_LOCK_DEFAULTS['feather'], 0, 128)
+    if gain_clamped:
+        notes.append('Scene Director Appearance Lock gain was clamped to the supported 0.0–1.0 range.')
+    if height_clamped:
+        notes.append('Scene Director Appearance Lock height was clamped to the supported 0.05–0.80 range.')
+    if feather_clamped:
+        notes.append('Scene Director Appearance Lock feather was clamped to the supported 0–128 px range.')
+
+    if gain_clamped:
+        guardrails.append({'code': 'appearance_lock_gain_clamped', 'action': 'auto_fixed', 'message': 'Gain was clamped to 0.0–1.0.'})
+    if height_clamped:
+        guardrails.append({'code': 'appearance_lock_height_clamped', 'action': 'auto_fixed', 'message': 'Height focus was clamped to 0.05–0.80.'})
+    if feather_clamped:
+        guardrails.append({'code': 'appearance_lock_feather_clamped', 'action': 'auto_fixed', 'message': 'Feather was clamped to 0–128 px.'})
+
+    effective = {
+        'enabled': enabled,
+        'mode': mode,
+        'mode_label': _APPEARANCE_LOCK_MODE_LABELS.get(mode, mode),
+        'gain': gain,
+        'height': height,
+        'feather': feather,
+        'node_required': 'NeoSceneDirectorV053' if enabled else 'NeoSceneDirectorV052',
+        'source': 'scene_director_payload',
+        'workflow_mode': workflow_mode,
+        'guardrails': guardrails,
+    }
+    payload['_neo_scene_director_appearance_lock_raw'] = raw
+    payload['_neo_scene_director_appearance_lock_effective'] = effective
+    payload['_neo_scene_director_appearance_lock_payload_policy'] = {
+        'canonical_keys': [
+            'scene_director_appearance_lock_enabled',
+            'scene_director_appearance_lock_mode',
+            'scene_director_appearance_lock_gain',
+            'scene_director_appearance_lock_height',
+            'scene_director_appearance_lock_feather',
+        ],
+        'raw_vs_effective_recorded': True,
+        'hidden_negative_injection': False,
+        'guardrails': guardrails,
+    }
+
+    # Canonical flat mirrors consumed by the workflow builder and sidecar. These
+    # are effective values, not raw UI values; raw values remain preserved above.
+    payload['scene_director_appearance_lock_enabled'] = enabled
+    payload['scene_director_appearance_lock_mode'] = mode
+    payload['scene_director_appearance_lock_gain'] = gain
+    payload['scene_director_appearance_lock_height'] = height
+    payload['scene_director_appearance_lock_feather'] = feather
+    return notes
+
+
+async def _comfy_node_exists(adapter: ComfyBackendAdapter, node_name: str) -> bool:
+    """Return True when ComfyUI object_info exposes a node class.
+
+    Some portable ComfyUI builds return either {node_name: schema} for a single
+    probe or the full object_info map. Keep this probe permissive and side-effect
+    free; ComfyUI remains the final runtime validator.
+    """
+    try:
+        info = await adapter.get_object_info(node_name)
+    except Exception:
+        return False
+    if not isinstance(info, dict):
+        return False
+    if node_name in info:
+        return True
+    if 'input' in info or 'output' in info:
+        return True
+    wanted = node_name.strip().lower()
+    return any(str(key).strip().lower() == wanted for key in info.keys())
+
+
+def _scene_director_appearance_lock_requested(payload: dict) -> bool:
+    effective = payload.get('_neo_scene_director_appearance_lock_effective')
+    if isinstance(effective, dict):
+        return bool(effective.get('enabled'))
+    enabled = _coerce_optional_bool(payload.get('scene_director_appearance_lock_enabled'), default=False)
+    return bool(enabled)
+
+
+async def _configure_scene_director_node_selection(adapter: ComfyBackendAdapter, payload: dict) -> list[str]:
+    """Select NeoSceneDirectorV053 only when Appearance Lock is explicitly active.
+
+    V052 remains the stable default. If V053 is requested but unavailable, this
+    falls back to V052 and records a visible compile note + payload warning.
+    """
+    notes: list[str] = []
+    if not bool(payload.get('scene_director_enabled')):
+        return notes
+    backend_mode = str(payload.get('scene_director_backend_mode') or payload.get('regional_backend_mode') or '').strip().lower()
+    if backend_mode and backend_mode not in {'v052_node', 'v053_node', 'scene_director_node'}:
+        payload['scene_director_backend_mode'] = 'v052_node'
+        payload['_neo_scene_director_backend_mode_warning'] = f"Unsupported Scene Director backend mode '{backend_mode}' was reset to V052."
+        notes.append(payload['_neo_scene_director_backend_mode_warning'])
+    if not str(payload.get('scene_director_v052_scene_json') or '').strip():
+        if _scene_director_appearance_lock_requested(payload):
+            payload['_neo_scene_director_appearance_lock_active'] = False
+            payload['_neo_scene_director_appearance_lock_warning'] = 'Appearance Lock requires Scene Director regions/scene JSON. Add at least one Scene Director region first.'
+            notes.append(payload['_neo_scene_director_appearance_lock_warning'])
+        return notes
+    wants_v053 = _scene_director_appearance_lock_requested(payload)
+    if not wants_v053:
+        payload.setdefault('scene_director_backend_mode', 'v052_node')
+        payload['_neo_scene_director_node_class'] = 'NeoSceneDirectorV052'
+        payload['_neo_scene_director_node_selection'] = 'v052_default'
+        payload['_neo_scene_director_appearance_lock_active'] = False
+        return notes
+
+    v053_ok = await _comfy_node_exists(adapter, 'NeoSceneDirectorV053')
+    if v053_ok:
+        payload['scene_director_backend_mode'] = 'v053_node'
+        payload['_neo_scene_director_node_class'] = 'NeoSceneDirectorV053'
+        payload['_neo_scene_director_node_selection'] = 'v053_appearance_lock'
+        payload['_neo_scene_director_appearance_lock_active'] = True
+        notes.append('Scene Director Appearance Lock requested: using NeoSceneDirectorV053.')
+        return notes
+
+    payload['scene_director_backend_mode'] = 'v052_node'
+    payload['_neo_scene_director_node_class'] = 'NeoSceneDirectorV052'
+    payload['_neo_scene_director_node_selection'] = 'v053_missing_fallback_v052'
+    payload['_neo_scene_director_appearance_lock_active'] = False
+    payload['_neo_scene_director_appearance_lock_warning'] = 'Appearance Lock requires NeoSceneDirectorV053. Falling back to NeoSceneDirectorV052.'
+    notes.append(payload['_neo_scene_director_appearance_lock_warning'])
+    return notes
+
+
+def _finalize_scene_director_appearance_lock_state_metadata(payload: dict) -> dict:
+    """Record raw/effective Appearance Lock state after node selection/build.
+
+    Phase 5 save/metadata contract: keep raw UI intent, normalized effective
+    values, selected node, fallback status, and guardrail policy together so a
+    saved output can be audited without re-running the workflow builder.
+    """
+    if not isinstance(payload, dict):
+        return {}
+    raw = payload.get('_neo_scene_director_appearance_lock_raw')
+    if not isinstance(raw, dict):
+        raw = {
+            'enabled': payload.get('scene_director_appearance_lock_enabled'),
+            'mode': payload.get('scene_director_appearance_lock_mode'),
+            'gain': payload.get('scene_director_appearance_lock_gain'),
+            'height': payload.get('scene_director_appearance_lock_height'),
+            'feather': payload.get('scene_director_appearance_lock_feather'),
+        }
+    effective = payload.get('_neo_scene_director_appearance_lock_effective')
+    if not isinstance(effective, dict):
+        effective = {
+            'enabled': bool(payload.get('scene_director_appearance_lock_enabled')),
+            'mode': str(payload.get('scene_director_appearance_lock_mode') or 'hair_focus_soft'),
+            'gain': payload.get('scene_director_appearance_lock_gain', 0.35),
+            'height': payload.get('scene_director_appearance_lock_height', 0.34),
+            'feather': payload.get('scene_director_appearance_lock_feather', 18),
+            'source': 'scene_director_payload',
+        }
+    node_class = str(payload.get('_neo_scene_director_node_class') or '').strip()
+    node_selection = str(payload.get('_neo_scene_director_node_selection') or '').strip()
+    version_used = str(payload.get('_neo_scene_director_version_used') or '').strip()
+    requested_enabled = bool(effective.get('enabled'))
+    active = bool(payload.get('_neo_scene_director_appearance_lock_active'))
+    fallback_warning = str(payload.get('_neo_scene_director_appearance_lock_warning') or '').strip()
+    metadata = {
+        'schema_version': 1,
+        'feature': 'scene_director_appearance_lock',
+        'raw_state': raw,
+        'effective_state': {
+            **effective,
+            'active': active,
+            'node_class': node_class,
+            'node_selection': node_selection,
+            'version_used': version_used,
+            'fallback_applied': bool(requested_enabled and not active),
+            'warning': fallback_warning,
+        },
+        'policy': {
+            'source': 'scene_director_live_generation_payload',
+            'output_policy': 'generation_output_metadata_only',
+            'batch_behavior': str(payload.get('_neo_scene_director_batch_policy') or 'preserve_user_batch_unless_guarded_elsewhere'),
+            'context_usage': 'appearance/head/hair/color conditioning inside Scene Director regions',
+            'hidden_negative_injection': False,
+            'raw_vs_effective_recorded': True,
+            'guardrails': effective.get('guardrails') if isinstance(effective, dict) else [],
+        },
+    }
+    payload['_neo_scene_director_appearance_lock_state_metadata'] = metadata
+    payload['_neo_scene_director_appearance_lock_fallback_applied'] = bool(metadata['effective_state']['fallback_applied'])
+    return metadata
+
 async def _build_res4lyf_core_fallback_workflow(payload: dict, reason: Exception | str) -> tuple[dict, dict, list[str]]:
     fallback_payload = _build_res4lyf_core_fallback_payload(payload)
     fallback_workflow, fallback_normalized, fallback_notes = build_image_workflow(fallback_payload, command=detect_image_workflow_command(fallback_payload))
@@ -984,6 +1290,14 @@ def _build_generation_sidecar(job: dict, payload: dict, source: dict, candidate_
         'outpaint_feather': payload.get('outpaint_feather') if payload.get('outpaint_feather') is not None else '',
         'style_positive': str(payload.get('style_positive') or '').strip(),
         'style_negative': str(payload.get('style_negative') or '').strip(),
+        'scene_director_version_used': str(payload.get('_neo_scene_director_version_used') or '').strip(),
+        'scene_director_node_class': str(payload.get('_neo_scene_director_node_class') or '').strip(),
+        'scene_director_node_selection': str(payload.get('_neo_scene_director_node_selection') or '').strip(),
+        'scene_director_appearance_lock_raw': payload.get('_neo_scene_director_appearance_lock_raw') if isinstance(payload.get('_neo_scene_director_appearance_lock_raw'), dict) else {},
+        'scene_director_appearance_lock_effective': payload.get('_neo_scene_director_appearance_lock_effective') if isinstance(payload.get('_neo_scene_director_appearance_lock_effective'), dict) else {},
+        'scene_director_appearance_lock_state': payload.get('_neo_scene_director_appearance_lock_state_metadata') if isinstance(payload.get('_neo_scene_director_appearance_lock_state_metadata'), dict) else {},
+        'scene_director_appearance_lock_fallback_applied': bool(payload.get('_neo_scene_director_appearance_lock_fallback_applied')),
+        'scene_director_appearance_lock_warning': str(payload.get('_neo_scene_director_appearance_lock_warning') or '').strip(),
         'loras': lora_units,
         'textual_inversions': list(payload.get('textual_inversions') or []) if isinstance(payload.get('textual_inversions'), list) else [],
         'ipadapter_units': ipadapter_units,
@@ -1021,6 +1335,12 @@ def _build_generation_sidecar(job: dict, payload: dict, source: dict, candidate_
             'units': ipadapter_units,
         },
         'extra_generation_params': extra_generation_params,
+        'scene_director': {
+            'version_used': str(payload.get('_neo_scene_director_version_used') or '').strip(),
+            'node_class': str(payload.get('_neo_scene_director_node_class') or '').strip(),
+            'node_selection': str(payload.get('_neo_scene_director_node_selection') or '').strip(),
+            'appearance_lock': payload.get('_neo_scene_director_appearance_lock_state_metadata') if isinstance(payload.get('_neo_scene_director_appearance_lock_state_metadata'), dict) else {},
+        },
         'raw_parameters': '\n'.join([line for line in raw_lines if line]),
         'save': {
             'output_root': str(mode_root.parent),
@@ -3088,10 +3408,18 @@ async def _prepare_scene_director_ipadapter_units(adapter: ComfyBackendAdapter, 
     if not isinstance(identity_units, list):
         identity_units = payload.get('identity_profile_units') if isinstance(payload.get('identity_profile_units'), list) else []
     bridged_identity_units: list[dict] = []
+    guardrails = payload.get('scene_director_ipadapter_guardrails') if isinstance(payload.get('scene_director_ipadapter_guardrails'), list) else []
+    auto_fix_actions = payload.get('scene_director_ipadapter_auto_fix_actions') if isinstance(payload.get('scene_director_ipadapter_auto_fix_actions'), list) else []
+    faceid_nodes_ok: bool | None = None
     for idx, unit in enumerate(identity_units or []):
         if not isinstance(unit, dict):
             continue
-        mode = str(unit.get('mode') or unit.get('ipadapter_mode') or 'standard').strip().lower() or 'faceid'
+        if unit.get('missing_reference_image'):
+            label = str(unit.get('profile_name') or unit.get('label') or idx + 1)
+            guardrails.append({'level': 'warning', 'reason': 'profile_missing_image', 'label': label, 'region_id': unit.get('region_id') or '', 'message': f'Scene Director Identity Profile skipped {label}: no reference image filename/path was provided.'})
+            compile_notes.append(f'Scene Director Identity Profile skipped {label}: no reference image filename/path was provided.')
+            continue
+        mode = str(unit.get('mode') or unit.get('ipadapter_mode') or 'faceid').strip().lower() or 'faceid'
         if mode == 'ipadapter':
             mode = 'standard'
         if mode not in {'standard', 'faceid'}:
@@ -3115,12 +3443,33 @@ async def _prepare_scene_director_ipadapter_units(adapter: ComfyBackendAdapter, 
         # Default profile routing now uses the same standard IPAdapter model lane as the
         # working native Scene Builder slot, unless the profile explicitly provides FaceID.
         explicit_mode = str(unit.get('mode') or unit.get('ipadapter_mode') or '').strip().lower()
+        if mode == 'faceid':
+            if faceid_nodes_ok is None:
+                try:
+                    loader_info = await adapter.get_object_info('IPAdapterUnifiedLoaderFaceID')
+                    apply_info = await adapter.get_object_info('IPAdapterFaceID')
+                    faceid_nodes_ok = bool(isinstance(loader_info, dict) and (loader_info.get('IPAdapterUnifiedLoaderFaceID') or loader_info) and isinstance(apply_info, dict) and (apply_info.get('IPAdapterFaceID') or apply_info))
+                except Exception:
+                    faceid_nodes_ok = False
+            if not faceid_nodes_ok:
+                fallback_model = model_name or str(payload.get('ipadapter_name') or payload.get('ipadapter_model') or '').strip()
+                if fallback_model:
+                    auto_fix_actions.append({'action': 'faceid_unavailable_fallback_to_standard_ipadapter', 'profile_id': unit.get('profile_id') or '', 'label': unit.get('profile_name') or unit.get('label') or '', 'fallback_model': fallback_model})
+                    compile_notes.append(f"Scene Director Identity Profile {str(unit.get('profile_name') or unit.get('label') or idx + 1)} requested FaceID, but FaceID nodes were not reported; falling back to standard masked IPAdapter.")
+                    mode = 'standard'
+                    model_name = fallback_model
+                else:
+                    guardrails.append({'level': 'warning', 'reason': 'faceid_unavailable_no_fallback_model', 'profile_id': unit.get('profile_id') or '', 'label': unit.get('profile_name') or unit.get('label') or '', 'message': 'FaceID nodes/model were unavailable and no standard IPAdapter model was selected.'})
+                    compile_notes.append(f"Scene Director Identity Profile skipped {str(unit.get('profile_name') or unit.get('label') or idx + 1)}: FaceID unavailable and no standard IPAdapter model was selected.")
+                    continue
         if mode == 'faceid' and not model_name and explicit_mode != 'faceid':
             mode = 'standard'
         if mode != 'faceid' and not model_name:
             model_name = str(payload.get('ipadapter_name') or payload.get('ipadapter_model') or '').strip()
         if mode != 'faceid' and not model_name:
-            compile_notes.append(f"Scene Director Identity Profile skipped {str(unit.get('profile_name') or unit.get('label') or idx + 1)}: no IPAdapter model was selected. Enable/select the working native IPAdapter model once, then Character Profile can reuse it for regional masking.")
+            label = str(unit.get('profile_name') or unit.get('label') or idx + 1)
+            guardrails.append({'level': 'warning', 'reason': 'no_ipadapter_model_loaded', 'label': label, 'profile_id': unit.get('profile_id') or '', 'message': 'No IPAdapter model was selected, so regional IPAdapter was disabled for this profile.'})
+            compile_notes.append(f"Scene Director Identity Profile skipped {label}: no IPAdapter model was selected. Enable/select the working native IPAdapter model once, then Character Profile can reuse it for regional masking.")
             continue
         try:
             region_index = int(unit.get('region_index') or idx + 1)
@@ -3160,6 +3509,8 @@ async def _prepare_scene_director_ipadapter_units(adapter: ComfyBackendAdapter, 
                 merged.append(unit)
         payload['scene_director_ipadapter_units'] = merged
         compile_notes.append(f"Scene Director bridged {len(bridged_identity_units)} Identity Profile(s) into masked IPAdapter/FaceID unit(s).")
+    payload['scene_director_ipadapter_guardrails'] = guardrails
+    payload['scene_director_ipadapter_auto_fix_actions'] = auto_fix_actions
     bindings = payload.get('scene_director_ipadapter_bindings')
     if isinstance(bindings, list) and bindings:
         source_units = payload.get('scene_director_bound_ipadapter_units_source')
@@ -3174,6 +3525,7 @@ async def _prepare_scene_director_ipadapter_units(adapter: ComfyBackendAdapter, 
             except Exception:
                 slot = 0
             if slot < 1 or slot > len(source_units):
+                guardrails.append({'level': 'warning', 'reason': 'ipadapter_slot_unavailable', 'slot': slot, 'message': f"Scene Director IPAdapter binding skipped: slot {slot or '?'} is not available."})
                 compile_notes.append(f"Scene Director IPAdapter binding skipped: slot {slot or '?'} is not available.")
                 continue
             source = source_units[slot - 1]
@@ -3191,6 +3543,7 @@ async def _prepare_scene_director_ipadapter_units(adapter: ComfyBackendAdapter, 
                 image_names.insert(0, image_name)
             if not clip_vision or not image_names or (mode != 'faceid' and not model_name):
                 missing = 'CLIP Vision/reference image' if mode == 'faceid' else 'model, CLIP Vision, or reference image'
+                guardrails.append({'level': 'warning', 'reason': 'no_ipadapter_model_loaded' if mode != 'faceid' and not model_name else 'ipadapter_reference_or_clip_missing', 'slot': slot, 'region_id': binding.get('region_id') or '', 'label': binding.get('label') or '', 'message': f'Scene Director IPAdapter binding skipped slot {slot}: missing {missing}.'})
                 compile_notes.append(f"Scene Director IPAdapter binding skipped slot {slot}: missing {missing}.")
                 continue
             region_index = int(binding.get('region_index') or len(normalized_units) + 1)
@@ -3237,6 +3590,8 @@ async def _prepare_scene_director_ipadapter_units(adapter: ComfyBackendAdapter, 
             compile_notes.append(f"Scene Director bound {len(normalized_units)} region(s) to existing Neo IPAdapter slot(s).")
         if bridged_identity_units and normalized_units:
             compile_notes.append("Scene Director preserved Identity Profile unit(s) while adding manual IPAdapter region binding(s).")
+        payload['scene_director_ipadapter_count'] = len(payload.get('scene_director_ipadapter_units') or [])
+        payload['scene_director_suppress_global_ipadapter'] = payload['scene_director_ipadapter_count'] > 0
         return compile_notes
 
     units = payload.get('scene_director_ipadapter_units')
@@ -3289,6 +3644,8 @@ async def _prepare_scene_director_ipadapter_units(adapter: ComfyBackendAdapter, 
         })
         normalized_units.append(normalized)
     payload['scene_director_ipadapter_units'] = normalized_units
+    payload['scene_director_ipadapter_count'] = len(normalized_units)
+    payload['scene_director_suppress_global_ipadapter'] = payload['scene_director_ipadapter_count'] > 0
     if normalized_units:
         with_images = sum(1 for unit in normalized_units if unit.get('image_name'))
         profile_units = sum(1 for unit in normalized_units if str(unit.get('composer_mode') or '') == 'identity_profile')
@@ -4895,6 +5252,8 @@ async def api_generation_queue(request: Request, background_tasks: BackgroundTas
         pre_compile_notes.extend(await _prepare_controlnet_units(adapter, payload, dynamic_uploads))
         pre_compile_notes.extend(await _prepare_ipadapter_units(adapter, payload, dynamic_uploads))
         pre_compile_notes.extend(await _prepare_scene_director_ipadapter_units(adapter, payload, dynamic_uploads))
+        pre_compile_notes.extend(_normalize_scene_director_appearance_lock_payload(payload))
+        pre_compile_notes.extend(await _configure_scene_director_node_selection(adapter, payload))
         pre_compile_notes.extend(prepare_detailer_assets_for_payload(payload))
 
         support_check = validate_generation_support(
@@ -4960,6 +5319,7 @@ async def api_generation_queue(request: Request, background_tasks: BackgroundTas
         workflow, normalized_payload, compile_notes = build_image_workflow(payload, command=detect_image_workflow_command(payload))
         workflow, advanced_lane_notes = await _apply_res4lyf_advanced_sampler_lane(adapter, payload, workflow)
         compile_notes = [*pre_compile_notes, *compile_notes, *advanced_lane_notes]
+        _finalize_scene_director_appearance_lock_state_metadata(normalized_payload)
         _safe_write_generation_debug_json(GENERATION_LAST_PAYLOAD_PATH, normalized_payload)
         _safe_write_generation_debug_json(GENERATION_LAST_WORKFLOW_PATH, workflow)
         logger.info(
@@ -5019,6 +5379,7 @@ async def api_generation_queue(request: Request, background_tasks: BackgroundTas
             })
             workflow, normalized_payload, fallback_notes = await _build_res4lyf_core_fallback_workflow(payload, queue_exc)
             compile_notes = [*compile_notes, *fallback_notes]
+            _finalize_scene_director_appearance_lock_state_metadata(normalized_payload)
             _safe_write_generation_debug_json(GENERATION_LAST_PAYLOAD_PATH, normalized_payload)
             _safe_write_generation_debug_json(GENERATION_LAST_WORKFLOW_PATH, workflow)
             queued = await adapter.queue_prompt(workflow)
