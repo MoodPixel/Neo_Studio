@@ -332,7 +332,7 @@ This mainly affects:
 ### ⚠️ Live Preview Not Working Inside Neo Studio
 ---
 
-If live previews work correctly inside normal ComfyUI KSampler previews but **Neo Studio shows no live preview**, even though generation still completes correctly, the issue may be ComfyUI preview websocket output not being enabled for external websocket/API clients.
+If **Neo Studio shows no live preview**, even though generation still completes correctly, the issue may be ComfyUI preview websocket output not being enabled for external websocket/API clients.
 
 Typical Neo debug state may show:
 
