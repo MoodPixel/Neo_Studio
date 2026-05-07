@@ -3970,30 +3970,86 @@ async def ws_generation_progress(websocket: WebSocket):
         return
 
     ws_url = base_url.replace('https://', 'wss://').replace('http://', 'ws://') + f'/ws?clientId={client_id or "neo_studio"}'
+    proxy_started = time.time()
+    stats = {
+        'client_id': client_id or 'neo_studio',
+        'upstream': ws_url,
+        'text_frames': 0,
+        'binary_frames': 0,
+        'forwarded_binary_frames': 0,
+        'binary_bytes': 0,
+        'json_types': {},
+        'last_json_type': '',
+        'last_binary_bytes': 0,
+        'upstream_closed': False,
+        'close_reason': '',
+    }
     logger.info('Generation progress proxy connecting | upstream=%s', ws_url)
+    _append_generation_log('Generation progress proxy connecting.', context={'client_id': stats['client_id'], 'upstream': ws_url})
     upstream = None
+
+    async def _send_proxy_diag(reason: str):
+        payload = dict(stats)
+        payload['reason'] = reason
+        payload['elapsed_sec'] = round(time.time() - proxy_started, 3)
+        try:
+            await websocket.send_json({'type': 'proxy_diag', 'data': payload})
+        except Exception:
+            pass
+
     try:
         upstream = await websockets.connect(ws_url, max_size=None, ping_interval=20, ping_timeout=20)
-        await websocket.send_json({'type': 'proxy_open', 'data': {'client_id': client_id or 'neo_studio'}})
+        await websocket.send_json({'type': 'proxy_open', 'data': {'client_id': stats['client_id'], 'upstream': ws_url}})
+        await _send_proxy_diag('open')
         while True:
             try:
                 message = await upstream.recv()
-            except websockets.ConnectionClosed:
+            except websockets.ConnectionClosed as exc:
+                stats['upstream_closed'] = True
+                stats['close_reason'] = f'{getattr(exc, "code", "")}: {getattr(exc, "reason", "")}'.strip()
+                await _send_proxy_diag('upstream_closed')
                 break
             if isinstance(message, bytes):
+                stats['binary_frames'] += 1
+                stats['forwarded_binary_frames'] += 1
+                stats['last_binary_bytes'] = len(message)
+                stats['binary_bytes'] += len(message)
+                # Log the first few binary frames and then occasional totals. This proves whether Comfy emits previews.
+                if stats['binary_frames'] <= 3 or stats['binary_frames'] % 25 == 0:
+                    _append_generation_log('Generation progress proxy binary frame forwarded.', context={
+                        'client_id': stats['client_id'],
+                        'binary_frames': stats['binary_frames'],
+                        'last_binary_bytes': stats['last_binary_bytes'],
+                        'binary_bytes': stats['binary_bytes'],
+                    })
+                    await _send_proxy_diag('binary_frame')
                 await websocket.send_bytes(message)
             else:
+                stats['text_frames'] += 1
+                parsed_type = ''
+                try:
+                    parsed = json.loads(message) if isinstance(message, str) else {}
+                    parsed_type = str((parsed or {}).get('type') or '')
+                except Exception:
+                    parsed_type = 'non_json_text'
+                if parsed_type:
+                    stats['last_json_type'] = parsed_type
+                    stats['json_types'][parsed_type] = int(stats['json_types'].get(parsed_type, 0)) + 1
+                if stats['text_frames'] <= 3 or stats['text_frames'] % 25 == 0:
+                    await _send_proxy_diag('text_frame')
                 await websocket.send_text(message)
     except WebSocketDisconnect:
-        pass
+        stats['close_reason'] = 'frontend_disconnected'
+        _append_generation_log('Generation progress proxy frontend disconnected.', context=stats)
     except Exception as exc:
         logger.warning('Generation progress proxy failed | %s', exc)
-        _append_generation_log('Generation progress websocket proxy failed safely.', exc=exc, context={'client_id': client_id, 'upstream': ws_url})
+        _append_generation_log('Generation progress websocket proxy failed safely.', exc=exc, context=stats)
         try:
-            await websocket.send_json({'type': 'error', 'data': {'message': f'Progress proxy failed: {exc}'}})
+            await websocket.send_json({'type': 'error', 'data': {'message': f'Progress proxy failed: {exc}', 'proxy_stats': stats}})
         except Exception:
             pass
     finally:
+        _append_generation_log('Generation progress proxy closed.', context=stats)
         try:
             if upstream is not None:
                 await upstream.close()
