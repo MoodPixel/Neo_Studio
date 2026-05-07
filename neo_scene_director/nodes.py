@@ -1,11 +1,16 @@
 
 """
-Neo Scene Director v0.5.2 — IPAdapter Region Prep / Phase 7.6 Prompt Contracts Patch
+Neo Scene Director v0.5.3 — Appearance Lock / Hair Region Conditioning Patch
 Built on Neo Regional Prompter v0.4.4 Quality First.
 
 Built from the v0.3 REAL masking/attention base.
 
-New in v0.5.2:
+New in v0.5.3:
+- adds optional appearance-lock conditioning branches for character head/hair zones
+- improves hair/style/color isolation without backend-injected negatives
+- preserves v0.5.2 subject MASK and identity_plan outputs
+
+Kept from v0.5.2:
 - appends per-subject MASK outputs for IPAdapter masked/attention workflows
 - appends identity_plan JSON for reference-image routing
 - keeps v0.5.1 count-locked scene behavior untouched
@@ -185,6 +190,65 @@ def _feather_mask(mask: torch.Tensor, feather_px: int) -> torch.Tensor:
     pad = k // 2
     m = F.avg_pool2d(mask.unsqueeze(0), kernel_size=k, stride=1, padding=pad)
     return m.squeeze(0).clamp(0, 1)
+
+
+def _clamp01(value: float, default: float = 0.0) -> float:
+    try:
+        value = float(value)
+    except Exception:
+        value = float(default)
+    return max(0.0, min(1.0, value))
+
+
+def _appearance_lock_mode_value(value: Any) -> str:
+    mode = str(value or "off").strip().lower()
+    aliases = {
+        "none": "off",
+        "disabled": "off",
+        "hair": "hair_focus_soft",
+        "soft": "hair_focus_soft",
+        "strong": "hair_focus_strong",
+    }
+    mode = aliases.get(mode, mode)
+    if mode not in ("off", "hair_focus_soft", "hair_focus_strong"):
+        return "off"
+    return mode
+
+
+def _make_top_focus_mask(mask_data: Dict, width: int, height: int, top_ratio: float, weight: float = 1.0) -> torch.Tensor:
+    """Return a subject-local upper/head area mask used for appearance locking.
+
+    This is intentionally bbox-derived, not detector-derived. It keeps txt2img single-pass safe:
+    region boxes still define intent, while the upper subject zone receives a separate
+    appearance-conditioning branch to reduce hair/color/style dilution at contact zones.
+    """
+    x1, y1, x2, y2 = _rect_to_pixels(mask_data, width, height)
+    ratio = _clamp01(top_ratio, 0.34)
+    ratio = max(0.12, min(0.62, ratio))
+    y_focus = y1 + max(1, int((y2 - y1) * ratio))
+    mask = torch.zeros((height, width), dtype=torch.float32)
+    mask[y1:y_focus, x1:x2] = max(0.0, float(weight))
+    return mask.unsqueeze(0)
+
+
+def _compile_appearance_lock_prompt(region: Dict, mode: str) -> str:
+    rid = str(region.get("id", region.get("name", "region"))).strip()
+    prompt = str(region.get("prompt", "")).strip()
+    tokens = _clean_list(region.get("tokens", [])) + _clean_list(region.get("owns", []))
+    subject_name = f" for {rid}" if rid else ""
+    # This is positive conditioning only. Do not inject opposite-character negatives here.
+    parts = [
+        f"appearance lock{subject_name}",
+        "hair, hairstyle, hair color, face, skin tone, head details, personal color styling",
+        "keep these appearance traits consistent with this same subject",
+        "do not average or borrow neighboring subject appearance",
+        prompt,
+    ]
+    if tokens:
+        parts.append("assigned visual tokens: " + ", ".join(tokens))
+    if mode == "hair_focus_strong":
+        parts.insert(1, "strong subject-local hair and head identity conditioning")
+    return ", ".join([p for p in parts if str(p).strip()])
 
 
 def _region_type(region):
@@ -595,7 +659,18 @@ def _normalize_scene_v05(data: Dict, width: int, height: int):
     }
     return regional, relations, camera, "0.5"
 
-def _parse_scene_schema(scene_json: str, width: int, height: int, global_prompt_override: str, enable_auto_prompts: bool, max_subject_slots: int):
+def _parse_scene_schema(
+    scene_json: str,
+    width: int,
+    height: int,
+    global_prompt_override: str,
+    enable_auto_prompts: bool,
+    max_subject_slots: int,
+    appearance_lock_mode: str = "off",
+    appearance_lock_gain: float = 0.35,
+    appearance_lock_height: float = 0.34,
+    appearance_lock_feather: int = 18,
+):
     data = json.loads(scene_json)
     if not isinstance(data, dict):
         raise ValueError("scene_json must be an object.")
@@ -654,6 +729,11 @@ def _parse_scene_schema(scene_json: str, width: int, height: int, global_prompt_
     branch_masks = []
     debug_meta = []
 
+    appearance_lock_mode = _appearance_lock_mode_value(appearance_lock_mode)
+    appearance_lock_gain = max(0.0, min(2.0, _safe_float(appearance_lock_gain, 0.35)))
+    appearance_lock_height = max(0.12, min(0.62, _safe_float(appearance_lock_height, 0.34)))
+    appearance_lock_feather = max(0, min(96, _safe_int(appearance_lock_feather, 18)))
+
     for idx, region in enumerate(all_regions):
         rid = str(region.get("id", region.get("name", f"region_{idx}")))
         prompt = str(region.get("prompt", "")).strip()
@@ -689,6 +769,21 @@ def _parse_scene_schema(scene_json: str, width: int, height: int, global_prompt_
             branch_prompts.append(slot_prompt)
             branch_masks.append(mask / float(slots))
 
+        appearance_branch_added = False
+        if rtype == "character" and appearance_lock_mode != "off" and appearance_lock_gain > 0:
+            # Extra positive-conditioning branch focused on the character's upper/head zone.
+            # This targets the tested weak point: hair/style/color bleed near overlapping characters.
+            # It does not add hidden negatives and does not require a second img2img pass.
+            appearance_mask_weight = mask_strength * appearance_lock_gain
+            appearance_mask = _make_top_focus_mask(mask_data, width, height, appearance_lock_height, appearance_mask_weight)
+            if appearance_lock_feather > 0:
+                appearance_mask = _feather_mask(appearance_mask, appearance_lock_feather)
+            if appearance_lock_mode == "hair_focus_strong":
+                appearance_mask = appearance_mask.clamp(0, max(0.0, appearance_mask_weight * 1.25))
+            branch_prompts.append(_compile_appearance_lock_prompt(region, appearance_lock_mode))
+            branch_masks.append(appearance_mask)
+            appearance_branch_added = True
+
         debug_meta.append({
             "id": rid,
             "type": rtype,
@@ -700,17 +795,25 @@ def _parse_scene_schema(scene_json: str, width: int, height: int, global_prompt_
             "mask_strength": mask_strength,
             "feather": feather,
             "tokens": _clean_list(region.get("tokens", [])) + _clean_list(region.get("owns", [])),
+            "appearance_lock_branch": appearance_branch_added,
         })
 
     if len(branch_prompts) < 1:
         raise ValueError("No enabled regions found.")
 
     debug_json = json.dumps({
-        "version": "0.5.2",
+        "version": "0.5.3",
         "schema": scene_schema_version,
         "multi_subject_mode": multi_subject_mode,
         "entity_count": entity_count,
         "branch_count": len(branch_prompts),
+        "appearance_lock": {
+            "mode": appearance_lock_mode,
+            "gain": appearance_lock_gain,
+            "height": appearance_lock_height,
+            "feather": appearance_lock_feather,
+            "policy": "positive subject-local upper/head conditioning only; no backend-injected negatives"
+        },
         "compiled_global": compiled_global,
         "compiled_negative": compiled_negative,
         "regions": debug_meta,
@@ -1101,7 +1204,7 @@ def _extract_subject_masks_and_identity(scene_json: str, width: int, height: int
             masks.append(_empty_mask(width, height))
 
     plan = {
-        "version": "0.5.2",
+        "version": "0.5.3",
         "purpose": "Regional IPAdapter prep. This node outputs subject masks; external IPAdapter nodes apply the reference images.",
         "subject_count_detected": len([s for s in subjects if isinstance(s, dict)]),
         "entries": entries,
@@ -1146,6 +1249,10 @@ class NeoSceneDirector:
                 "max_subject_slots": ("INT", {"default": 1, "min": 1, "max": 1, "step": 1}),
                 "normalize_masks": ("BOOLEAN", {"default": True}),
                 "enable_auto_prompts": ("BOOLEAN", {"default": True}),
+                "appearance_lock_mode": (["off", "hair_focus_soft", "hair_focus_strong"], {"default": "hair_focus_soft"}),
+                "appearance_lock_gain": ("STRING", {"default": "0.35"}),
+                "appearance_lock_height": ("STRING", {"default": "0.34"}),
+                "appearance_lock_feather": ("INT", {"default": 18, "min": 0, "max": 96, "step": 1}),
                 "scene_json": ("STRING", {"multiline": True, "default": default_scene}),
             }
         }
@@ -1155,7 +1262,24 @@ class NeoSceneDirector:
     FUNCTION = "patch"
     CATEGORY = "Neo Studio/Scene Director"
 
-    def patch(self, model, clip, width, height, global_prompt_override, base_weight, region_gain, max_subject_slots, normalize_masks, enable_auto_prompts, scene_json):
+    def patch(
+        self,
+        model,
+        clip,
+        width,
+        height,
+        global_prompt_override,
+        base_weight,
+        region_gain,
+        max_subject_slots,
+        normalize_masks,
+        enable_auto_prompts,
+        scene_json,
+        appearance_lock_mode="off",
+        appearance_lock_gain="0.35",
+        appearance_lock_height="0.34",
+        appearance_lock_feather=18,
+    ):
         width = int(width)
         height = int(height)
         base_weight_value = _safe_float(base_weight, 0.55)
@@ -1169,6 +1293,10 @@ class NeoSceneDirector:
             global_prompt_override=global_prompt_override,
             enable_auto_prompts=bool(enable_auto_prompts),
             max_subject_slots=max_subject_slots,
+            appearance_lock_mode=appearance_lock_mode,
+            appearance_lock_gain=_safe_float(appearance_lock_gain, 0.35),
+            appearance_lock_height=_safe_float(appearance_lock_height, 0.34),
+            appearance_lock_feather=_safe_int(appearance_lock_feather, 18),
         )
 
         region_conds = [_clip_encode_crossattn(clip, p) for p in branch_prompts]
@@ -1190,18 +1318,44 @@ class NeoSceneDirector:
         )
 
 
+class NeoSceneDirectorV052Compat(NeoSceneDirector):
+    """Compatibility class for existing v0.5.2 and older workflows.
+
+    It intentionally exposes the old widget contract so saved/API workflows do not fail
+    validation because of new required inputs. Appearance lock defaults to off unless
+    a newer workflow uses NeoSceneDirectorV053 and sends the explicit controls.
+    """
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        data = NeoSceneDirector.INPUT_TYPES()
+        required = dict(data.get("required", {}))
+        for key in (
+            "appearance_lock_mode",
+            "appearance_lock_gain",
+            "appearance_lock_height",
+            "appearance_lock_feather",
+        ):
+            required.pop(key, None)
+        data = dict(data)
+        data["required"] = required
+        return data
+
+
 NODE_CLASS_MAPPINGS = {
-    "NeoSceneDirectorV052": NeoSceneDirector,
-    "NeoSceneDirectorV051": NeoSceneDirector,
-    "NeoSceneDirectorV05": NeoSceneDirector,
-    "NeoRegionalPrompterV044": NeoSceneDirector,
-    "NeoRegionalPrompterV043": NeoSceneDirector,
-    "NeoRegionalPrompterV042": NeoSceneDirector,
-    "NeoRegionalPrompterV041": NeoSceneDirector,
-    "NeoRegionalPrompterV04": NeoSceneDirector,
-    "NeoCompositionDirector": NeoSceneDirector,
+    "NeoSceneDirectorV053": NeoSceneDirector,
+    "NeoSceneDirectorV052": NeoSceneDirectorV052Compat,
+    "NeoSceneDirectorV051": NeoSceneDirectorV052Compat,
+    "NeoSceneDirectorV05": NeoSceneDirectorV052Compat,
+    "NeoRegionalPrompterV044": NeoSceneDirectorV052Compat,
+    "NeoRegionalPrompterV043": NeoSceneDirectorV052Compat,
+    "NeoRegionalPrompterV042": NeoSceneDirectorV052Compat,
+    "NeoRegionalPrompterV041": NeoSceneDirectorV052Compat,
+    "NeoRegionalPrompterV04": NeoSceneDirectorV052Compat,
+    "NeoCompositionDirector": NeoSceneDirectorV052Compat,
 }
 NODE_DISPLAY_NAME_MAPPINGS = {
+    "NeoSceneDirectorV053": "Neo Scene Director v0.5.3 (Appearance Lock)",
     "NeoSceneDirectorV052": "Neo Scene Director v0.5.2 (IPAdapter Region Prep)",
     "NeoSceneDirectorV051": "Neo Scene Director v0.5.2 (v0.5.1 compatible)",
     "NeoSceneDirectorV05": "Neo Scene Director v0.5.1 (v0.5 compatible)",
