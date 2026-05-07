@@ -329,6 +329,60 @@ This mainly affects:
 - InsightFace-based workflows
 
 ---
+### ⚠️ Live Preview Not Working Inside Neo Studio
+---
+
+If live previews work correctly inside normal ComfyUI KSampler previews but **Neo Studio shows no live preview**, even though generation still completes correctly, the issue may be ComfyUI preview websocket output not being enabled for external websocket/API clients.
+
+Typical Neo debug state may show:
+
+```js
+window.getNeoGenerationPreviewDebugState()
+```
+
+Result:
+
+```txt
+socket_open: true
+binary_frames: 0
+preview_frames: 0
+```
+
+This means:
+- Neo connected successfully
+- but no preview image frames were received
+
+---
+
+### ✅ Recommended Fix
+
+Add:
+
+```bash
+--preview-method auto
+```
+
+to your ComfyUI startup BAT.
+
+Example:
+
+```bat
+.\python_embeded\python.exe -s ComfyUI\main.py --windows-standalone-build --preview-method auto
+```
+
+---
+
+### ✅ Why This Happens
+
+Even if previews appear correctly inside the normal ComfyUI browser interface, external websocket/API preview clients (like Neo Studio) may not receive preview image frames unless preview output is explicitly enabled.
+
+This mainly affects:
+- Neo Studio live preview
+- external websocket preview clients
+- API-driven generation dashboards
+- custom frontend integrations using Comfy websocket previews
+
+---
 ## 🎥 Setup Guide (Video)
 
 Watch the full setup guide here:
