@@ -13,8 +13,16 @@ EXT_ROOT = Path(__file__).resolve().parents[1]
 USER_DATA_DIR = library_data_path('', legacy_rel='')
 SETTINGS_PATH = library_data_path('neo_library_settings.json', legacy_rel='neo_library_settings.json', default_json={})
 NEO_STUDIO_SETTINGS_PATH = studio_data_path('neo_studio_settings.json', legacy_rel='neo_studio_settings.json', default_json={})
+GENERATION_OUTPUT_SETTINGS_PATH = studio_data_path('generation_output_settings.json', legacy_rel='generation_output_settings.json', default_json={})
 DEFAULT_ROOT = CENTRAL_ROOT
+DEFAULT_GENERATION_OUTPUT_ROOT = studio_data_path('generated_outputs', legacy_rel='generated_outputs')
 OUTPUT_EXTS = {'.png', '.jpg', '.jpeg', '.webp'}
+_MODE_OUTPUT_DIRS = {
+    'txt2img': 'txt2img-images',
+    'img2img': 'img2img-images',
+    'inpaint': 'inpaint-images',
+    'outpaint': 'outpaint-images',
+}
 
 
 def _ensure_dir(path: Path) -> None:
@@ -248,21 +256,26 @@ def _webui_root() -> Path:
     return EXT_ROOT.parent
 
 
+def _mode_output_dir_name(mode: str) -> str:
+    return _MODE_OUTPUT_DIRS.get((mode or '').strip().lower(), 'txt2img-images')
+
+
+def _generation_output_root() -> Path:
+    """Return the Image Results output root selected in Neo Studio.
+
+    The Results > Output reuse browser must scan the same root that
+    Rescue and save details uses. Do not fall back to the legacy WebUI
+    outputs folder here, otherwise manually selected Neo output roots are
+    ignored and stale files appear in the reuse browser.
+    """
+    data = _read_json_dict(GENERATION_OUTPUT_SETTINGS_PATH)
+    configured = str(data.get('output_root') or '').strip()
+    return Path(configured).expanduser() if configured else DEFAULT_GENERATION_OUTPUT_ROOT
+
+
 def get_output_dirs() -> Dict[str, Path]:
-    out = {}
-    try:
-        from modules import shared  # type: ignore
-        txt = str(getattr(shared.opts, 'outdir_txt2img_samples', '') or '').strip()
-        img = str(getattr(shared.opts, 'outdir_img2img_samples', '') or '').strip()
-        if txt:
-            out['txt2img'] = Path(txt)
-        if img:
-            out['img2img'] = Path(img)
-    except Exception:
-        pass
-    root = _webui_root()
-    out.setdefault('txt2img', root / 'outputs' / 'txt2img-images')
-    out.setdefault('img2img', root / 'outputs' / 'img2img-images')
+    root = _generation_output_root()
+    out = {mode: root / folder for mode, folder in _MODE_OUTPUT_DIRS.items()}
     for p in out.values():
         _ensure_dir(p)
     return out
