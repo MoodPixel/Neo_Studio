@@ -693,6 +693,67 @@ window.refreshGenerationRES4LYFRecoveryPanel = refreshGenerationRES4LYFRecoveryP
 window.addEventListener('neo:generation-catalog-refreshed', () => renderGenerationRES4LYFStatus());
 document.addEventListener('DOMContentLoaded', () => { bindGenerationRES4LYFPresetButtons(); renderGenerationRES4LYFStatus(); });
 
+function readGenerationSceneDirectorStateForTargets() {
+  const candidates = [];
+  try {
+    const liveState = window.NeoSceneDirectorExtension?.state;
+    if (liveState && typeof liveState === 'object') candidates.push(liveState);
+  } catch (_) {}
+  try {
+    const extState = window.NeoSceneDirectorExtension?.getState?.();
+    if (extState && typeof extState === 'object') {
+      candidates.push(extState);
+      if (extState.scene_director_state && typeof extState.scene_director_state === 'object') candidates.push(extState.scene_director_state);
+    }
+  } catch (_) {}
+  try {
+    const stateNode = document.getElementById('neo-scene-director-state');
+    const raw = stateNode?.value || stateNode?.textContent || '';
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') candidates.push(parsed);
+    }
+  } catch (_) {}
+  try {
+    const payloadNode = document.getElementById('generation-last-payload') || document.getElementById('neo-last-payload');
+    const raw = payloadNode?.value || payloadNode?.textContent || '';
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed?.scene_director_state && typeof parsed.scene_director_state === 'object') candidates.push(parsed.scene_director_state);
+    }
+  } catch (_) {}
+  return candidates.find(item => Array.isArray(item?.regions)) || null;
+}
+
+function sceneDirectorRegionsToLoraTargets(state) {
+  const regions = Array.isArray(state?.regions) ? state.regions : [];
+  return regions
+    .map((region, index) => {
+      const enabled = region?.enabled !== false;
+      const visible = region?.visible !== false;
+      if (!enabled || !visible) return null;
+      const regionIndex = Number(region?.index || region?.region_index || index + 1) || (index + 1);
+      return {
+        value: `scene_region_${regionIndex}`,
+        label: String(region?.label || region?.name || `Region ${regionIndex}`).trim() || `Region ${regionIndex}`,
+        region_index: regionIndex,
+        id: String(region?.id || '').trim(),
+        source: 'scene_director_state_fallback'
+      };
+    })
+    .filter(Boolean);
+}
+
+function dedupeGenerationLoraTargets(targets) {
+  const seen = new Set();
+  return targets.filter(item => {
+    const value = String(item?.value || '').trim();
+    if (!value || seen.has(value)) return false;
+    seen.add(value);
+    return true;
+  });
+}
+
 function getGenerationSceneDirectorLoraTargets() {
   const targets = [{ value: 'global', label: 'Global' }];
   try {
@@ -700,10 +761,14 @@ function getGenerationSceneDirectorLoraTargets() {
     sceneTargets.forEach((item, index) => {
       const value = String(item?.value || ('scene_region_' + (index + 1))).trim();
       const label = String(item?.label || ('Scene Region ' + (index + 1))).trim();
-      if (value) targets.push({ value, label });
+      if (value) targets.push({ value, label, region_index: item?.region_index || index + 1, id: item?.id || '', source: 'scene_director_live_registry' });
     });
   } catch (_) {}
-  return targets;
+  if (targets.length <= 1) {
+    const fallbackState = readGenerationSceneDirectorStateForTargets();
+    sceneDirectorRegionsToLoraTargets(fallbackState).forEach(item => targets.push(item));
+  }
+  return dedupeGenerationLoraTargets(targets);
 }
 
 function normalizeGenerationLoraApplyTo(value) {
@@ -731,12 +796,25 @@ function refreshGenerationLoraApplyTargets() {
   const targets = getGenerationSceneDirectorLoraTargets();
   document.querySelectorAll('#generation-lora-extra-list .generation-lora-apply-to').forEach(select => {
     const current = normalizeGenerationLoraApplyTo(select.value || select.dataset.value || 'global');
-    select.innerHTML = targets.map(item => '<option value="' + escapeHtml(item.value) + '" ' + (item.value === current ? 'selected' : '') + '>' + escapeHtml(item.label) + '</option>').join('');
-    if (!targets.some(item => item.value === current)) select.value = 'global';
+    const hasCurrent = targets.some(item => item.value === current);
+    const visibleTargets = targets.slice();
+    if (current !== 'global' && !hasCurrent) {
+      visibleTargets.push({ value: current, label: generationLoraApplyToLabel(current) + ' (waiting for Scene Director)', source: 'preserved_selection' });
+    }
+    select.innerHTML = visibleTargets.map(item => '<option value="' + escapeHtml(item.value) + '" ' + (item.value === current ? 'selected' : '') + '>' + escapeHtml(item.label) + '</option>').join('');
+    select.value = current;
+    select.dataset.value = current;
   });
   document.querySelectorAll('#generation-lora-extra-list .generation-lora-row').forEach(row => updateGenerationLoraRowSummary(row));
 }
 window.addEventListener('neo-scene-director-regions-updated', () => refreshGenerationLoraApplyTargets());
+window.addEventListener('neo-scene-director-state-updated', () => refreshGenerationLoraApplyTargets());
+window.addEventListener('neo:generation-draft-applied', () => window.setTimeout(refreshGenerationLoraApplyTargets, 0));
+document.addEventListener('DOMContentLoaded', () => {
+  refreshGenerationLoraApplyTargets();
+  window.setTimeout(refreshGenerationLoraApplyTargets, 250);
+  window.setTimeout(refreshGenerationLoraApplyTargets, 1000);
+});
 
 function createGenerationLoraRow(values={}) {
   generationLoraRowCounter += 1;

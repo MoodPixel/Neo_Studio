@@ -1498,6 +1498,48 @@ function buildGenerationPayload() {
       const sceneState = collectSceneDirectorLiveDomStateForGeneration(rawSceneState);
       payload.scene_director_state = sceneState;
       payload.scene_director_enabled = !!sceneState.enabled;
+      const appearanceLockState = sceneState && typeof sceneState.appearance_lock === 'object' ? sceneState.appearance_lock : {};
+      const appearanceLockMode = String(appearanceLockState.mode || 'hair_focus_soft').trim() || 'hair_focus_soft';
+      const appearanceLockEnabled = appearanceLockState.enabled === false || appearanceLockMode === 'off' ? false : true;
+      const appearanceLockGain = Number.isFinite(Number(appearanceLockState.gain)) ? Number(appearanceLockState.gain) : 0.35;
+      const appearanceLockHeight = Number.isFinite(Number(appearanceLockState.height)) ? Number(appearanceLockState.height) : 0.34;
+      const appearanceLockFeather = Number.isFinite(Number(appearanceLockState.feather)) ? Number(appearanceLockState.feather) : 18;
+      const promptContextState = sceneState && typeof sceneState.prompt_context === 'object' ? sceneState.prompt_context : {};
+      const promptContextModeRaw = String(promptContextState.mode || 'global_and_style').trim().toLowerCase();
+      const promptContextMode = ['off', 'global_only', 'style_only', 'global_and_style'].includes(promptContextModeRaw) ? promptContextModeRaw : 'global_and_style';
+      const promptContextEnabled = promptContextState.enabled === false || promptContextMode === 'off' ? false : true;
+      const promptContextWeight = Math.max(0, Math.min(2, Number.isFinite(Number(promptContextState.weight)) ? Number(promptContextState.weight) : 0.35));
+      payload.scene_director_appearance_lock_enabled = !!appearanceLockEnabled;
+      payload.scene_director_appearance_lock_mode = appearanceLockMode;
+      payload.scene_director_appearance_lock_gain = appearanceLockGain;
+      payload.scene_director_appearance_lock_height = appearanceLockHeight;
+      payload.scene_director_appearance_lock_feather = appearanceLockFeather;
+      payload._neo_scene_director_appearance_lock_frontend_state = {
+        raw: appearanceLockState,
+        effective_intent: {
+          enabled: !!appearanceLockEnabled,
+          mode: appearanceLockMode,
+          gain: appearanceLockGain,
+          height: appearanceLockHeight,
+          feather: appearanceLockFeather,
+          source: 'scene_director_live_generation_payload',
+        },
+      };
+      payload.scene_director_region_context_enabled = !!promptContextEnabled;
+      payload.scene_director_region_context_mode = promptContextMode;
+      payload.scene_director_region_context_weight = promptContextWeight;
+      payload._neo_scene_director_region_context_frontend_state = {
+        raw: promptContextState,
+        effective_intent: {
+          enabled: !!promptContextEnabled,
+          mode: promptContextMode,
+          weight: promptContextWeight,
+          source: 'scene_director_live_generation_payload',
+          hardcoded_style_prompt: false,
+        },
+        visible: true,
+        affects_scene_json_region_compiler: true,
+      };
       // Phase 10.3 hotfix: build generation-time Scene Director data from the LIVE canvas regions,
       // not from whichever layout preset button was last clicked.
       const sceneRegions = Array.isArray(sceneState.regions) ? sceneState.regions : [];

@@ -16,6 +16,23 @@
     style_merge: 'use Neo main prompt as the scene style and composition intent'
   };
 
+  const DEFAULT_APPEARANCE_LOCK = {
+    enabled: true,
+    mode: 'hair_focus_soft',
+    gain: 0.35,
+    height: 0.34,
+    feather: 18,
+  };
+
+  const DEFAULT_PROMPT_CONTEXT = {
+    enabled: true,
+    mode: 'global_and_style',
+    weight: 0.35,
+  };
+  const PROMPT_CONTEXT_MODES = new Set(['off', 'global_only', 'style_only', 'global_and_style']);
+
+  const APPEARANCE_LOCK_MODES = new Set(['off', 'hair_focus_soft', 'hair_focus_strong']);
+
 
   const REGION_LAYOUT_PRESETS = {
     'one_person': { label: '1 Person', description: 'Centered portrait / full body single subject.', regions: [
@@ -150,10 +167,12 @@
   function saveState(extra = {}) {
     const enabled = !!$('neo-scene-director-enabled')?.checked;
     const contracts = extra.contracts || (document.getElementById('neo-scene-count-contract') ? getPromptContracts() : undefined);
+    const appearanceLock = extra.appearance_lock || (document.getElementById('neo-scene-appearance-lock-mode') ? getAppearanceLockSettings() : undefined);
+    const promptContext = extra.prompt_context || (document.getElementById('neo-scene-prompt-context-mode') ? getPromptContextSettings() : undefined);
     // Keep localStorage and the hidden payload in sync with the live region array.
     // Phase 10.3 hotfix: manual canvas edits must win over the last clicked layout preset.
     regions = regions.map((region, index) => normalizeRegionData(region, index));
-    const state = { enabled, regions, ...(contracts ? { contracts } : {}), ...extra };
+    const state = { enabled, regions, ...(contracts ? { contracts } : {}), ...(appearanceLock ? { appearance_lock: appearanceLock } : {}), ...(promptContext ? { prompt_context: promptContext } : {}), ...extra };
     serverState = state;
     persistStateToServer(state);
     const stateNode = $('neo-scene-director-state');
@@ -486,6 +505,30 @@
     }).join('');
   }
 
+
+  function renderIdentityProfileBindingBadges(region, index = 0) {
+    if (!region || !region.identity_profile_id) return '<span class="badge">FaceID/IPAdapter off</span>';
+    const profile = getIdentityProfileById(region.identity_profile_id) || region.identity_profile || null;
+    const safe = profile ? normalizeIdentityProfile(profile) : null;
+    const imageCount = Array.isArray(safe?.reference_images) ? safe.reference_images.filter(Boolean).length : 0;
+    const mode = String(safe?.ipadapter_mode || 'faceid').toLowerCase();
+    const slot = Math.max(1, Math.min(4, Number(index || 0) + 1));
+    const weight = Number.isFinite(Number(safe?.weight)) ? Number(safe.weight).toFixed(2).replace(/\.00$/, '') : '0.45';
+    const faceWeight = Number.isFinite(Number(safe?.weight_faceidv2)) ? Number(safe.weight_faceidv2).toFixed(2).replace(/\.00$/, '') : weight;
+    const rows = [
+      { tone: 'ok', text: mode === 'faceid' ? 'FaceID active' : 'IPAdapter active' },
+      { tone: 'ok', text: `region slot #${slot}` },
+      { tone: imageCount ? 'ok' : 'warn', text: imageCount ? `${imageCount} ref image${imageCount === 1 ? '' : 's'}` : 'profile image missing' },
+      { tone: 'ok', text: mode === 'faceid' ? `weight ${weight} / face ${faceWeight}` : `weight ${weight}` },
+      { tone: 'ok', text: 'region mask enabled' },
+    ];
+    return rows.map(item => {
+      const bg = item.tone === 'ok' ? 'rgba(34,197,94,.14)' : 'rgba(245,158,11,.16)';
+      const border = item.tone === 'ok' ? 'rgba(34,197,94,.35)' : 'rgba(245,158,11,.38)';
+      return `<span class="badge" data-tone="${item.tone}" style="background:${bg}; border-color:${border};">${escapeHtml(item.text)}</span>`;
+    }).join('');
+  }
+
   function rectsOverlap(a, b) {
     const ar = normalizeRegionRect(a);
     const br = normalizeRegionRect(b);
@@ -552,6 +595,120 @@
       negative_contract: String(negativeNode ? negativeNode.value : contracts.negative_contract || '').trim(),
       style_merge: String(styleNode ? styleNode.value : contracts.style_merge || '').trim()
     };
+  }
+
+  function normalizeAppearanceLockSettings(value = {}) {
+    const source = value && typeof value === 'object' ? value : {};
+    let mode = String(source.mode || DEFAULT_APPEARANCE_LOCK.mode).trim();
+    if (!APPEARANCE_LOCK_MODES.has(mode)) mode = DEFAULT_APPEARANCE_LOCK.mode;
+    return {
+      enabled: source.enabled === false || mode === 'off' ? false : true,
+      mode,
+      gain: clamp(Number(source.gain ?? DEFAULT_APPEARANCE_LOCK.gain), 0, 1),
+      height: clamp(Number(source.height ?? DEFAULT_APPEARANCE_LOCK.height), 0.05, 0.8),
+      feather: Math.max(0, Math.min(128, parseInt(source.feather ?? DEFAULT_APPEARANCE_LOCK.feather, 10) || DEFAULT_APPEARANCE_LOCK.feather)),
+    };
+  }
+
+  function getAppearanceLockSettings() {
+    const saved = serverState && typeof serverState === 'object' ? serverState : {};
+    const savedAppearanceLock = normalizeAppearanceLockSettings(saved.appearance_lock || {});
+    const enabledNode = $('neo-scene-appearance-lock-enabled');
+    const modeNode = $('neo-scene-appearance-lock-mode');
+    const gainNode = $('neo-scene-appearance-lock-gain');
+    const heightNode = $('neo-scene-appearance-lock-height');
+    const featherNode = $('neo-scene-appearance-lock-feather');
+    return normalizeAppearanceLockSettings({
+      enabled: enabledNode ? !!enabledNode.checked : savedAppearanceLock.enabled,
+      mode: modeNode ? modeNode.value : savedAppearanceLock.mode,
+      gain: gainNode ? gainNode.value : savedAppearanceLock.gain,
+      height: heightNode ? heightNode.value : savedAppearanceLock.height,
+      feather: featherNode ? featherNode.value : savedAppearanceLock.feather,
+    });
+  }
+
+  function syncAppearanceLockUi() {
+    const enabled = !!$('neo-scene-director-enabled')?.checked;
+    const allowed = isAllowedFamily() && getSceneDirectorModePolicy().supported;
+    const settings = getAppearanceLockSettings();
+    const controls = [
+      $('neo-scene-appearance-lock-enabled'),
+      $('neo-scene-appearance-lock-mode'),
+      $('neo-scene-appearance-lock-gain'),
+      $('neo-scene-appearance-lock-height'),
+      $('neo-scene-appearance-lock-feather'),
+    ].filter(Boolean);
+    controls.forEach(node => { node.disabled = !enabled || !allowed; });
+    const state = $('neo-scene-appearance-lock-state');
+    if (state) {
+      if (!enabled) {
+        state.textContent = 'Disabled because Scene Director is off.';
+        state.dataset.tone = 'muted';
+      } else if (!allowed) {
+        state.textContent = 'Disabled for this workflow/model family.';
+        state.dataset.tone = 'warn';
+      } else if (!settings.enabled) {
+        state.textContent = 'Appearance Lock is off. Region prompts use the normal Scene Director path.';
+        state.dataset.tone = 'muted';
+      } else {
+        state.textContent = `Active · ${settings.mode.replace(/_/g, ' ')} · gain ${settings.gain.toFixed(2)} · height ${settings.height.toFixed(2)} · feather ${settings.feather}`;
+        state.dataset.tone = 'ok';
+      }
+    }
+  }
+
+  function normalizePromptContextSettings(value = {}) {
+    const source = value && typeof value === 'object' ? value : {};
+    let mode = String(source.mode || DEFAULT_PROMPT_CONTEXT.mode).trim().toLowerCase();
+    if (!PROMPT_CONTEXT_MODES.has(mode)) mode = DEFAULT_PROMPT_CONTEXT.mode;
+    const enabled = source.enabled === false || mode === 'off' ? false : true;
+    return {
+      enabled,
+      mode,
+      weight: clamp(Number(source.weight ?? DEFAULT_PROMPT_CONTEXT.weight), 0, 2),
+    };
+  }
+
+  function getPromptContextSettings() {
+    const saved = serverState && typeof serverState === 'object' ? serverState : {};
+    const savedContext = normalizePromptContextSettings(saved.prompt_context || {});
+    const enabledNode = $('neo-scene-prompt-context-enabled');
+    const modeNode = $('neo-scene-prompt-context-mode');
+    const weightNode = $('neo-scene-prompt-context-weight');
+    return normalizePromptContextSettings({
+      enabled: enabledNode ? !!enabledNode.checked : savedContext.enabled,
+      mode: modeNode ? modeNode.value : savedContext.mode,
+      weight: weightNode ? weightNode.value : savedContext.weight,
+    });
+  }
+
+  function syncPromptContextUi() {
+    const enabled = !!$('neo-scene-director-enabled')?.checked;
+    const allowed = isAllowedFamily() && getSceneDirectorModePolicy().supported;
+    const settings = getPromptContextSettings();
+    const controls = [
+      $('neo-scene-prompt-context-enabled'),
+      $('neo-scene-prompt-context-mode'),
+      $('neo-scene-prompt-context-weight'),
+    ].filter(Boolean);
+    controls.forEach(node => { node.disabled = !enabled || !allowed; });
+    const state = $('neo-scene-prompt-context-state');
+    if (state) {
+      if (!enabled) {
+        state.textContent = 'Disabled because Scene Director is off.';
+        state.dataset.tone = 'muted';
+      } else if (!allowed) {
+        state.textContent = 'Disabled for this workflow/model family.';
+        state.dataset.tone = 'warn';
+      } else if (!settings.enabled || settings.mode === 'off') {
+        state.textContent = 'Off · region prompts only use their own text. Global/style still goes to sampler conditioning.';
+        state.dataset.tone = 'muted';
+      } else {
+        const label = settings.mode === 'global_and_style' ? 'Global + Style' : (settings.mode === 'global_only' ? 'Global only' : 'Style only');
+        state.textContent = `Active · ${label} context copied into Scene Director region compiler at weight ${settings.weight.toFixed(2)}.`;
+        state.dataset.tone = 'ok';
+      }
+    }
   }
 
   function resetPromptContracts() {
@@ -680,7 +837,9 @@
     syncRegionsFromLiveCanvas();
     const enabled = !!$('neo-scene-director-enabled')?.checked;
     const contracts = document.getElementById('neo-scene-count-contract') ? getPromptContracts() : undefined;
-    const state = { enabled, regions: regions.map((region, index) => normalizeRegionData(region, index)), ...(contracts ? { contracts } : {}), manual_layout_override: true, last_layout_preset: '', coordinate_source: reason };
+    const appearanceLock = document.getElementById('neo-scene-appearance-lock-mode') ? getAppearanceLockSettings() : undefined;
+    const promptContext = document.getElementById('neo-scene-prompt-context-mode') ? getPromptContextSettings() : undefined;
+    const state = { enabled, regions: regions.map((region, index) => normalizeRegionData(region, index)), ...(contracts ? { contracts } : {}), ...(appearanceLock ? { appearance_lock: appearanceLock } : {}), ...(promptContext ? { prompt_context: promptContext } : {}), manual_layout_override: true, last_layout_preset: '', coordinate_source: reason };
     serverState = state;
     persistStateToServer(state);
     const stateNode = $('neo-scene-director-state');
@@ -708,6 +867,8 @@
       size: { width, height },
       global: { prompt: getMainPrompt(), negative_prompt: getMainNegativePrompt(), source: 'neo_image_tab' },
       contracts: getPromptContracts(),
+      appearance_lock: getAppearanceLockSettings(),
+      prompt_context: getPromptContextSettings(),
       regions: normalizedRegions,
       active_region_count: activeRegions.length,
       identity_profiles: identityProfiles,
@@ -726,6 +887,8 @@
       regions: Array.isArray(payload.regions) ? payload.regions : [],
       size: payload.size || getSize(),
       contracts: payload.contracts || getPromptContracts(),
+      appearance_lock: payload.appearance_lock || getAppearanceLockSettings(),
+      prompt_context: payload.prompt_context || getPromptContextSettings(),
       active_region_count: Number(payload.active_region_count || 0),
       identity_profile_units: Array.isArray(payload.identity_profile_units) ? payload.identity_profile_units : [],
       scene_director_identity_units: Array.isArray(payload.scene_director_identity_units) ? payload.scene_director_identity_units : [],
@@ -746,6 +909,10 @@
     if (payload.enabled && payload.mode_policy && !payload.mode_policy.supported) warnings.push(payload.mode_policy.message || 'Scene Director is not applied to this workflow mode yet.');
     else if (payload.enabled && !payload.allowed) warnings.push('Scene Director only supports SDXL / SD 1.5.');
     if (payload.enabled && payload.active_region_count < 1) warnings.push('Add at least one enabled visible region.');
+    if (payload.enabled && payload.appearance_lock && payload.appearance_lock.enabled && payload.mode_policy && payload.mode_policy.supported) {
+      if (!APPEARANCE_LOCK_MODES.has(String(payload.appearance_lock.mode || ''))) warnings.push('Appearance Lock mode is invalid. Use Appearance Focus Soft or Appearance Focus Strong.');
+      if (Number(payload.appearance_lock.gain) > 0.65) warnings.push('Appearance Lock gain is high. Strong values can make hair/head regions rigid or over-shaped.');
+    }
     const ipSlots = new Map();
     const active = payload.regions.filter(region => region.enabled && region.visible !== false);
     active.forEach((region, index) => {
@@ -790,7 +957,8 @@
     if (!payload.enabled) return 'Prompt system ready. Enable Scene Director when you want regions included in the future adapter payload.';
     if (payload.mode_policy && !payload.mode_policy.supported) return payload.mode_policy.message || 'Scene Director is not applied to this workflow mode yet.';
     if (warnings.length) return 'Prompt system needs attention: ' + warnings[0];
-    return 'Prompt system ready: ' + payload.active_region_count + ' active region' + (payload.active_region_count === 1 ? '' : 's') + ' staged. SDXL / SD 1.5 V052 + IPAdapter slot binding adapter is active.';
+    const lockText = payload.appearance_lock && payload.appearance_lock.enabled ? ' V053 Appearance Lock requested.' : ' V052-compatible Scene Director path active.';
+    return 'Prompt system ready: ' + payload.active_region_count + ' active region' + (payload.active_region_count === 1 ? '' : 's') + ' staged.' + lockText;
   }
 
   function syncPromptPayload() {
@@ -1141,8 +1309,9 @@
               <label>Character Profile</label>
               <select data-region-profile="${region.id}">${buildIdentityProfileOptions(region.identity_profile_id)}</select>
             </div>
-            <div class="mini-note">Assigning a profile overrides manual IPAdapter for this region and prepares identity routing for this region.</div>
+            <div class="mini-note">Assigning a profile creates a real region-masked FaceID/IPAdapter unit. Manual IPAdapter slot binding is disabled for this region.</div>
           </div>
+          <div class="row" style="gap:6px; flex-wrap:wrap; margin-top:8px;">${renderIdentityProfileBindingBadges(region, index)}</div>
         </div>
         <div class="grid grid-2" style="margin-top:10px; gap:10px;">
           <div>
@@ -1192,7 +1361,7 @@
               <label class="neo-toggle-line"><input type="checkbox" data-region-ip-mask="${region.id}" ${region.ipadapter_use_region_mask === false ? '' : 'checked'} ${region.ipadapter ? '' : 'disabled'} /> Use region mask</label>
             </div>
           </div>
-          <div class="mini-note" style="margin-top:8px;">When Scene Director is ON, normal global IPAdapter is suppressed. Only region-bound IPAdapter slots are applied to prevent face bleed.</div>
+          <div class="mini-note" style="margin-top:8px;">When Scene Director has active regional IPAdapter/FaceID units, global IPAdapter is suppressed. If no regional identity unit is active, the global IPAdapter lane is not suppressed.</div>
         </div>
         `;
       host.appendChild(card);
@@ -1334,7 +1503,8 @@
     const modePolicy = getSceneDirectorModePolicy();
     const ready = allowed && modePolicy.supported;
     setStatus(ready ? summarizePromptReadiness() : (modePolicy.message || 'Scene Director is blocked for this family. Flux, Qwen, and Z-Image stay untouched.'), ready ? 'muted' : 'warn');
-    saveState({ family, mode: getWorkflowMode(), scene_director_mode_policy: modePolicy.reason || 'supported' });
+    syncAppearanceLockUi();
+    saveState({ family, mode: getWorkflowMode(), scene_director_mode_policy: modePolicy.reason || 'supported', appearance_lock: getAppearanceLockSettings() });
   }
 
 
@@ -1532,6 +1702,52 @@
         </div>
         <div class="mini-note" id="neo-scene-director-status">Loading Scene Director shell...</div>
         <input id="neo-scene-director-state" type="hidden" value="" />
+            <div class="neo-scene-appearance-lock-panel" style="margin-top:12px; padding:12px; border:1px solid rgba(236,72,153,.24); border-radius:14px; background:rgba(76,29,149,.18);">
+              <div class="row-between" style="gap:10px; align-items:flex-start; flex-wrap:wrap;">
+                <div>
+                  <div class="stat-title">Appearance Lock</div>
+                  <div class="muted small">Helps preserve hair, head-shape, and color traits inside each character region when characters touch or overlap.</div>
+                </div>
+                <label class="neo-toggle-line"><input type="checkbox" id="neo-scene-appearance-lock-enabled" ${normalizeAppearanceLockSettings(saved.appearance_lock || {}).enabled ? 'checked' : ''} /> Enable</label>
+              </div>
+              <div class="grid grid-4" style="gap:10px; margin-top:10px; align-items:end;">
+                <div>
+                  <label>Mode</label>
+                  <select id="neo-scene-appearance-lock-mode">
+                    <option value="hair_focus_soft" ${normalizeAppearanceLockSettings(saved.appearance_lock || {}).mode === 'hair_focus_soft' ? 'selected' : ''}>Appearance Focus Soft</option>
+                    <option value="hair_focus_strong" ${normalizeAppearanceLockSettings(saved.appearance_lock || {}).mode === 'hair_focus_strong' ? 'selected' : ''}>Appearance Focus Strong</option>
+                    <option value="off" ${normalizeAppearanceLockSettings(saved.appearance_lock || {}).mode === 'off' ? 'selected' : ''}>Off</option>
+                  </select>
+                </div>
+                <div><label>Gain</label><input id="neo-scene-appearance-lock-gain" type="number" min="0" max="1" step="0.01" value="${normalizeAppearanceLockSettings(saved.appearance_lock || {}).gain}" /></div>
+                <div><label>Height Focus</label><input id="neo-scene-appearance-lock-height" type="number" min="0.05" max="0.8" step="0.01" value="${normalizeAppearanceLockSettings(saved.appearance_lock || {}).height}" /></div>
+                <div><label>Feather</label><input id="neo-scene-appearance-lock-feather" type="number" min="0" max="128" step="1" value="${normalizeAppearanceLockSettings(saved.appearance_lock || {}).feather}" /></div>
+              </div>
+              <div class="mini-note" style="margin-top:8px;">Use Appearance Focus Soft first. Strong can reduce hair/color bleed more, but may over-control the hairline or head silhouette.</div>
+              <div class="mini-note" id="neo-scene-appearance-lock-state" style="margin-top:8px;">Appearance Lock state will show here.</div>
+            </div>
+            <div class="neo-scene-prompt-context-panel" style="margin-top:12px; padding:12px; border:1px solid rgba(59,130,246,.24); border-radius:14px; background:rgba(30,64,175,.14);">
+              <div class="row-between" style="gap:10px; align-items:flex-start; flex-wrap:wrap;">
+                <div>
+                  <div class="stat-title">Global Context Routing</div>
+                  <div class="muted small">Controls whether Neo global/style prompt context is copied into Scene Director's regional prompt compiler. No hardcoded styles are used.</div>
+                </div>
+                <label class="neo-toggle-line"><input type="checkbox" id="neo-scene-prompt-context-enabled" ${normalizePromptContextSettings(saved.prompt_context || {}).enabled ? 'checked' : ''} /> Enable</label>
+              </div>
+              <div class="grid grid-2" style="gap:10px; margin-top:10px; align-items:end;">
+                <div>
+                  <label>Region Context Source</label>
+                  <select id="neo-scene-prompt-context-mode">
+                    <option value="global_and_style" ${normalizePromptContextSettings(saved.prompt_context || {}).mode === 'global_and_style' ? 'selected' : ''}>Global + Style</option>
+                    <option value="global_only" ${normalizePromptContextSettings(saved.prompt_context || {}).mode === 'global_only' ? 'selected' : ''}>Global only</option>
+                    <option value="style_only" ${normalizePromptContextSettings(saved.prompt_context || {}).mode === 'style_only' ? 'selected' : ''}>Style only</option>
+                    <option value="off" ${normalizePromptContextSettings(saved.prompt_context || {}).mode === 'off' ? 'selected' : ''}>Off</option>
+                  </select>
+                </div>
+                <div><label>Region Context Weight</label><input id="neo-scene-prompt-context-weight" type="number" min="0" max="2" step="0.05" value="${normalizePromptContextSettings(saved.prompt_context || {}).weight}" /></div>
+              </div>
+              <div class="mini-note" id="neo-scene-prompt-context-state" style="margin-top:8px;">Global context routing state will show here.</div>
+            </div>
         <details class="neo-scene-identity-profile-panel" style="margin:12px 0; padding:12px; border:1px solid rgba(168,85,247,.22); border-radius:14px; background:rgba(88,28,135,.16);">
           <summary class="row-between" style="gap:10px; align-items:center; flex-wrap:wrap; cursor:pointer; list-style:none;">
             <div>
@@ -1727,18 +1943,25 @@
         return;
       }
       saveState();
+      syncAppearanceLockUi();
       setExtensionEnabled(enabled);
       updateCanvasShell();
     });
     ['generation-width', 'generation-height'].forEach(id => $(id)?.addEventListener('input', updateCanvasShell));
+    ['generation-workflow-type', 'generation-family'].forEach(id => $(id)?.addEventListener('change', () => { updateEligibility(); syncPromptPayload(); }));
     ['generation-ipadapter-enabled', 'generation-ipadapter-mode', 'generation-ipadapter-name', 'generation-ipadapter-clip-vision', 'generation-ipadapter-weight', 'generation-ipadapter-weight-faceidv2', 'generation-ipadapter-image'].forEach(id => $(id)?.addEventListener('change', () => { renderRegions(); setStatus(summarizePromptReadiness(), validatePromptPayload().length ? 'warn' : 'muted'); }));
     document.getElementById('generation-ipadapter-extra-list')?.addEventListener('change', () => { renderRegions(); setStatus(summarizePromptReadiness(), validatePromptPayload().length ? 'warn' : 'muted'); });
     ['generation-positive', 'generation-negative', 'generation-prompt', 'prompt', 'generation-negative-prompt', 'negative-prompt', 'negative_prompt'].forEach(id => $(id)?.addEventListener('input', () => { syncPromptPayload(); setStatus(summarizePromptReadiness(), validatePromptPayload().length ? 'warn' : 'muted'); }));
     ['neo-scene-contracts-enabled', 'neo-scene-node-auto-prompts', 'neo-scene-count-contract', 'neo-scene-subject-contract', 'neo-scene-negative-contract', 'neo-scene-style-merge'].forEach(id => $(id)?.addEventListener('input', () => { saveState({ contracts: getPromptContracts() }); syncPromptPayload(); setStatus(summarizePromptReadiness(), validatePromptPayload().length ? 'warn' : 'muted'); }));
+    ['neo-scene-appearance-lock-enabled', 'neo-scene-appearance-lock-mode', 'neo-scene-appearance-lock-gain', 'neo-scene-appearance-lock-height', 'neo-scene-appearance-lock-feather'].forEach(id => $(id)?.addEventListener('input', () => { saveState({ appearance_lock: getAppearanceLockSettings() }); syncAppearanceLockUi(); syncPromptContextUi(); syncPromptPayload(); setStatus(summarizePromptReadiness(), validatePromptPayload().length ? 'warn' : 'muted'); }));
+    ['neo-scene-appearance-lock-enabled', 'neo-scene-appearance-lock-mode', 'neo-scene-appearance-lock-gain', 'neo-scene-appearance-lock-height', 'neo-scene-appearance-lock-feather'].forEach(id => $(id)?.addEventListener('change', () => { saveState({ appearance_lock: getAppearanceLockSettings() }); syncAppearanceLockUi(); syncPromptContextUi(); syncPromptPayload(); setStatus(summarizePromptReadiness(), validatePromptPayload().length ? 'warn' : 'muted'); }));
+    ['neo-scene-prompt-context-enabled', 'neo-scene-prompt-context-mode', 'neo-scene-prompt-context-weight'].forEach(id => $(id)?.addEventListener('input', () => { saveState({ prompt_context: getPromptContextSettings() }); syncPromptContextUi(); syncPromptPayload(); setStatus(summarizePromptReadiness(), validatePromptPayload().length ? 'warn' : 'muted'); }));
+    ['neo-scene-prompt-context-enabled', 'neo-scene-prompt-context-mode', 'neo-scene-prompt-context-weight'].forEach(id => $(id)?.addEventListener('change', () => { saveState({ prompt_context: getPromptContextSettings() }); syncPromptContextUi(); syncPromptPayload(); setStatus(summarizePromptReadiness(), validatePromptPayload().length ? 'warn' : 'muted'); }));
     $('neo-scene-reset-contracts')?.addEventListener('click', resetPromptContracts);
     document.addEventListener('neo-generation-family-changed', updateEligibility);
     renderRegions();
     updateCanvasShell();
+    syncAppearanceLockUi();
     updateEligibility();
   }
 

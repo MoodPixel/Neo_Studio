@@ -82,7 +82,10 @@
       const baseNeg = String(payload.negative || scene.negative || '').trim();
       payload.positive = [basePos, add].filter(Boolean).join(', ');
       payload.negative = [baseNeg, 'extra people, missing person, merged bodies, duplicate limbs, deformed anatomy, nude, nsfw, underwear, bikini'].filter(Boolean).join(', ');
-      payload._neo_scene_director_note = 'Scene Director uses Neo main prompt/settings and augments prompt only when enabled.';
+      const stylePromptActive = !!String(payload.style_positive || payload.refine_style_positive || '').trim();
+      const activeStyleNames = Array.isArray(payload.active_styles) ? payload.active_styles : [];
+      payload.scene_director_style_stack_merged = stylePromptActive || activeStyleNames.length > 0;
+      payload._neo_scene_director_note = payload.scene_director_style_stack_merged ? 'Scene Director merged the active Style Stack into the same conditioning path before regional composition.' : 'Scene Director uses Neo main prompt/settings and augments prompt only when enabled.';
     }
     return payload;
   }
