@@ -9,7 +9,7 @@ BLOCKED_FAMILIES = {'flux', 'qwen', 'qwen_image_edit', 'zimage'}
 DEFAULT_CONTRACTS = {
     'enabled': True,
     'use_node_auto_prompts': False,
-    'count_contract': 'exactly {count} visible subjects, one subject per enabled region, no extra subjects',
+    'count_contract': 'exactly {count} visible subjects, one subject per character region, no extra subjects',
     'subject_contract': 'one complete subject inside this region, not merged, not duplicated',
     'negative_contract': 'extra people, missing subject, wrong number of subjects, merged bodies, fused faces',
     'style_merge': 'use Neo main prompt as the scene style and composition intent',
@@ -67,6 +67,72 @@ def _unique_csv(parts: list[str]) -> str:
     return ', '.join(out)
 
 
+def _region_type(region: dict[str, Any]) -> str:
+    value = str(region.get('type') or 'character').strip().lower() if isinstance(region, dict) else 'character'
+    if value in {'person', 'subject', 'character'}:
+        return 'character'
+    if value in {'object', 'detail', 'prop', 'item'}:
+        return 'object'
+    if value in {'background', 'style'}:
+        return value
+    return 'character'
+
+
+def _is_character_region(region: dict[str, Any]) -> bool:
+    return _region_type(region) == 'character'
+
+
+def _contract_template_for_render(template: Any) -> str:
+    text = str(template or '').strip()
+    old_default = 'exactly {count} visible subjects, one subject per enabled region, no extra subjects'
+    if text == old_default:
+        return DEFAULT_CONTRACTS['count_contract']
+    return text
+
+
+def _scene_region_feather(region: dict[str, Any]) -> int:
+    # Tighter default masks reduce cross-region trait bleed when characters overlap.
+    # Users can still override by adding feather/mask_feather to region data later.
+    explicit = region.get('feather', region.get('mask_feather')) if isinstance(region, dict) else None
+    if explicit not in (None, ''):
+        return int(round(_clamp_float(explicit, 8.0, 0.0, 64.0)))
+    region_type = _region_type(region)
+    if region_type == 'character':
+        return 8
+    if region_type == 'object':
+        return 10
+    return 18
+
+
+def _extract_bleed_traits(prompt: Any) -> list[str]:
+    text = str(prompt or '')
+    if not text.strip():
+        return []
+    keywords = (
+        'hair', 'skin', 'hoodie', 'shirt', 'shorts', 'suit', 'jacket', 'pants', 'jogger',
+        'spectacles', 'glasses', 'beard', 'stubble', 'lipstick', 'rose', 'flower',
+        'tall', 'short', 'skinny', 'dark', 'fair', 'light', 'pink', 'red', 'black', 'yellow',
+        'curly', 'spiky', 'chinese', 'indian', 'sri lankan', 'slman', 'joong'
+    )
+    traits: list[str] = []
+    for chunk in text.replace(';', ',').split(','):
+        item = chunk.strip()
+        low = item.lower()
+        if item and any(keyword in low for keyword in keywords):
+            traits.append(item)
+    return traits[:12]
+
+
+def _anti_bleed_negative_for_region(region: dict[str, Any], character_regions: list[dict[str, Any]]) -> str:
+    if not _is_character_region(region):
+        return ''
+    own_id = str(region.get('id') or '')
+    traits: list[str] = []
+    for other in character_regions:
+        if str(other.get('id') or '') == own_id:
+            continue
+        traits.extend(_extract_bleed_traits(other.get('prompt')))
+    return _unique_csv(traits)
 
 
 def _region_has_identity_reference(region: dict[str, Any]) -> bool:
@@ -193,12 +259,14 @@ def normalize_scene_director_state(extension_state: dict[str, Any] | None = None
         'regions': regions,
         'active_regions': active_regions,
         'active_region_count': len(active_regions),
+        'active_character_count': len([region for region in active_regions if _is_character_region(region)]),
     }
 
 
 def build_v052_scene_json(scene: dict[str, Any], width: int, height: int) -> tuple[str, dict[str, Any]]:
     active = scene.get('active_regions') if isinstance(scene.get('active_regions'), list) else []
-    count = len(active)
+    character_regions = [region for region in active if _is_character_region(region)]
+    count = len(character_regions)
     global_data = scene.get('global') if isinstance(scene.get('global'), dict) else {}
     contracts = _contracts_from_scene(scene)
     contracts_enabled = contracts.get('enabled') is not False
@@ -209,7 +277,7 @@ def build_v052_scene_json(scene: dict[str, Any], width: int, height: int) -> tup
     if contracts_enabled:
         global_parts.extend([
             _render_contract(contracts.get('style_merge'), count),
-            _render_contract(contracts.get('count_contract'), count),
+            _render_contract(_contract_template_for_render(contracts.get('count_contract')), count),
         ])
     global_style = _unique_csv(global_parts)
 
@@ -230,20 +298,28 @@ def build_v052_scene_json(scene: dict[str, Any], width: int, height: int) -> tup
         region_prompt = str(region.get('prompt') or '').strip()
         if region_prompt:
             prompt_parts.append(region_prompt)
-        if subject_contract:
+        is_character = _is_character_region(region)
+        if is_character and subject_contract:
             prompt_parts.append(subject_contract)
+        region_negative = _unique_csv([
+            str(region.get('negative_prompt') or '').strip(),
+            _anti_bleed_negative_for_region(region, character_regions),
+        ])
         subjects.append({
             'id': region_id,
             'bbox': [round(x, 4), round(y, 4), round(min(1.0, x + w), 4), round(min(1.0, y + h), 4)],
+            'type': _region_type(region),
             'prompt': _unique_csv(prompt_parts),
+            'negative': region_negative,
+            'negative_prompt': region_negative,
             'pose_type': str(region.get('pose') or '').strip(),
             'facing': '',
-            'required': True,
+            'required': bool(is_character),
             'strength': round(_clamp_float(region.get('strength'), 1.0, 0.0, 2.0), 4),
-            'priority': 1.0,
-            'presence_boost': 1.0,
+            'priority': 1.0 if is_character else 0.65,
+            'presence_boost': 1.0 if is_character else 0.35,
             'min_body_presence': 0.0,
-            'feather': 18,
+            'feather': _scene_region_feather(region),
         })
         if bool(region.get('ipadapter')) or str(region.get('reference') or 'off') != 'off':
             slot = max(1, min(8, int(_clamp_float(region.get('ipadapter_slot') or index, index, 1.0, 8.0))))
@@ -274,6 +350,9 @@ def build_v052_scene_json(scene: dict[str, Any], width: int, height: int) -> tup
         'negative': _unique_csv(negative_parts),
         'multi_subject_mode': 'count_locked' if count > 1 else 'single_subject',
         'entity_count': count,
+        'character_count': count,
+        'region_count': len(active),
+        'detail_region_count': max(0, len(active) - count),
         'identity': {'ipadapter': ipadapter},
     }
     return json.dumps(scene_json, ensure_ascii=False, indent=2), contracts
@@ -330,6 +409,8 @@ def scene_director_to_regional_payload(payload: dict[str, Any]) -> tuple[dict[st
             'y': _clamp_float(rect.get('y'), 0.0, 0.0, 1.0),
             'w': _clamp_float(rect.get('w'), 0.33, 0.02, 1.0),
             'h': _clamp_float(rect.get('h'), 1.0, 0.02, 1.0),
+            'region_role': 'subject' if _is_character_region(region) else 'detail',
+            'mask_feather': _scene_region_feather(region),
             'positive_strength': strength,
             'negative_strength': strength,
             'strength': strength,
@@ -460,10 +541,13 @@ def scene_director_to_regional_payload(payload: dict[str, Any]) -> tuple[dict[st
     payload['scene_director_v052_global_prompt_override'] = ''
     payload['scene_director_v052_prompt_contracts'] = contracts
     payload['scene_director_v052_scene_json'] = scene_json
-    payload['scene_director_v052_base_weight'] = 0.55
-    payload['scene_director_v052_region_gain'] = 0.42 if len(units) >= 3 else 0.40
+    payload['scene_director_v052_base_weight'] = 0.35 if len([unit for unit in units if str(unit.get('type') or 'character').lower() == 'character']) >= 2 else 0.45
+    payload['scene_director_v052_region_gain'] = 0.65 if len([unit for unit in units if str(unit.get('type') or 'character').lower() == 'character']) >= 2 else 0.50
     payload['scene_director_v052_max_subject_slots'] = 1
     payload['scene_director_v052_normalize_masks'] = True
+    payload['scene_director_v052_subject_count'] = len([unit for unit in units if str(unit.get('type') or 'character').lower() == 'character'])
+    payload['scene_director_v052_detail_region_count'] = len([unit for unit in units if str(unit.get('type') or 'character').lower() != 'character'])
+    payload['scene_director_v052_anti_bleed'] = True
     payload['scene_director_v052_enable_auto_prompts'] = bool(contracts.get('use_node_auto_prompts'))
     region_identity_units = []
     for unit in units:
@@ -498,7 +582,7 @@ def scene_director_to_regional_payload(payload: dict[str, Any]) -> tuple[dict[st
     payload['regional_count'] = len(units)
     payload['regional_prompt_regions'] = units
     readable_variant = 'SD 1.5' if variant == 'sd15' else ('SDXL' if variant == 'sdxl' else 'SD checkpoint')
-    notes.append(f'Scene Director Phase 9.2 staged {len(units)} {readable_variant} region(s) with editable prompt contracts, IPAdapter slot binding, and LoRA binding foundation metadata.')
+    notes.append(f"Scene Director staged {len(units)} {readable_variant} region(s): {payload.get('scene_director_v052_subject_count', 0)} subject region(s), {payload.get('scene_director_v052_detail_region_count', 0)} detail/object region(s), tighter masks, and anti-bleed negatives.")
     if scene_ipadapter_bindings:
         notes.append(f'Scene Director bound {len(scene_ipadapter_bindings)} region(s) to existing Neo IPAdapter slot(s): ' + ', '.join(str(slot) for slot in bound_slots) + '. Global IPAdapter is suppressed while Scene Director is on.')
     if region_identity_units:

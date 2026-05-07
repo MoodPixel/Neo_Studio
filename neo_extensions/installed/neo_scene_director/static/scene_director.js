@@ -6,7 +6,7 @@
   const DEFAULT_CONTRACTS = {
     enabled: true,
     use_node_auto_prompts: false,
-    count_contract: 'exactly {count} visible subjects, one subject per enabled region, no extra subjects',
+    count_contract: 'exactly {count} visible subjects, one subject per character region, no extra subjects',
     subject_contract: 'one complete subject inside this region, not merged, not duplicated',
     negative_contract: 'extra people, missing subject, wrong number of subjects, merged bodies, fused faces',
     style_merge: 'use Neo main prompt as the scene style and composition intent'
@@ -767,7 +767,7 @@
             <input class="neo-scene-director-label-input" data-region-label="${region.id}" value="${escapeHtml(region.label || `Person ${index + 1}`)}" />
             <select data-region-type="${region.id}" title="Region type">
               ${option('character', region.type, 'Character')}
-              ${option('object', region.type, 'Object')}
+              ${option('object', region.type, 'Object / detail')}
               ${option('background', region.type, 'Background')}
               ${option('style', region.type, 'Style area')}
             </select>
