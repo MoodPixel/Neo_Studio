@@ -371,6 +371,34 @@ def _merge_prompt_parts(*parts: Any) -> str:
     return ', '.join([chunk for chunk in chunks if chunk])
 
 
+def _apply_prompt_template(style_text: Any, main_text: Any) -> str:
+    """Expand Style Stack templates before any CLIP/Scene Director conditioning.
+
+    Style rows commonly store strings such as ``neonpunk style {prompt}``.
+    Leaving ``{prompt}`` literal makes the final prompt look merged in metadata
+    while the actual conditioning is weak or malformed.
+    """
+    style = str(style_text or '').strip()
+    main = str(main_text or '').strip().strip(' ,')
+    if not style:
+        return ''
+    if '{prompt}' in style:
+        return style.replace('{prompt}', main).replace(' ,', ',').replace(' .', '.').strip(' ,')
+    if '{PROMPT}' in style:
+        return style.replace('{PROMPT}', main).replace(' ,', ',').replace(' .', '.').strip(' ,')
+    return style
+
+
+def _merge_prompt_with_style(main_text: Any, style_text: Any, ti_text: Any = '') -> str:
+    main = str(main_text or '').strip()
+    style = _apply_prompt_template(style_text, main)
+    # If the style template already contains the main prompt, do not append main again.
+    clean_main = main.strip(' ,')
+    if style and clean_main and clean_main.lower() in style.lower():
+        return _merge_prompt_parts(style, ti_text)
+    return _merge_prompt_parts(main, style, ti_text)
+
+
 def _normalize_pass_target(value: Any, default: str = 'both') -> str:
     target = str(value or default).strip().lower() or default
     return target if target in {'both', 'base', 'finish'} else default
@@ -436,7 +464,7 @@ def _build_pass_prompt_pair(payload: Dict[str, Any], pass_name: str = 'base') ->
     style_negative_key = 'refine_style_negative' if pass_key == 'finish' else 'style_negative'
     ti_positive_key = 'ti_finish_positive' if pass_key == 'finish' else 'ti_base_positive'
     ti_negative_key = 'ti_finish_negative' if pass_key == 'finish' else 'ti_base_negative'
-    positive_text = _merge_prompt_parts(payload.get('positive') or '', payload.get(style_positive_key) or '', payload.get(ti_positive_key) or '')
+    positive_text = _merge_prompt_with_style(payload.get('positive') or '', payload.get(style_positive_key) or '', payload.get(ti_positive_key) or '')
     negative_text = _merge_prompt_parts(payload.get('negative') or '', payload.get(style_negative_key) or '', payload.get(ti_negative_key) or '')
     conditioning_mode = _normalize_prompt_conditioning_mode(payload.get('prompt_conditioning_mode'))
     return _condition_prompt_text(positive_text, conditioning_mode), _condition_prompt_text(negative_text, conditioning_mode)
@@ -3661,35 +3689,54 @@ def _neo_scene_director_patch_scene_json_prompt_strength(scene_json: str, payloa
     return raw, False
 
 def _apply_scene_director_v052_node(graph: Dict[str, Any], next_id: int, model_ref, clip_ref, positive_ref, negative_ref, payload: Dict[str, Any], width: int, height: int):
-    """Route Scene Director through the proven NeoSceneDirectorV052 custom node and optional masked per-region IPAdapter chain."""
+    """Route Scene Director through the selected NeoSceneDirector node and optional masked per-region IPAdapter chain."""
     scene_json = str(payload.get('scene_director_v052_scene_json') or '').strip()
     scene_json, prompt_strength_patched = _neo_scene_director_patch_scene_json_prompt_strength(scene_json, payload)
     if not scene_json:
         return next_id, model_ref, positive_ref, negative_ref, []
     node_id = next_id
-    graph[str(node_id)] = {
-        'class_type': 'NeoSceneDirectorV052',
-        'inputs': {
-            'model': list(model_ref),
-            'clip': list(clip_ref),
-            'width': int(width),
-            'height': int(height),
-            'global_prompt_override': str(payload.get('scene_director_v052_global_prompt_override') or ''),
-            'base_weight': str(payload.get('scene_director_v052_base_weight') or '0.55'),
-            'region_gain': str(payload.get('scene_director_v052_region_gain') or '0.40'),
-            'max_subject_slots': int(payload.get('scene_director_v052_max_subject_slots') or 1),
-            'normalize_masks': bool(payload.get('scene_director_v052_normalize_masks', True)),
-            'enable_auto_prompts': bool(payload.get('scene_director_v052_enable_auto_prompts', True)),
-            'scene_json': scene_json,
-        },
+    node_class = str(payload.get('_neo_scene_director_node_class') or 'NeoSceneDirectorV052').strip() or 'NeoSceneDirectorV052'
+    if node_class not in {'NeoSceneDirectorV052', 'NeoSceneDirectorV053'}:
+        node_class = 'NeoSceneDirectorV052'
+    effective_scene_positive = str(payload.get('scene_director_effective_global_prompt') or payload.get('scene_director_v052_global_prompt_override') or '').strip()
+    effective_scene_negative = str(payload.get('scene_director_effective_negative_prompt') or '').strip()
+    node_inputs = {
+        'model': list(model_ref),
+        'clip': list(clip_ref),
+        'width': int(width),
+        'height': int(height),
+        'global_prompt_override': str(payload.get('scene_director_v052_global_prompt_override') or ''),
+        'base_weight': str(payload.get('scene_director_v052_base_weight') or '0.55'),
+        'region_gain': str(payload.get('scene_director_v052_region_gain') or '0.40'),
+        'max_subject_slots': int(payload.get('scene_director_v052_max_subject_slots') or 1),
+        'normalize_masks': bool(payload.get('scene_director_v052_normalize_masks', True)),
+        'enable_auto_prompts': bool(payload.get('scene_director_v052_enable_auto_prompts', True)),
+        'scene_json': scene_json,
     }
+    if node_class == 'NeoSceneDirectorV053':
+        node_inputs.update({
+            'appearance_lock_mode': str(payload.get('scene_director_appearance_lock_mode') or 'hair_focus_soft'),
+            'appearance_lock_gain': float(payload.get('scene_director_appearance_lock_gain') or 0.35),
+            'appearance_lock_height': float(payload.get('scene_director_appearance_lock_height') or 0.34),
+            'appearance_lock_feather': int(payload.get('scene_director_appearance_lock_feather') or 18),
+        })
+    graph[str(node_id)] = {
+        'class_type': node_class,
+        'inputs': node_inputs,
+    }
+    payload['_neo_scene_director_version_used'] = node_class
     payload['_scene_director_v052_node_id'] = node_id
     positive_encode_id = next_id + 1
     graph[str(positive_encode_id)] = {
         'class_type': 'CLIPTextEncode',
         'inputs': {
             'clip': list(clip_ref),
-            'text': [str(node_id), 3],
+            # Phase 7 repair: the sampler must not depend on Scene Director's
+            # internal text output when Neo positive/style text was already
+            # composed upstream. The node still receives scene_json/global_prompt
+            # for regional model patching, but the sampler CLIP text is the
+            # transparent Neo-composed global prompt.
+            'text': effective_scene_positive or [str(node_id), 3],
         },
     }
     negative_encode_id = next_id + 2
@@ -3697,13 +3744,15 @@ def _apply_scene_director_v052_node(graph: Dict[str, Any], next_id: int, model_r
         'class_type': 'CLIPTextEncode',
         'inputs': {
             'clip': list(clip_ref),
-            'text': [str(node_id), 4],
+            'text': effective_scene_negative or [str(node_id), 4],
         },
     }
     notes = [
-        'Scene Director Phase 8 routed through NeoSceneDirectorV052 with editable prompt contracts.',
-        'Scene Director V052 is generating count-locked positive/negative prompts from scene_json before sampling.',
+        f'Scene Director routed through {node_class} with editable prompt contracts.',
+        f'{node_class} receives the composed Scene Director prompt, while sampler CLIP text uses the Neo-composed global/style prompt to avoid stale node text.',
     ]
+    if node_class == 'NeoSceneDirectorV053':
+        notes.append('Scene Director Appearance Lock inputs were passed to NeoSceneDirectorV053.')
     if payload.get('scene_director_regional_units'):
         notes.append(f"Scene Director V052 received {len(payload.get('scene_director_regional_units') or [])} required subject slot(s).")
     if prompt_strength_patched:
@@ -3740,10 +3789,10 @@ def _apply_regional_prompting(graph: Dict[str, Any], next_id: int, model_ref, po
             notes.append('Scene Director Phase 8 is using the SDXL V052 + per-region IPAdapter profile.')
         else:
             notes.append('Scene Director Phase 8 is using the shared SD checkpoint V052 + per-region IPAdapter profile.')
-    scene_director_v052_requested = bool(payload.get('scene_director_enabled')) and str(payload.get('scene_director_backend_mode') or payload.get('regional_backend_mode') or '').strip().lower() == 'v052_node'
+    scene_director_v052_requested = bool(payload.get('scene_director_enabled')) and str(payload.get('scene_director_backend_mode') or payload.get('regional_backend_mode') or '').strip().lower() in {'v052_node', 'v053_node'}
     if mode not in {'txt2img', 'img2img', 'inpaint'}:
         if scene_director_v052_requested:
-            notes.append(f'Scene Director V052 skipped for {mode}: this mode is not wired in Phase 5.')
+            notes.append(f'Scene Director skipped for {mode}: this mode is not wired for Scene Director regional conditioning.')
             payload['_neo_scene_director_applied'] = False
             payload['_neo_scene_director_skip_reason'] = f'unsupported_mode_{mode}'
         else:
@@ -3767,7 +3816,7 @@ def _apply_regional_prompting(graph: Dict[str, Any], next_id: int, model_ref, po
                 next_id, scene_positive_ref, scene_negative_ref = _apply_controlnet_stack(
                     graph, next_id, scene_positive_ref, scene_negative_ref, vae_ref, controlnet_units
                 )
-                notes.append(f'Scene Director Phase 8.3 preserved {len(controlnet_units)} global ControlNet unit(s) after V052 conditioning.')
+                notes.append(f'Scene Director preserved {len(controlnet_units)} global ControlNet unit(s) after selected-node conditioning.')
             payload['_neo_scene_director_applied'] = True
             payload['_neo_scene_director_mode'] = mode
             
@@ -4329,7 +4378,7 @@ def build_generation_workflow(payload: Dict[str, Any]) -> Tuple[Dict[str, Any], 
         if not vae_name:
             raise ValueError('Choose a VAE for the GGUF workflow first.')
 
-    scene_director_requested = bool(payload.get('scene_director_enabled')) and str(payload.get('scene_director_backend_mode') or payload.get('regional_backend_mode') or '').strip().lower() == 'v052_node'
+    scene_director_requested = bool(payload.get('scene_director_enabled')) and str(payload.get('scene_director_backend_mode') or payload.get('regional_backend_mode') or '').strip().lower() in {'v052_node', 'v053_node'}
     inpaint_backend, model_source, hygiene_notes = _apply_phase9_effective_payload_hygiene(
         payload,
         mode=mode,
