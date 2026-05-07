@@ -57,6 +57,15 @@ Ongoing improvements focus on:
 ---
 
 ## 🛠️ Update
+**May/08/2026 - Image Tab**
+
+| System | Update | Details |
+|---|---|---|
+| Scene Director | ✅ Global Prompt Routing Fix | Fixed Scene Director prompt handling so the Neo positive prompt and Style Stack output route into the effective Scene Director global context instead of being ignored or disconnected from the active sampler path. Node Updated |
+| Scene Director + IPAdapter | ✅ Regional Identity Binding Fix | Fixed regional FaceID/IPAdapter routing so character profiles assigned to Scene Director regions can apply identity conditioning through the correct regional mask instead of falling back to global or empty routing. |
+| LoRA Stack | ✅ Regional Apply-To Fix | Fixed the LoRA Stack **Apply to** dropdown so Scene Director regions can appear as selectable targets, allowing LoRAs to be applied to a specific region instead of only globally. |
+| Scene Director + LoRA | ✅ Regional LoRA Workflow Fix | Fixed regional LoRA workflow routing so selected region LoRAs are applied through a masked regional pass rather than affecting the full image globally. |
+
 **May/06/2026 - Image Tab**
 
 | System | Update | Details |
