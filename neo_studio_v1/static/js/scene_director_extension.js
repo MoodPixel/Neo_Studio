@@ -3,10 +3,14 @@
   const ALLOWED_FAMILIES = new Set(['sdxl_sd', 'sdxl', 'sd', 'sd15', 'sd1.5']);
   const BLOCKED_FAMILIES = new Set(['flux', 'qwen', 'qwen_image_edit', 'zimage']);
   const STATE_KEY = 'neo_scene_director_ui_state_v1';
+  const SCENE_DIRECTOR_STATE_API = '/api/scene-director/state';
+  let serverStateLoaded = false;
+  let serverState = {};
+  let persistTimer = null;
   const DEFAULT_CONTRACTS = {
     enabled: true,
     use_node_auto_prompts: false,
-    count_contract: 'exactly {count} visible subjects, one subject per enabled region, no extra subjects',
+    count_contract: 'exactly {count} visible subjects, one subject per character region, no extra subjects',
     subject_contract: 'one complete subject inside this region, not merged, not duplicated',
     negative_contract: 'extra people, missing subject, wrong number of subjects, merged bodies, fused faces',
     style_merge: 'use Neo main prompt as the scene style and composition intent'
@@ -111,16 +115,36 @@
     return ALLOWED_FAMILIES.has(family);
   }
 
-  function loadState() {
+  async function loadStateFromServer() {
     try {
-      const raw = localStorage.getItem(STATE_KEY);
-      const parsed = raw ? JSON.parse(raw) : {};
-      regions = Array.isArray(parsed.regions) ? parsed.regions : [];
-      return parsed && typeof parsed === 'object' ? parsed : {};
+      const res = await fetch(SCENE_DIRECTOR_STATE_API + '?_=' + Date.now(), { cache: 'no-store' });
+      const data = await res.json();
+      serverState = data && data.ok && data.state && typeof data.state === 'object' ? data.state : {};
     } catch (_) {
-      regions = [];
-      return {};
+      serverState = {};
     }
+    serverStateLoaded = true;
+    regions = Array.isArray(serverState.regions) ? serverState.regions : [];
+    return serverState;
+  }
+
+  function loadState() {
+    const parsed = serverState && typeof serverState === 'object' ? serverState : {};
+    regions = Array.isArray(parsed.regions) ? parsed.regions : [];
+    return parsed;
+  }
+
+  function persistStateToServer(state) {
+    if (persistTimer) window.clearTimeout(persistTimer);
+    persistTimer = window.setTimeout(async () => {
+      try {
+        await fetch(SCENE_DIRECTOR_STATE_API, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ state: state && typeof state === 'object' ? state : {} })
+        });
+      } catch (_) {}
+    }, 250);
   }
 
   function saveState(extra = {}) {
@@ -130,7 +154,8 @@
     // Phase 10.3 hotfix: manual canvas edits must win over the last clicked layout preset.
     regions = regions.map((region, index) => normalizeRegionData(region, index));
     const state = { enabled, regions, ...(contracts ? { contracts } : {}), ...extra };
-    try { localStorage.setItem(STATE_KEY, JSON.stringify(state)); } catch (_) {}
+    serverState = state;
+    persistStateToServer(state);
     const stateNode = $('neo-scene-director-state');
     if (stateNode) stateNode.value = JSON.stringify(state);
     window.NeoSceneDirectorExtension.state = state;
@@ -510,8 +535,7 @@
   }
 
   function getPromptContracts() {
-    let saved = {};
-    try { saved = JSON.parse(localStorage.getItem(STATE_KEY) || '{}') || {}; } catch (_) { saved = {}; }
+    const saved = serverState && typeof serverState === 'object' ? serverState : {};
     const savedContracts = saved.contracts && typeof saved.contracts === 'object' ? saved.contracts : {};
     const contracts = { ...DEFAULT_CONTRACTS, ...savedContracts };
     const enabledNode = $('neo-scene-contracts-enabled');
@@ -586,6 +610,43 @@
   }
 
 
+  function readRegionControlsFromDom(regionId, index = 0) {
+    const readValue = (selector, fallback = '') => {
+      const node = document.querySelector(selector);
+      return node ? node.value : fallback;
+    };
+    const readChecked = (selector, fallback = true) => {
+      const node = document.querySelector(selector);
+      return node ? !!node.checked : fallback;
+    };
+    const baseLabel = `Region ${index + 1}`;
+    return normalizeRegionData({
+      id: regionId || `region_${Date.now()}_${index + 1}`,
+      label: readValue(`[data-region-label="${regionId}"]`, baseLabel) || baseLabel,
+      type: readValue(`[data-region-type="${regionId}"]`, 'character') || 'character',
+      enabled: readChecked(`[data-region-enabled="${regionId}"]`, true),
+      visible: true,
+      prompt: readValue(`[data-region-prompt="${regionId}"]`, ''),
+      negative_prompt: readValue(`[data-region-negative="${regionId}"]`, ''),
+      strength: Number(readValue(`[data-region-strength="${regionId}"]`, '1')) || 1,
+      identity_profile_id: readValue(`[data-region-profile="${regionId}"]`, ''),
+      ipadapter: readChecked(`[data-region-ipadapter="${regionId}"]`, false),
+      ipadapter_slot: Number(readValue(`[data-region-ip-slot="${regionId}"]`, String(index + 1))) || (index + 1),
+      ipadapter_weight_mode: readValue(`[data-region-ip-weight-mode="${regionId}"]`, 'slot_default') || 'slot_default',
+      ipadapter_weight: Number(readValue(`[data-region-ip-weight="${regionId}"]`, '0.52')) || 0.52,
+      ipadapter_use_region_mask: readChecked(`[data-region-ip-mask="${regionId}"]`, true),
+    }, index);
+  }
+
+  function rebuildRegionsFromLiveDom(boxes = []) {
+    if (!boxes.length) return [];
+    return boxes.map((box, index) => {
+      const id = box.dataset.regionId || `region_${Date.now()}_${index + 1}`;
+      const region = readRegionControlsFromDom(id, index);
+      return { ...region, rect: readLiveCanvasRectFromBox(box) };
+    });
+  }
+
   function syncRegionsFromLiveCanvas() {
     const layer = $('neo-scene-director-region-layer');
     if (!layer) return regions;
@@ -594,7 +655,24 @@
     const rectById = new Map();
     boxes.forEach((box) => { const id = box.dataset.regionId || ''; const rect = readLiveCanvasRectFromBox(box); if (id && rect) rectById.set(id, rect); });
     if (!rectById.size) return regions;
-    regions = regions.map((region, index) => { const normalized = normalizeRegionData(region, index); const liveRect = rectById.get(normalized.id); return liveRect ? { ...normalized, rect: liveRect } : normalized; });
+
+    // Rescue guard: after clearing test presets or replacing older patches, the
+    // visible canvas/cards can still exist while the in-memory `regions` array is
+    // empty. Generation must never send zero regions in that state. Rebuild from
+    // the visible DOM controls so the live canvas remains the source of truth.
+    if (!Array.isArray(regions) || !regions.length) {
+      const rescued = rebuildRegionsFromLiveDom(boxes);
+      if (rescued.length) {
+        regions = rescued;
+        return regions;
+      }
+    }
+
+    regions = regions.map((region, index) => {
+      const normalized = normalizeRegionData(region, index);
+      const liveRect = rectById.get(normalized.id);
+      return liveRect ? { ...normalized, rect: liveRect } : normalized;
+    });
     return regions;
   }
 
@@ -603,7 +681,8 @@
     const enabled = !!$('neo-scene-director-enabled')?.checked;
     const contracts = document.getElementById('neo-scene-count-contract') ? getPromptContracts() : undefined;
     const state = { enabled, regions: regions.map((region, index) => normalizeRegionData(region, index)), ...(contracts ? { contracts } : {}), manual_layout_override: true, last_layout_preset: '', coordinate_source: reason };
-    try { localStorage.setItem(STATE_KEY, JSON.stringify(state)); } catch (_) {}
+    serverState = state;
+    persistStateToServer(state);
     const stateNode = $('neo-scene-director-state');
     if (stateNode) stateNode.value = JSON.stringify(state);
     window.NeoSceneDirectorExtension.state = state;
@@ -635,6 +714,31 @@
       identity_profile_units: identityUnits,
       scene_director_identity_units: identityUnits,
     };
+  }
+
+  function getGenerationPayload(reason = 'generation_collect') {
+    // Phase 3: generation must read the live Scene Director canvas/state directly.
+    // Do not depend on workspace presets, stale hidden fields, or previous draft payloads.
+    forceLiveCanvasState(reason);
+    const payload = getPromptPayload();
+    const canonicalState = {
+      enabled: !!payload.enabled,
+      regions: Array.isArray(payload.regions) ? payload.regions : [],
+      size: payload.size || getSize(),
+      contracts: payload.contracts || getPromptContracts(),
+      active_region_count: Number(payload.active_region_count || 0),
+      identity_profile_units: Array.isArray(payload.identity_profile_units) ? payload.identity_profile_units : [],
+      scene_director_identity_units: Array.isArray(payload.scene_director_identity_units) ? payload.scene_director_identity_units : [],
+      coordinate_source: reason,
+      state_source: 'scene_director_live_generation_payload'
+    };
+    serverState = canonicalState;
+    window.NeoSceneDirectorExtension.state = canonicalState;
+    window.NeoSceneDirectorExtension.promptPayload = payload;
+    const stateNode = $('neo-scene-director-state');
+    if (stateNode) stateNode.value = JSON.stringify(payload);
+    persistStateToServer(canonicalState);
+    return payload;
   }
 
   function validatePromptPayload(payload = getPromptPayload()) {
@@ -1019,7 +1123,7 @@
             <input class="neo-scene-director-label-input" data-region-label="${region.id}" value="${escapeHtml(region.label || `Person ${index + 1}`)}" />
             <select data-region-type="${region.id}" title="Region type">
               ${option('character', region.type, 'Character')}
-              ${option('object', region.type, 'Object')}
+              ${option('object', region.type, 'Object / detail')}
               ${option('background', region.type, 'Background')}
               ${option('style', region.type, 'Style area')}
             </select>
@@ -1644,6 +1748,7 @@
     if (!host) return;
     mounted = true;
     registryRecord = await fetchRecord();
+    await loadStateFromServer();
     mountShell(host);
     if (registryRecord && $('neo-scene-director-enabled')) {
       $('neo-scene-director-enabled').checked = !!registryRecord.enabled || !!loadState().enabled;
@@ -1662,7 +1767,8 @@
     phase: 10.3,
     ready: true,
     mount: init,
-    getState: () => { forceLiveCanvasState('generation_live_canvas'); return getPromptPayload(); },
+    getState: () => getGenerationPayload('generation_live_canvas'),
+    getGenerationPayload,
     getRegionTargets: () => getSceneRegionTargets(),
     validate: () => validatePromptPayload(),
     savePresetPayload: captureScenePresetPayload,

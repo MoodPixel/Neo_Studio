@@ -1022,6 +1022,130 @@ function neoApplyRegionPromptStrength(prompt, strength) {
 // Phase 10.2: strip removed Image Tab feature state from newly queued payloads.
 // Keep this narrow: do not touch surviving owner systems such as IP-Adapter,
 // ControlNet, Inpaint/Mask, ADetailer, Upscale Lab, SUPIR, Wildcards, or styles.
+
+
+// Phase 10.3.14: final Scene Director DOM rescue at generation-payload boundary.
+// This is intentionally placed in generation_library_tools.js because this file
+// owns the payload that reaches the backend. If the extension's in-memory region
+// array is stale/empty after preset removal, but the user can visibly see region
+// boxes/cards, collect the live DOM state here instead of sending zero regions.
+function collectSceneDirectorLiveDomStateForGeneration(existingState = {}) {
+  const state = (existingState && typeof existingState === 'object') ? existingState : {};
+  const enabled = !!document.getElementById('neo-scene-director-enabled')?.checked || !!state.enabled;
+  const layer = document.getElementById('neo-scene-director-region-layer');
+  const frame = document.getElementById('neo-scene-director-canvas-frame');
+  const boxes = layer ? Array.from(layer.querySelectorAll('.neo-scene-director-region-box[data-region-id]')) : [];
+  const cards = Array.from(document.querySelectorAll('#neo-scene-director-regions-host .neo-scene-director-region-card[data-region-id]'));
+  const ids = [];
+  const addId = (id) => { const value = String(id || '').trim(); if (value && !ids.includes(value)) ids.push(value); };
+  boxes.forEach(box => addId(box.dataset.regionId));
+  cards.forEach(card => addId(card.dataset.regionId));
+
+  const cssEscape = (value) => {
+    try { return CSS && CSS.escape ? CSS.escape(String(value || '')) : String(value || '').replace(/"/g, '\\"'); }
+    catch (_) { return String(value || '').replace(/"/g, '\\"'); }
+  };
+  const readValue = (selector, fallback = '') => {
+    const node = document.querySelector(selector);
+    return node ? String(node.value ?? fallback) : fallback;
+  };
+  const readChecked = (selector, fallback = true) => {
+    const node = document.querySelector(selector);
+    return node ? !!node.checked : fallback;
+  };
+  const parsePct = (value, fallback) => {
+    const text = String(value || '').trim();
+    if (text.endsWith('%')) {
+      const n = Number(text.slice(0, -1));
+      return Number.isFinite(n) ? n / 100 : fallback;
+    }
+    const n = Number(text);
+    return Number.isFinite(n) ? n : fallback;
+  };
+  const normalizeRect = (rect = {}) => {
+    let x = Number(rect.x ?? 0);
+    let y = Number(rect.y ?? 0);
+    let w = Number(rect.w ?? 0.3);
+    let h = Number(rect.h ?? 0.7);
+    if (!Number.isFinite(x)) x = 0;
+    if (!Number.isFinite(y)) y = 0;
+    if (!Number.isFinite(w) || w <= 0) w = 0.3;
+    if (!Number.isFinite(h) || h <= 0) h = 0.7;
+    w = Math.max(0.01, Math.min(1, w));
+    h = Math.max(0.01, Math.min(1, h));
+    x = Math.max(0, Math.min(1 - w, x));
+    y = Math.max(0, Math.min(1 - h, y));
+    return { x, y, w, h };
+  };
+  const readRectFromBox = (box, fallbackIndex = 0) => {
+    if (!box) return normalizeRect({ x: Math.min(0.7, fallbackIndex * 0.22), y: 0.1, w: 0.3, h: 0.7 });
+    const style = box.style || {};
+    const styled = {
+      x: parsePct(style.left, NaN),
+      y: parsePct(style.top, NaN),
+      w: parsePct(style.width, NaN),
+      h: parsePct(style.height, NaN),
+    };
+    if ([styled.x, styled.y, styled.w, styled.h].every(Number.isFinite)) return normalizeRect(styled);
+    try {
+      const fb = frame?.getBoundingClientRect?.();
+      const bb = box.getBoundingClientRect?.();
+      if (fb && bb && fb.width > 0 && fb.height > 0) {
+        return normalizeRect({ x: (bb.left - fb.left) / fb.width, y: (bb.top - fb.top) / fb.height, w: bb.width / fb.width, h: bb.height / fb.height });
+      }
+    } catch (_) {}
+    return normalizeRect({ x: Math.min(0.7, fallbackIndex * 0.22), y: 0.1, w: 0.3, h: 0.7 });
+  };
+
+  const existingById = new Map();
+  if (Array.isArray(state.regions)) {
+    state.regions.forEach((region) => { if (region && region.id) existingById.set(String(region.id), region); });
+  }
+
+  const regions = ids.map((id, index) => {
+    const escaped = cssEscape(id);
+    const old = existingById.get(id) || {};
+    const box = boxes.find(item => item.dataset.regionId === id);
+    const label = readValue(`[data-region-label="${escaped}"]`, old.label || `Region ${index + 1}`);
+    const type = readValue(`[data-region-type="${escaped}"]`, old.type || 'character') || 'character';
+    const prompt = readValue(`[data-region-prompt="${escaped}"]`, old.prompt || '');
+    const negative = readValue(`[data-region-negative="${escaped}"]`, old.negative_prompt || '');
+    const strength = Number(readValue(`[data-region-strength="${escaped}"]`, old.strength ?? '1')) || 1;
+    const profileId = readValue(`[data-region-profile="${escaped}"]`, old.identity_profile_id || '');
+    return {
+      ...old,
+      id,
+      label,
+      type,
+      enabled: readChecked(`[data-region-enabled="${escaped}"]`, old.enabled !== false),
+      visible: old.visible === false ? false : true,
+      locked: old.locked === true,
+      prompt,
+      negative_prompt: negative,
+      strength,
+      rect: readRectFromBox(box, index),
+      identity_profile_id: profileId,
+      identity_profile_name: old.identity_profile_name || profileId || '',
+      ipadapter: readChecked(`[data-region-ipadapter="${escaped}"]`, !!old.ipadapter),
+      ipadapter_slot: Number(readValue(`[data-region-ip-slot="${escaped}"]`, old.ipadapter_slot ?? (index + 1))) || (index + 1),
+      ipadapter_weight: Number(readValue(`[data-region-ip-weight="${escaped}"]`, old.ipadapter_weight ?? '0.52')) || 0.52,
+      ipadapter_weight_mode: readValue(`[data-region-ip-weight-mode="${escaped}"]`, old.ipadapter_weight_mode || 'slot_default') || 'slot_default',
+      ipadapter_use_region_mask: readChecked(`[data-region-ip-mask="${escaped}"]`, old.ipadapter_use_region_mask !== false),
+    };
+  });
+
+  if (!regions.length) return { ...state, enabled };
+  const active = regions.filter(region => region.enabled !== false && region.visible !== false);
+  return {
+    ...state,
+    enabled,
+    regions,
+    active_region_count: active.length,
+    state_source: 'generation_payload_dom_rescue',
+    coordinate_source: 'generation_payload_dom_rescue',
+  };
+}
+
 function sanitizeGenerationPayload(payload) {
   const source = (payload && typeof payload === 'object') ? payload : {};
   const cleaned = JSON.parse(JSON.stringify(source));
@@ -1367,14 +1491,20 @@ function buildGenerationPayload() {
     notes: $('generation-workflow-notes')?.value || '',
   };
   try {
-    if (window.NeoSceneDirectorExtension && typeof window.NeoSceneDirectorExtension.getState === 'function') {
-      const sceneState = window.NeoSceneDirectorExtension.getState();
+    if (window.NeoSceneDirectorExtension && (typeof window.NeoSceneDirectorExtension.getGenerationPayload === 'function' || typeof window.NeoSceneDirectorExtension.getState === 'function')) {
+      const rawSceneState = typeof window.NeoSceneDirectorExtension.getGenerationPayload === 'function'
+        ? window.NeoSceneDirectorExtension.getGenerationPayload('generation_payload_collect')
+        : window.NeoSceneDirectorExtension.getState();
+      const sceneState = collectSceneDirectorLiveDomStateForGeneration(rawSceneState);
       payload.scene_director_state = sceneState;
       payload.scene_director_enabled = !!sceneState.enabled;
       // Phase 10.3 hotfix: build generation-time Scene Director data from the LIVE canvas regions,
       // not from whichever layout preset button was last clicked.
       const sceneRegions = Array.isArray(sceneState.regions) ? sceneState.regions : [];
       const activeSceneRegions = sceneRegions.filter((region) => region && region.enabled !== false && region.visible !== false);
+      payload._neo_scene_director_frontend_region_count = sceneRegions.length;
+      payload._neo_scene_director_frontend_active_region_count = activeSceneRegions.length;
+      payload._neo_scene_director_frontend_state_source = sceneState.state_source || sceneState.coordinate_source || 'live_generation_payload';
       if (payload.scene_director_enabled) {
         payload.scene_director_backend_mode = 'v052_node';
         // Phase 3: Scene Director regional txt2img is batch-compatible.
@@ -1464,7 +1594,9 @@ function buildGenerationPayload() {
       // scene_director_ipadapter_units on the browser side; the server is the
       // source of truth for future safe/staged FaceID routing.
     }
-  } catch (_) {}
+  } catch (error) {
+    payload._neo_scene_director_frontend_sync_error = error && error.message ? error.message : 'Scene Director frontend sync failed.';
+  }
   return sanitizeGenerationPayload(payload);
 }
 

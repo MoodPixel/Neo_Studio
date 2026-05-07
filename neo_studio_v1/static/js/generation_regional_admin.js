@@ -1029,42 +1029,72 @@ function normalizeGenerationShellSnapshotEntry(item, { forceNewId=false } = {}) 
   };
 }
 
-function loadGenerationShellSnapshots() {
-  try {
-    const raw = localStorage.getItem(generationSnapshotStorageKey);
-    const parsed = raw ? JSON.parse(raw) : [];
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .map(item => normalizeGenerationShellSnapshotEntry(item))
-      .filter(Boolean);
-  } catch (_) {
-    return [];
-  }
+function normalizeGenerationShellSnapshotList(list) {
+  return Array.isArray(list)
+    ? list.map(item => normalizeGenerationShellSnapshotEntry(item)).filter(Boolean)
+    : [];
 }
 
-function saveGenerationShellSnapshots(list) {
-  try {
-    const safeList = Array.isArray(list)
-      ? list.map(item => normalizeGenerationShellSnapshotEntry(item)).filter(Boolean)
-      : [];
-    localStorage.setItem(generationSnapshotStorageKey, JSON.stringify(safeList));
-  } catch (_) {}
+function loadGenerationShellSnapshots() {
+  return normalizeGenerationShellSnapshotList(generationShellSnapshotsState || []);
 }
 
 function getGenerationDefaultShellSnapshotId() {
-  try {
-    return String(localStorage.getItem(generationDefaultSnapshotStorageKey) || '').trim();
-  } catch (_) {
-    return '';
-  }
+  return String(generationDefaultShellSnapshotIdState || '').trim();
+}
+
+function setGenerationWorkspacePresetState(list, defaultId='') {
+  generationShellSnapshotsState = normalizeGenerationShellSnapshotList(list || []);
+  const presetIds = new Set(generationShellSnapshotsState.map(item => String(item?.id || '')));
+  const value = String(defaultId || '').trim();
+  generationDefaultShellSnapshotIdState = value && (presetIds.has(value) || isBuiltinGenerationShellPresetId(value)) ? value : '';
+}
+
+function queueGenerationShellSnapshotServerSave() {
+  if (generationShellSnapshotsServerSaveTimer) window.clearTimeout(generationShellSnapshotsServerSaveTimer);
+  generationShellSnapshotsServerSaveTimer = window.setTimeout(async () => {
+    generationShellSnapshotsServerSaveTimer = null;
+    try {
+      await fetch(generationWorkspacePresetApiPath, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          presets: loadGenerationShellSnapshots(),
+          default_id: getGenerationDefaultShellSnapshotId(),
+        }),
+      });
+    } catch (e) {
+      setStatus('generation-status', e?.message || 'Workspace preset save failed. Check Neo backend.', 'error');
+    }
+  }, 160);
+}
+
+function saveGenerationShellSnapshots(list) {
+  setGenerationWorkspacePresetState(list, getGenerationDefaultShellSnapshotId());
+  queueGenerationShellSnapshotServerSave();
 }
 
 function setGenerationDefaultShellSnapshotId(id) {
-  const value = String(id || '').trim();
+  setGenerationWorkspacePresetState(loadGenerationShellSnapshots(), id);
+  queueGenerationShellSnapshotServerSave();
+}
+
+async function hydrateGenerationShellSnapshotsFromServer({ render=true } = {}) {
   try {
-    if (!value) localStorage.removeItem(generationDefaultSnapshotStorageKey);
-    else localStorage.setItem(generationDefaultSnapshotStorageKey, value);
-  } catch (_) {}
+    const res = await fetch(`${generationWorkspacePresetApiPath}?_=${Date.now()}`);
+    const data = await res.json();
+    if (!res.ok || data?.ok === false) throw new Error(data?.error || data?.message || 'Could not load workspace presets.');
+    setGenerationWorkspacePresetState(data?.presets || [], data?.default_id || '');
+    generationShellSnapshotsServerHydrated = true;
+    if (render) renderGenerationShellSnapshotSelect($('generation-shell-snapshot-select')?.value || '');
+    return true;
+  } catch (e) {
+    generationShellSnapshotsServerHydrated = false;
+    setGenerationWorkspacePresetState([], '');
+    if (render) renderGenerationShellSnapshotSelect('');
+    setStatus('generation-status', e?.message || 'Workspace presets could not be loaded from neo_library_data.', 'warn');
+    return false;
+  }
 }
 
 function clearGenerationDefaultShellSnapshotId() {

@@ -94,7 +94,12 @@ document.addEventListener('DOMContentLoaded', () => {
   safeGenerationBootStep('prompt conditioning render', () => renderGenerationPromptConditioning());
   safeGenerationBootStep('experimental mode render', () => renderGenerationExperimentalMode());
   safeGenerationBootStep('image preflight render', () => renderGenerationImagePreflight());
-  safeGenerationBootStep('workspace preset select render', () => renderGenerationShellSnapshotSelect());
+  safeGenerationBootStep('workspace preset select render', () => {
+    renderGenerationShellSnapshotSelect();
+    if (typeof hydrateGenerationShellSnapshotsFromServer === 'function') {
+      hydrateGenerationShellSnapshotsFromServer({ render:true }).then(() => autoLoadDefaultGenerationShellSnapshot({ silent:true })).catch(() => {});
+    }
+  });
   safeGenerationBootStep('default workspace preset autoload', () => autoLoadDefaultGenerationShellSnapshot({ silent:true }));
   safeGenerationBootStep('generation state hydrate', () => fetchGenerationState(true));
   safeGenerationBootStep('generation catalog hydrate', () => {

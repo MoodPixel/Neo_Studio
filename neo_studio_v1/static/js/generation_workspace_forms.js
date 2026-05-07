@@ -133,14 +133,65 @@ function showGenerationLivePreview(sourceUrl, label='Live preview updating…') 
   if ($('generation-preview-state')) $('generation-preview-state').textContent = label;
 }
 
+function detectGenerationPreviewImagePayload(buffer) {
+  if (!(buffer instanceof ArrayBuffer) || buffer.byteLength < 4) return null;
+  const bytes = new Uint8Array(buffer);
+  const isPngAt = offset => bytes.length >= offset + 8
+    && bytes[offset] === 0x89
+    && bytes[offset + 1] === 0x50
+    && bytes[offset + 2] === 0x4e
+    && bytes[offset + 3] === 0x47
+    && bytes[offset + 4] === 0x0d
+    && bytes[offset + 5] === 0x0a
+    && bytes[offset + 6] === 0x1a
+    && bytes[offset + 7] === 0x0a;
+  const isJpegAt = offset => bytes.length >= offset + 3
+    && bytes[offset] === 0xff
+    && bytes[offset + 1] === 0xd8
+    && bytes[offset + 2] === 0xff;
+  const isWebpAt = offset => bytes.length >= offset + 12
+    && bytes[offset] === 0x52
+    && bytes[offset + 1] === 0x49
+    && bytes[offset + 2] === 0x46
+    && bytes[offset + 3] === 0x46
+    && bytes[offset + 8] === 0x57
+    && bytes[offset + 9] === 0x45
+    && bytes[offset + 10] === 0x42
+    && bytes[offset + 11] === 0x50;
+
+  // ComfyUI preview frames normally use an 8-byte binary header:
+  // uint32 event_type + uint32 image_type + raw image bytes. Some builds/plugins
+  // can forward raw image bytes or slightly different frame headers, so keep the
+  // parser permissive instead of silently dropping valid preview frames.
+  try {
+    if (buffer.byteLength > 8) {
+      const view = new DataView(buffer);
+      const frameType = view.getUint32(0, false);
+      const imageType = view.getUint32(4, false);
+      if (frameType === 1) {
+        const offset = 8;
+        let mime = imageType === 2 ? 'image/png' : 'image/jpeg';
+        if (isPngAt(offset)) mime = 'image/png';
+        else if (isJpegAt(offset)) mime = 'image/jpeg';
+        else if (isWebpAt(offset)) mime = 'image/webp';
+        return { offset, mime };
+      }
+    }
+  } catch (_) {}
+
+  const offsets = [0, 4, 8, 12, 16];
+  for (const offset of offsets) {
+    if (isPngAt(offset)) return { offset, mime: 'image/png' };
+    if (isJpegAt(offset)) return { offset, mime: 'image/jpeg' };
+    if (isWebpAt(offset)) return { offset, mime: 'image/webp' };
+  }
+  return null;
+}
+
 function applyGenerationPreviewBuffer(buffer) {
-  if (!(buffer instanceof ArrayBuffer) || buffer.byteLength <= 8) return;
-  const view = new DataView(buffer);
-  const frameType = view.getUint32(0, false);
-  if (frameType !== 1) return;
-  const imageType = view.getUint32(4, false);
-  const mime = imageType === 2 ? 'image/png' : 'image/jpeg';
-  const blob = new Blob([buffer.slice(8)], { type: mime });
+  const payload = detectGenerationPreviewImagePayload(buffer);
+  if (!payload) return;
+  const blob = new Blob([buffer.slice(payload.offset)], { type: payload.mime || 'image/jpeg' });
   const objectUrl = URL.createObjectURL(blob);
   if (generationLivePreviewUrl && generationLivePreviewUrl.startsWith('blob:')) {
     try { URL.revokeObjectURL(generationLivePreviewUrl); } catch (_) {}
