@@ -25,6 +25,7 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 PRESET_DIR = studio_data_path('scene_presets', legacy_rel='scene_presets')
 IDENTITY_PROFILE_DIR = studio_data_path('identity_profiles', legacy_rel='identity_profiles')
+SCENE_DIRECTOR_STATE_PATH = studio_data_path('image', legacy_rel='image') / 'scene_director_state.json'
 PRESET_VERSION = 1
 IDENTITY_PROFILE_VERSION = 1
 
@@ -39,6 +40,35 @@ class IdentityProfileSaveRequest(BaseModel):
     profile: dict
 
 
+class SceneDirectorStateSaveRequest(BaseModel):
+    state: dict
+
+
+
+
+def _read_scene_director_state() -> dict:
+    try:
+        if not SCENE_DIRECTOR_STATE_PATH.exists():
+            return {}
+        data = json.loads(SCENE_DIRECTOR_STATE_PATH.read_text(encoding='utf-8'))
+        state = data.get('state') if isinstance(data, dict) and isinstance(data.get('state'), dict) else data
+        return state if isinstance(state, dict) else {}
+    except Exception:
+        return {}
+
+
+def _write_scene_director_state(state: dict) -> dict:
+    safe_state = state if isinstance(state, dict) else {}
+    SCENE_DIRECTOR_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    now = datetime.now(timezone.utc).isoformat()
+    envelope = {
+        'ok': True,
+        'version': 1,
+        'updated_at': now,
+        'state': safe_state,
+    }
+    SCENE_DIRECTOR_STATE_PATH.write_text(json.dumps(envelope, indent=2, ensure_ascii=False), encoding='utf-8')
+    return envelope
 
 def _safe_identity_slug(name: str) -> str:
     value = re.sub(r'[^a-zA-Z0-9._ -]+', '', str(name or '').strip())
@@ -147,6 +177,25 @@ async def api_scene_director_status():
     except Exception as exc:
         return json_exception(exc, default_message='Could not load Scene Director status.', default_status=500)
 
+
+
+
+@router.get('/api/scene-director/state')
+async def api_scene_director_load_state():
+    try:
+        state = _read_scene_director_state()
+        return JSONResponse({'ok': True, 'state': state, 'path': str(SCENE_DIRECTOR_STATE_PATH)})
+    except Exception as exc:
+        return json_exception(exc, default_message='Could not load Scene Director state.', default_status=500)
+
+
+@router.post('/api/scene-director/state')
+async def api_scene_director_save_state(payload: SceneDirectorStateSaveRequest):
+    try:
+        envelope = _write_scene_director_state(payload.state if isinstance(payload.state, dict) else {})
+        return JSONResponse({'ok': True, 'updated_at': envelope.get('updated_at'), 'path': str(SCENE_DIRECTOR_STATE_PATH)})
+    except Exception as exc:
+        return json_exception(exc, default_message='Could not save Scene Director state.', default_status=500)
 
 @router.get('/api/scene-director/default-scene')
 async def api_scene_director_default_scene(case: str = 'pose_interaction'):
