@@ -96,12 +96,13 @@ function updateGenerationPreviewActionState() {
   const hasTarget = !!(target && target.view_url);
   const wrap = $('generation-preview-actions');
   if (wrap) wrap.classList.toggle('is-visible', hasTarget);
-  ['btn-generation-preview-hires', 'btn-generation-preview-detailer', 'btn-generation-preview-img2img', 'btn-generation-preview-inpaint', 'btn-generation-preview-outpaint'].forEach(id => {
+  ['btn-generation-preview-hires', 'btn-generation-preview-detailer', 'btn-generation-preview-img2img', 'btn-generation-preview-inpaint', 'btn-generation-preview-outpaint', 'btn-generation-preview-controlnet', 'btn-generation-preview-ipadapter', 'btn-generation-preview-identity'].forEach(id => {
     const el = $(id);
     if (!el) return;
     if (hasTarget) el.removeAttribute('disabled');
     else el.setAttribute('disabled', 'disabled');
   });
+  if (typeof syncGenerationPreviewQwenUnsupportedActions === 'function') syncGenerationPreviewQwenUnsupportedActions();
 }
 
 function setGenerationPreviewActionTarget(target) {

@@ -438,14 +438,60 @@ window.NeoGenerationResultsShell.refreshGenerationCatalog = async function refre
       }
       return [];
     };
+    const nestedListFrom = (obj, ...keys) => {
+      if (!obj || typeof obj !== 'object') return [];
+      for (const key of keys) {
+        const value = obj?.[key];
+        if (Array.isArray(value)) return value;
+        if (value && typeof value === 'object') {
+          const nested = value.models || value.items || value.files || value.choices || value.options || value.names;
+          if (Array.isArray(nested)) return nested;
+        }
+      }
+      return [];
+    };
+    const preferredGenerationList = (preferred, ...fallbacks) => {
+      const primary = Array.isArray(preferred) ? preferred : [];
+      if (primary.length) return primary;
+      return mergeGenerationCatalogLists(...fallbacks);
+    };
     const checkpoints = listFrom('checkpoints');
     const rawGgufUnet = listFrom('unet');
     const rawDiffusionModels = listFrom('diffusion_models');
     const rawGgufClip = listFrom('clip');
     const rawTextEncoders = listFrom('text_encoders');
-    const ggufUnet = mergeGenerationCatalogLists(rawGgufUnet, rawDiffusionModels);
-    const ggufClip = mergeGenerationCatalogLists(rawGgufClip, rawTextEncoders);
-    const vaes = listFrom('vae');
+    const rawVae = listFrom('vae');
+    const ggufCatalog = (catalog && typeof catalog.gguf === 'object' && catalog.gguf) ? catalog.gguf : {};
+    const qwenCatalog = (catalog && typeof catalog.qwen_image === 'object' && catalog.qwen_image) ? catalog.qwen_image : {};
+    const fluxCatalog = (catalog && typeof catalog.flux_gguf === 'object' && catalog.flux_gguf) ? catalog.flux_gguf : {};
+    const explicitGgufUnet = nestedListFrom(ggufCatalog, 'unet');
+    const explicitGgufClip = nestedListFrom(ggufCatalog, 'clip');
+    const explicitGgufClipSingle = nestedListFrom(ggufCatalog, 'clip_single');
+    const explicitGgufClipDual = nestedListFrom(ggufCatalog, 'clip_dual');
+    const explicitGgufMmproj = nestedListFrom(ggufCatalog, 'mmproj');
+    const explicitGgufVae = nestedListFrom(ggufCatalog, 'vae');
+    const explicitQwenTextEncoders = nestedListFrom(qwenCatalog, 'text_encoders', 'clip', 'encoders');
+    const explicitQwenMmproj = nestedListFrom(qwenCatalog, 'mmproj');
+    const explicitQwenVae = nestedListFrom(qwenCatalog, 'preferred_vae', 'vae');
+    const explicitFluxUnet = nestedListFrom(fluxCatalog, 'unet');
+    const explicitFluxClip = nestedListFrom(fluxCatalog, 'clip');
+    const explicitFluxVae = nestedListFrom(fluxCatalog, 'vae');
+    const ggufUnet = preferredGenerationList(
+      mergeGenerationCatalogLists(explicitGgufUnet, explicitFluxUnet),
+      rawGgufUnet,
+      rawDiffusionModels
+    );
+    const ggufClip = preferredGenerationList(
+      mergeGenerationCatalogLists(explicitGgufClip, explicitGgufClipSingle, explicitGgufClipDual),
+      rawGgufClip,
+      rawTextEncoders
+    );
+    const ggufClipSingle = preferredGenerationList(explicitGgufClipSingle, explicitQwenTextEncoders, ggufClip, rawTextEncoders, rawGgufClip);
+    const ggufClipDual = preferredGenerationList(explicitGgufClipDual, explicitFluxClip, ggufClip, rawGgufClip, rawTextEncoders);
+    const ggufMmproj = preferredGenerationList(mergeGenerationCatalogLists(explicitGgufMmproj, explicitQwenMmproj), rawTextEncoders, rawGgufClip);
+    const qwenTextEncoders = preferredGenerationList(explicitQwenTextEncoders, ggufClipSingle, rawTextEncoders, rawGgufClip);
+    const fluxClip = preferredGenerationList(explicitFluxClip, ggufClipDual, rawGgufClip, rawTextEncoders);
+    const vaes = preferredGenerationList(mergeGenerationCatalogLists(explicitGgufVae, explicitFluxVae, explicitQwenVae), rawVae);
     const mergeGenerationUniqueChoices = (...lists) => {
       const out = [];
       const seen = new Set();
@@ -470,6 +516,27 @@ window.NeoGenerationResultsShell.refreshGenerationCatalog = async function refre
       diffusion_models: rawDiffusionModels,
       clip: ggufClip,
       text_encoders: rawTextEncoders,
+      gguf: {
+        ...(ggufCatalog || {}),
+        unet: ggufUnet,
+        clip: ggufClip,
+        clip_single: ggufClipSingle,
+        clip_dual: ggufClipDual,
+        mmproj: ggufMmproj,
+        vae: explicitGgufVae.length ? explicitGgufVae : vaes,
+      },
+      qwen_image: {
+        ...(qwenCatalog || {}),
+        text_encoders: qwenTextEncoders,
+        mmproj: ggufMmproj,
+        preferred_vae: explicitQwenVae,
+      },
+      flux_gguf: {
+        ...(fluxCatalog || {}),
+        unet: ggufUnet,
+        clip: fluxClip,
+        vae: explicitFluxVae.length ? explicitFluxVae : vaes,
+      },
       loras: listFrom('loras'),
       controlnet: listFrom('controlnet'),
       ipadapter: listFrom('ipadapter'),
@@ -485,8 +552,8 @@ window.NeoGenerationResultsShell.refreshGenerationCatalog = async function refre
     };
     populateGenerationSelect('generation-checkpoint', checkpoints, 'Choose checkpoint');
     populateGenerationSelect('generation-gguf-unet', ggufUnet, 'Choose GGUF model');
-    populateGenerationSelect('generation-gguf-clip-primary', ggufClip, 'Choose encoder A');
-    populateGenerationSelect('generation-gguf-clip-secondary', ggufClip, 'Choose encoder B');
+    populateGenerationSelect('generation-gguf-clip-primary', qwenTextEncoders.length ? qwenTextEncoders : ggufClip, 'Choose encoder A');
+    populateGenerationSelect('generation-gguf-clip-secondary', fluxClip.length ? fluxClip : ggufClipDual, 'Choose encoder B');
     populateGenerationSelect('generation-vae', vaes, 'Use checkpoint VAE');
     populateGenerationSelect('generation-sampler', samplers, 'Choose sampler');
     populateGenerationSelect('generation-scheduler', schedulers, 'Choose schedule');

@@ -1,4 +1,136 @@
 // Phase 6 split: launch/runtime + recent item + backend dependency shell logic
+
+function normalizeGenerationGuardrailFamily(value='') {
+  const raw = String(value || '').trim().toLowerCase();
+  if (raw === 'qwen' || raw === 'qwen_image') return 'qwen_image_edit';
+  if (raw === 'flux') return 'flux';
+  if (raw === 'sdxl' || raw === 'sd') return 'sdxl_sd';
+  return raw || 'sdxl_sd';
+}
+
+function getGenerationGuardrailCatalogValue(item) {
+  if (typeof window !== 'undefined' && window.NeoGenerationRuntimeShell && typeof window.NeoGenerationRuntimeShell.normalizeGenerationCatalogValue === 'function') {
+    return String(window.NeoGenerationRuntimeShell.normalizeGenerationCatalogValue(item) || '').trim();
+  }
+  if (item && typeof item === 'object') return String(item.value || item.name || item.label || item.filename || '').trim();
+  return String(item || '').trim();
+}
+
+function collectGenerationGuardrailList(...lists) {
+  const out = [];
+  const seen = new Set();
+  lists.forEach(list => {
+    (Array.isArray(list) ? list : []).forEach(item => {
+      const value = getGenerationGuardrailCatalogValue(item);
+      const key = value.toLowerCase();
+      if (value && !seen.has(key)) {
+        seen.add(key);
+        out.push(value);
+      }
+    });
+  });
+  return out;
+}
+
+function generationGuardrailHasCatalogValue(list, selected) {
+  const wanted = String(selected || '').trim().toLowerCase();
+  if (!wanted) return false;
+  const values = collectGenerationGuardrailList(list);
+  return values.some(value => value.toLowerCase() === wanted);
+}
+
+function collectGenerationGgufGuardrailReport(payload={}, context={}) {
+  const report = { blockers: [], warnings: [], required: [], family: '', clip_type: '', clip_mode: '', mmproj_required: false };
+  const catalog = (typeof generationCatalogState !== 'undefined' && generationCatalogState) ? generationCatalogState : {};
+  const gguf = (catalog.gguf && typeof catalog.gguf === 'object') ? catalog.gguf : {};
+  const qwen = (catalog.qwen_image && typeof catalog.qwen_image === 'object') ? catalog.qwen_image : {};
+  const flux = (catalog.flux_gguf && typeof catalog.flux_gguf === 'object') ? catalog.flux_gguf : {};
+  const loaderNodes = (gguf.loader_nodes && typeof gguf.loader_nodes === 'object') ? gguf.loader_nodes : {};
+
+  const rawFamily = payload.family || window.NeoGenerationFamilyRouter?.getActiveFamily?.() || $('generation-family')?.value || '';
+  const family = normalizeGenerationGuardrailFamily(rawFamily);
+  const modelSource = String(payload.model_source || $('generation-model-source')?.value || 'checkpoint').trim().toLowerCase();
+  const isFlux = family === 'flux';
+  const isQwen = family === 'qwen_image_edit';
+  const isGguf = modelSource === 'gguf' || isFlux || isQwen;
+  if (!isGguf) return report;
+
+  const clipType = isQwen ? 'qwen_image' : (isFlux ? 'flux' : String(payload.gguf_clip_type || $('generation-gguf-clip-type')?.value || 'flux').trim().toLowerCase());
+  const clipMode = clipType === 'qwen_image' ? 'single' : (String(payload.gguf_clip_mode || $('generation-gguf-clip-mode')?.value || 'dual').trim().toLowerCase() === 'single' ? 'single' : 'dual');
+  const mode = String(payload.mode || payload.workflow_type || $('generation-workflow-type')?.value || 'txt2img').trim().toLowerCase();
+  const unet = String(payload.gguf_unet || $('generation-gguf-unet')?.value || '').trim();
+  const primary = String(payload.gguf_clip_primary || $('generation-gguf-clip-primary')?.value || '').trim();
+  const secondary = clipMode === 'dual' ? String(payload.gguf_clip_secondary || $('generation-gguf-clip-secondary')?.value || '').trim() : '';
+  const vae = String(payload.vae || $('generation-vae')?.value || '').trim();
+  let mmproj = String(payload.gguf_mmproj || payload._neo_effective_gguf_mmproj || '').trim();
+  if (!mmproj && clipType === 'qwen_image' && typeof window.NeoGenerationRuntimeShell?.findGenerationQwenMmproj === 'function') {
+    const sources = typeof window.NeoGenerationRuntimeShell.getGenerationGgufDropdownSources === 'function'
+      ? window.NeoGenerationRuntimeShell.getGenerationGgufDropdownSources('qwen_image')
+      : { mmproj: collectGenerationGuardrailList(gguf.mmproj, qwen.mmproj) };
+    mmproj = String(window.NeoGenerationRuntimeShell.findGenerationQwenMmproj(primary, sources.mmproj || null) || '').trim();
+  }
+
+  const sources = typeof window.NeoGenerationRuntimeShell?.getGenerationGgufDropdownSources === 'function'
+    ? window.NeoGenerationRuntimeShell.getGenerationGgufDropdownSources(clipType)
+    : {
+      unet: collectGenerationGuardrailList(gguf.unet, flux.unet, catalog.unet, catalog.diffusion_models),
+      primary: collectGenerationGuardrailList(clipType === 'qwen_image' ? qwen.text_encoders : flux.clip, gguf.clip, catalog.clip, catalog.text_encoders),
+      secondary: collectGenerationGuardrailList(flux.clip, gguf.clip_dual, gguf.clip, catalog.clip, catalog.text_encoders),
+      vae: collectGenerationGuardrailList(clipType === 'qwen_image' ? qwen.preferred_vae : flux.vae, gguf.vae, catalog.vae),
+      mmproj: collectGenerationGuardrailList(qwen.mmproj, gguf.mmproj),
+    };
+
+  report.family = family;
+  report.clip_type = clipType;
+  report.clip_mode = clipMode;
+
+  const addMissing = (label, detail) => {
+    report.required.push(label);
+    report.blockers.push(detail);
+  };
+  if (!unet) addMissing('GGUF UNet', `${isQwen ? 'Qwen' : isFlux ? 'Flux' : 'GGUF'} needs a GGUF model before queueing.`);
+  else if (Array.isArray(sources.unet) && sources.unet.length && !generationGuardrailHasCatalogValue(sources.unet, unet)) report.warnings.push(`Selected GGUF model is not present in the current explicit catalog: ${unet}`);
+
+  if (!primary) addMissing(isQwen ? 'Qwen text encoder' : 'GGUF primary encoder', `${isQwen ? 'Qwen' : isFlux ? 'Flux' : 'GGUF'} needs the primary GGUF encoder before queueing.`);
+  else if (Array.isArray(sources.primary) && sources.primary.length && !generationGuardrailHasCatalogValue(sources.primary, primary)) report.warnings.push(`Selected primary encoder is not present in the current explicit catalog: ${primary}`);
+
+  if (clipMode === 'dual') {
+    if (!secondary) addMissing('GGUF secondary encoder', 'Flux GGUF needs the second encoder before queueing.');
+    else if (Array.isArray(sources.secondary) && sources.secondary.length && !generationGuardrailHasCatalogValue(sources.secondary, secondary)) report.warnings.push(`Selected secondary encoder is not present in the current explicit catalog: ${secondary}`);
+  }
+
+  if (!vae) addMissing('VAE', `${isQwen ? 'Qwen' : isFlux ? 'Flux' : 'GGUF'} needs a VAE before queueing.`);
+
+  if (!loaderNodes.unet) addMissing('GGUF UNet loader node', 'ComfyUI did not expose LoaderGGUF/UnetLoaderGGUF. Install or enable the GGUF node pack before queueing.');
+  if (clipMode === 'dual' && !loaderNodes.clip_dual) addMissing('Dual GGUF CLIP loader node', 'Flux GGUF needs DualCLIPLoaderGGUF from ComfyUI before queueing.');
+  if (clipMode === 'single' && !loaderNodes.clip_single) addMissing('Single GGUF CLIP loader node', 'Qwen GGUF needs CLIPLoaderGGUF/ClipLoaderGGUF from ComfyUI before queueing.');
+  if (vae && !loaderNodes.vae) report.warnings.push('No GGUF VAE loader alias was reported. Queue may still work if this VAE is loaded by the workflow fallback.');
+
+  const qwenUsesImageContext = isQwen && (['img2img', 'inpaint'].includes(mode) || (Array.isArray(payload.source_image_fields) && payload.source_image_fields.length > 0));
+  report.mmproj_required = qwenUsesImageContext;
+  if (qwenUsesImageContext && !mmproj) addMissing('Qwen mmproj sidecar', 'Qwen image/reference workflows need a matching mmproj sidecar. Put it in ComfyUI models/mmproj or text_encoders, then refresh the catalog.');
+  if (isQwen && String(payload.gguf_clip_mode || $('generation-gguf-clip-mode')?.value || '').trim().toLowerCase() === 'dual') {
+    report.warnings.push('Qwen uses the single-encoder GGUF path. Neo will ignore secondary encoder state for this family.');
+  }
+
+  const ipadapterEnabled = !!(isGenerationUnitEnabledFromCheckbox?.($('generation-ipadapter-enabled')));
+  const extraIpadapterEnabled = Array.from(document.querySelectorAll('#generation-ipadapter-extra-list .generation-ipadapter-row')).some(row => isGenerationUnitEnabledFromCheckbox?.(row.querySelector('.generation-unit-enabled')));
+  if ((isQwen || isFlux) && (ipadapterEnabled || extraIpadapterEnabled)) {
+    addMissing('IP-Adapter disabled for this family', `${isQwen ? 'Qwen' : 'Flux'} GGUF currently blocks IP-Adapter. Disable IP-Adapter or switch to an SDXL checkpoint workflow.`);
+  }
+
+  return report;
+}
+
+function getGenerationGgufGuardrailBlockers(payload={}, context={}) {
+  return collectGenerationGgufGuardrailReport(payload, context).blockers || [];
+}
+
+window.NeoGenerationGgufGuardrails = Object.freeze({
+  collectReport: collectGenerationGgufGuardrailReport,
+  getBlockers: getGenerationGgufGuardrailBlockers,
+});
+
 async function queueGenerationShell(options={}) {
   const imageSession = getRoleSession('image');
   if (!imageSession.connected) {
@@ -34,6 +166,20 @@ async function queueGenerationShell(options={}) {
   payload = await applyGenerationWildcardResolution(payload, { variantOffset: options.wildcardVariantOffset || 0 });
   if (typeof sanitizeGenerationPayload === 'function') payload = sanitizeGenerationPayload(payload);
   const modelSource = String(payload.model_source || 'checkpoint').trim().toLowerCase();
+  const sourceFile = options.overrideSourceFile || $('generation-source-image')?.files?.[0] || null;
+  const maskFile = options.overrideMaskFile || $('generation-mask-image')?.files?.[0] || null;
+  const ggufGuardrailReport = collectGenerationGgufGuardrailReport(payload, { sourceFile, maskFile, queueContext:'queue_submit' });
+  if (ggufGuardrailReport.blockers.length) {
+    announceGenerationStatus(ggufGuardrailReport.blockers[0], 'warn');
+    if (typeof syncGenerationLaunchAvailability === 'function') syncGenerationLaunchAvailability();
+    return null;
+  }
+  if (Array.isArray(ggufGuardrailReport.warnings) && ggufGuardrailReport.warnings.length) {
+    payload._neo_gguf_guardrail_warnings = ggufGuardrailReport.warnings.slice(0, 8);
+  }
+  payload._neo_gguf_guardrail_status = ggufGuardrailReport.blockers.length ? 'blocked' : 'pass';
+  payload._neo_gguf_guardrail_family = ggufGuardrailReport.family || '';
+  payload._neo_gguf_guardrail_version = 'phase9_gguf_validator_guardrails';
   if (modelSource === 'checkpoint' && selectedCheckpoint && !trim(payload.checkpoint)) payload.checkpoint = selectedCheckpoint;
   if (!trim(payload.positive)) {
     announceGenerationStatus('Add or pull in a positive prompt first.', 'warn');
@@ -62,8 +208,6 @@ async function queueGenerationShell(options={}) {
   }
 
   const mode = payload.mode || payload.workflow_type || 'txt2img';
-  const sourceFile = options.overrideSourceFile || $('generation-source-image')?.files?.[0] || null;
-  const maskFile = options.overrideMaskFile || $('generation-mask-image')?.files?.[0] || null;
   const primaryControlEnabled = isGenerationUnitEnabledFromCheckbox($('generation-controlnet-enabled'));
   const controlFile = primaryControlEnabled ? ($('generation-control-image')?.files?.[0] || null) : null;
   const controlFiles = collectGenerationControlFiles();
@@ -191,6 +335,23 @@ function getGenerationLaunchBlockers() {
   }
   const familyBlocker = window.NeoGenerationFamilyRouter?.getLaunchBlocker?.();
   if (familyBlocker) blockers.unshift(familyBlocker);
+  try {
+    const guardPayload = {
+      workflow_type: mode,
+      mode,
+      family: window.NeoGenerationFamilyRouter?.getActiveFamily?.() || $('generation-family')?.value || '',
+      model_source: $('generation-model-source')?.value || 'checkpoint',
+      gguf_unet: $('generation-gguf-unet')?.value || '',
+      gguf_clip_mode: $('generation-gguf-clip-mode')?.value || 'dual',
+      gguf_clip_type: $('generation-gguf-clip-type')?.value || 'flux',
+      gguf_clip_primary: $('generation-gguf-clip-primary')?.value || '',
+      gguf_clip_secondary: $('generation-gguf-clip-secondary')?.value || '',
+      vae: $('generation-vae')?.value || '',
+      source_image_fields: ['generation-source-image-2', 'generation-source-image-3'].filter(id => !!$(id)?.files?.[0]).map((_, i) => `source_image__${i + 2}`),
+    };
+    const ggufBlockers = getGenerationGgufGuardrailBlockers(guardPayload, { sourceFile, maskFile, queueContext:'button_state' });
+    ggufBlockers.forEach(item => blockers.push(item));
+  } catch (_) {}
   return blockers;
 }
 

@@ -226,26 +226,35 @@ document.addEventListener('neo-generation-family-changed', () => { scheduleGener
   $('generation-output-category')?.addEventListener('change', async () => { updateGenerationOutputDestinationPreview(trim($('generation-seed')?.value || '') || '[seed]'); await saveGenerationOutputSettings(); });
   
 function syncGenerationPreviewQwenUnsupportedActions() {
-  const family = String($('generation-family')?.value || window.NeoGenerationFamilyRouter?.getActiveFamily?.() || '').trim();
+  const family = String(window.NeoGenerationFamilyRouter?.getActiveFamily?.() || $('generation-family')?.value || '').trim();
   const isQwen = family === 'qwen_image_edit';
+  const isFlux = family === 'flux';
   const overrides = [
     {
       id: 'btn-generation-preview-ipadapter',
-      blockedTitle: 'IP-Adapter reference is disabled for Qwen Image because this family uses Qwen multi-source references instead.',
+      blocked: isQwen || isFlux,
+      blockedTitle: isQwen
+        ? 'IP-Adapter reference is disabled for Qwen Image because this family uses Qwen multi-source references instead.'
+        : 'IP-Adapter reference is disabled for Flux GGUF until a compatible Flux IP-Adapter graph is registered.',
     },
     {
       id: 'btn-generation-preview-identity',
-      blockedTitle: 'Identity Rescue / Face ID is disabled for Qwen Image because this finish pass is not supported on this family.',
+      blocked: isQwen || isFlux,
+      blockedTitle: isQwen
+        ? 'Identity Rescue / Face ID is disabled for Qwen Image because this finish pass is not supported on this family.'
+        : 'Identity Rescue / Face ID is disabled for Flux GGUF until a compatible Flux identity graph is registered.',
     },
   ];
-  overrides.forEach(({ id, blockedTitle }) => {
+  overrides.forEach(({ id, blocked, blockedTitle }) => {
     const btn = $(id);
     if (!btn) return;
     if (!btn.dataset.defaultTitle) btn.dataset.defaultTitle = btn.getAttribute('title') || '';
-    btn.disabled = isQwen;
-    btn.classList.toggle('is-disabled-by-family', isQwen);
-    btn.setAttribute('aria-disabled', isQwen ? 'true' : 'false');
-    btn.setAttribute('title', isQwen ? blockedTitle : (btn.dataset.defaultTitle || ''));
+    btn.disabled = !!blocked;
+    btn.classList.toggle('is-disabled-by-family', !!blocked);
+    btn.setAttribute('aria-disabled', blocked ? 'true' : 'false');
+    btn.setAttribute('title', blocked ? blockedTitle : (btn.dataset.defaultTitle || ''));
+    if (blocked) btn.dataset.disabledReason = blockedTitle;
+    else delete btn.dataset.disabledReason;
   });
 }
 

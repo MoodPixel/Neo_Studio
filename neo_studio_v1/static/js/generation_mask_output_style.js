@@ -1839,8 +1839,21 @@ function focusGenerationSetupTab(tab='core', accordionId='') {
   }, 90);
 }
 
+function getGenerationPreviewFamilyBlocker(kind='') {
+  const family = String(window.NeoGenerationFamilyRouter?.getActiveFamily?.() || $('generation-family')?.value || '').trim();
+  const lane = String(kind || '').trim().toLowerCase();
+  if (lane === 'ipadapter' && family === 'qwen_image_edit') return 'IP-Adapter reference is disabled for Qwen Image because this family uses Qwen multi-source references instead.';
+  if (lane === 'ipadapter' && family === 'flux') return 'IP-Adapter reference is disabled for Flux GGUF until a compatible Flux IP-Adapter graph is registered.';
+  return '';
+}
+
 async function sendGenerationPreviewToReferenceLane(kind='controlnet') {
   try {
+    const blockedReason = getGenerationPreviewFamilyBlocker(kind);
+    if (blockedReason) {
+      setStatus('generation-status', blockedReason, 'warn');
+      return;
+    }
     const file = await fetchGenerationPreviewFile();
     if (kind === 'ipadapter') {
       assignFileToInput('generation-ipadapter-image', file);
@@ -1891,6 +1904,8 @@ function buildGenerationPreviewActionContract(actionType, options={}) {
   const action = String(actionType || 'derived').trim().toLowerCase() || 'derived';
   const sourceKind = activeOutput?.source_kind || activeOutput?.source || (activeOutput?.imported ? 'imported' : 'generated');
   const saveLane = options.saveLane || inferGenerationPreviewSaveMode(activeOutput);
+  const family = String(window.NeoGenerationFamilyRouter?.getActiveFamily?.() || $('generation-family')?.value || '').trim();
+  const modelSource = String($('generation-model-source')?.value || '').trim();
   return {
     schema_version: 1,
     action_type: action,
@@ -1904,6 +1919,8 @@ function buildGenerationPreviewActionContract(actionType, options={}) {
     source_view_url: activeOutput?.view_url || '',
     execution_mode: options.executionMode || 'img2img',
     workflow_variant: options.workflowVariant || 'preview_action',
+    source_family: family,
+    source_model_source: family === 'flux' || family === 'qwen_image_edit' ? 'gguf' : (modelSource || 'checkpoint'),
     save_lane: saveLane,
     derived_stage: options.stage || options.derivedStage || action,
     parent_output_id: activeOutput?.output_id || activeOutput?.id || '',
@@ -1931,6 +1948,21 @@ function applyGenerationPreviewActionContractToPayload(payload, contract, option
   next._neo_parent_output_id = contract?.parent_output_id || '';
   next._neo_parent_output_key = contract?.parent_output_key || '';
   next._neo_save_lane = contract?.save_lane || next.save_mode_override || '';
+  next._neo_preview_action_family = next.family || contract?.source_family || '';
+  next._neo_preview_action_model_source = next.model_source || contract?.source_model_source || '';
+  next._neo_preview_action_preserved_context = {
+    family: next.family || '',
+    model_source: next.model_source || '',
+    gguf_unet: next.gguf_unet || '',
+    gguf_clip_primary: next.gguf_clip_primary || '',
+    gguf_clip_secondary: next.gguf_clip_secondary || '',
+    gguf_clip_mode: next.gguf_clip_mode || '',
+    gguf_clip_type: next.gguf_clip_type || '',
+    gguf_mmproj: next.gguf_mmproj || next._neo_effective_gguf_mmproj || '',
+    effective_gguf_unet_loader: next._neo_effective_gguf_unet_loader || '',
+    effective_gguf_clip_loader: next._neo_effective_gguf_clip_loader || '',
+    effective_mmproj_source: next._neo_effective_mmproj_source || '',
+  };
   if (options.patch && typeof options.patch === 'object') {
     Object.entries(options.patch).forEach(([key, value]) => { next[key] = value; });
   }

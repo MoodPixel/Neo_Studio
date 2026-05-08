@@ -86,7 +86,14 @@ window.NeoGenerationRuntimeShell.findGenerationQwenMmproj = function findGenerat
   if (!selected) return '';
   const baseKey = window.NeoGenerationRuntimeShell.qwenCompanionBaseKey(selected);
   if (!baseKey) return '';
-  const catalogRows = Array.isArray(rows) ? rows : mergeGenerationCatalogLists(generationCatalogState?.clip, generationCatalogState?.text_encoders);
+  const qwenCatalog = generationCatalogState?.qwen_image || {};
+  const ggufCatalog = generationCatalogState?.gguf || {};
+  const catalogRows = Array.isArray(rows) ? rows : mergeGenerationCatalogLists(
+    qwenCatalog?.mmproj,
+    ggufCatalog?.mmproj,
+    generationCatalogState?.clip,
+    generationCatalogState?.text_encoders
+  );
   const values = catalogRows.map(item => window.NeoGenerationRuntimeShell.normalizeGenerationCatalogValue(item)).filter(Boolean);
   if (!values.length) return '';
   const lowered = values.map(value => ({ value, lower: String(value || '').trim().toLowerCase() }));
@@ -94,7 +101,47 @@ window.NeoGenerationRuntimeShell.findGenerationQwenMmproj = function findGenerat
   if (exact) return exact.value;
   const prefix = lowered.find(item => item.lower.includes('mmproj') && (item.lower.startsWith(baseKey) || item.lower.includes(`${baseKey}.mmproj`) || item.lower.includes(`${baseKey}-mmproj`) || item.lower.includes(`${baseKey}_mmproj`)));
   if (prefix) return prefix.value;
-  return '';
+  const firstQwen = lowered.find(item => item.lower.includes('mmproj') && item.lower.includes('qwen'));
+  return firstQwen ? firstQwen.value : '';
+}
+
+window.NeoGenerationRuntimeShell.getGenerationGgufDropdownSources = function getGenerationGgufDropdownSources(family='') {
+  const active = window.NeoGenerationRuntimeShell.normalizeGenerationFamilyKey(family || $('generation-family')?.value || $('generation-gguf-clip-type')?.value || '');
+  const catalog = (typeof generationCatalogState !== 'undefined' && generationCatalogState) ? generationCatalogState : {};
+  const gguf = (catalog.gguf && typeof catalog.gguf === 'object') ? catalog.gguf : {};
+  const qwen = (catalog.qwen_image && typeof catalog.qwen_image === 'object') ? catalog.qwen_image : {};
+  const flux = (catalog.flux_gguf && typeof catalog.flux_gguf === 'object') ? catalog.flux_gguf : {};
+  const unetFallback = mergeGenerationCatalogLists(catalog.unet, catalog.diffusion_models);
+  const clipFallback = mergeGenerationCatalogLists(catalog.clip, catalog.text_encoders);
+  const unet = mergeGenerationCatalogLists(gguf.unet, flux.unet, unetFallback);
+  const qwenText = mergeGenerationCatalogLists(qwen.text_encoders, gguf.clip_single, gguf.clip, clipFallback);
+  const fluxClip = mergeGenerationCatalogLists(flux.clip, gguf.clip_dual, gguf.clip, clipFallback);
+  const genericClip = mergeGenerationCatalogLists(gguf.clip, gguf.clip_single, gguf.clip_dual, clipFallback);
+  const mmproj = mergeGenerationCatalogLists(qwen.mmproj, gguf.mmproj, clipFallback).filter(item => String(window.NeoGenerationRuntimeShell.normalizeGenerationCatalogValue(item)).toLowerCase().includes('mmproj'));
+  const vae = mergeGenerationCatalogLists(
+    active === 'qwen_image' ? qwen.preferred_vae : [],
+    active === 'flux' ? flux.vae : [],
+    gguf.vae,
+    catalog.vae
+  );
+  return {
+    unet,
+    primary: active === 'qwen_image' ? qwenText : (active === 'flux' ? fluxClip : genericClip),
+    secondary: active === 'qwen_image' ? [] : (active === 'flux' ? fluxClip : genericClip),
+    mmproj,
+    vae,
+  };
+}
+
+window.NeoGenerationRuntimeShell.refreshGenerationGgufDropdownsForFamily = function refreshGenerationGgufDropdownsForFamily(family='') {
+  if (typeof populateGenerationSelect !== 'function') return false;
+  const active = window.NeoGenerationRuntimeShell.normalizeGenerationFamilyKey(family || $('generation-family')?.value || $('generation-gguf-clip-type')?.value || '');
+  const sources = window.NeoGenerationRuntimeShell.getGenerationGgufDropdownSources(active);
+  populateGenerationSelect('generation-gguf-unet', sources.unet, 'Choose GGUF model');
+  populateGenerationSelect('generation-gguf-clip-primary', sources.primary, active === 'qwen_image' ? 'Choose Qwen text encoder' : 'Choose encoder A');
+  populateGenerationSelect('generation-gguf-clip-secondary', sources.secondary, active === 'qwen_image' ? 'Qwen uses single encoder' : 'Choose encoder B');
+  if (sources.vae.length) populateGenerationSelect('generation-vae', sources.vae, 'Use checkpoint VAE');
+  return true;
 }
 
 window.NeoGenerationRuntimeShell.applyGenerationFamilyDefaults = function applyGenerationFamilyDefaults(raw='', options={}) {
@@ -172,19 +219,22 @@ window.NeoGenerationRuntimeShell.renderGenerationGGUFValidator = function render
   const encoderA = trim($('generation-gguf-clip-primary')?.value || '');
   const encoderB = trim($('generation-gguf-clip-secondary')?.value || '');
   const vae = trim($('generation-vae')?.value || '');
-  const unetCatalog = mergeGenerationCatalogLists(generationCatalogState?.unet, generationCatalogState?.diffusion_models);
-  const clipCatalog = mergeGenerationCatalogLists(generationCatalogState?.clip, generationCatalogState?.text_encoders);
-  const qwenMmproj = family === 'qwen_image' ? window.NeoGenerationRuntimeShell.findGenerationQwenMmproj(encoderA, clipCatalog) : '';
+  const sources = typeof window.NeoGenerationRuntimeShell.getGenerationGgufDropdownSources === 'function'
+    ? window.NeoGenerationRuntimeShell.getGenerationGgufDropdownSources(family)
+    : { unet: mergeGenerationCatalogLists(generationCatalogState?.unet, generationCatalogState?.diffusion_models), primary: mergeGenerationCatalogLists(generationCatalogState?.clip, generationCatalogState?.text_encoders), secondary: mergeGenerationCatalogLists(generationCatalogState?.clip, generationCatalogState?.text_encoders), mmproj: [] };
+  const unetCatalog = sources.unet || [];
+  const clipCatalog = mergeGenerationCatalogLists(sources.primary, sources.secondary);
+  const qwenMmproj = family === 'qwen_image' ? window.NeoGenerationRuntimeShell.findGenerationQwenMmproj(encoderA, sources.mmproj) : '';
   const aliasPieces = [];
   if (Array.isArray(generationCatalogState?.diffusion_models) && generationCatalogState.diffusion_models.length) aliasPieces.push('diffusion_models');
   if (Array.isArray(generationCatalogState?.text_encoders) && generationCatalogState.text_encoders.length) aliasPieces.push('text_encoders');
 
   const checks = [
-    { ok: !!modelName && unetCatalog.some(item => item.toLowerCase() === modelName.toLowerCase()), label: 'GGUF model', detail: modelName || 'Pick a GGUF model' },
-    { ok: !!encoderA && clipCatalog.some(item => item.toLowerCase() === encoderA.toLowerCase()), label: family === 'qwen_image' ? 'Text encoder' : 'Encoder A', detail: encoderA || (family === 'qwen_image' ? 'Pick the Qwen text encoder' : 'Pick the primary encoder') },
+    { ok: !!modelName && unetCatalog.some(item => String(window.NeoGenerationRuntimeShell.normalizeGenerationCatalogValue(item) || item || '').toLowerCase() === modelName.toLowerCase()), label: 'GGUF model', detail: modelName || 'Pick a GGUF model' },
+    { ok: !!encoderA && clipCatalog.some(item => String(window.NeoGenerationRuntimeShell.normalizeGenerationCatalogValue(item) || item || '').toLowerCase() === encoderA.toLowerCase()), label: family === 'qwen_image' ? 'Text encoder' : 'Encoder A', detail: encoderA || (family === 'qwen_image' ? 'Pick the Qwen text encoder' : 'Pick the primary encoder') },
   ];
   if (clipMode === 'dual') {
-    checks.push({ ok: !!encoderB && clipCatalog.some(item => item.toLowerCase() === encoderB.toLowerCase()), label: 'Encoder B', detail: encoderB || 'Pick the second encoder' });
+    checks.push({ ok: !!encoderB && clipCatalog.some(item => String(window.NeoGenerationRuntimeShell.normalizeGenerationCatalogValue(item) || item || '').toLowerCase() === encoderB.toLowerCase()), label: 'Encoder B', detail: encoderB || 'Pick the second encoder' });
   }
   if (family === 'qwen_image') {
     checks.push({
@@ -197,18 +247,47 @@ window.NeoGenerationRuntimeShell.renderGenerationGGUFValidator = function render
   }
   checks.push({ ok: !!vae, label: 'VAE', detail: vae || 'Pick a VAE for GGUF runs' });
 
+  let guardrailReport = { blockers: [], warnings: [], mmproj_required: false };
+  if (window.NeoGenerationGgufGuardrails && typeof window.NeoGenerationGgufGuardrails.collectReport === 'function') {
+    guardrailReport = window.NeoGenerationGgufGuardrails.collectReport({
+      workflow_type: $('generation-workflow-type')?.value || 'txt2img',
+      mode: $('generation-workflow-type')?.value || 'txt2img',
+      family: family === 'qwen_image' ? 'qwen_image_edit' : family,
+      model_source: 'gguf',
+      gguf_unet: modelName,
+      gguf_clip_mode: clipMode,
+      gguf_clip_type: family,
+      gguf_clip_primary: encoderA,
+      gguf_clip_secondary: encoderB,
+      gguf_mmproj: qwenMmproj,
+      vae,
+      source_image_fields: ['generation-source-image-2', 'generation-source-image-3'].filter(id => !!$(id)?.files?.[0]).map((_, i) => `source_image__${i + 2}`),
+    }, { queueContext:'validator_card' });
+  }
+  const guardrailBlockers = Array.isArray(guardrailReport.blockers) ? guardrailReport.blockers : [];
+  const guardrailWarnings = Array.isArray(guardrailReport.warnings) ? guardrailReport.warnings : [];
+  if (guardrailBlockers.length) {
+    checks.push({ ok:false, label:'Workflow guardrail', detail: guardrailBlockers[0] });
+  } else if (guardrailWarnings.length) {
+    checks.push({ ok:true, label:'Workflow guardrail', detail: `Ready with warning: ${guardrailWarnings[0]}` });
+  } else {
+    checks.push({ ok:true, label:'Workflow guardrail', detail:'No Flux/Qwen GGUF guardrail blockers detected.' });
+  }
+
   const readyCount = checks.filter(item => item.ok).length;
   const missingCount = checks.length - readyCount;
   const familyLabel = family === 'qwen_image' ? 'Qwen Image' : family.toUpperCase();
-  summary.textContent = missingCount === 0
-    ? `${familyLabel} bundle looks complete. Ready to queue once the rest of the workflow is set.`
-    : `${familyLabel} still needs ${missingCount} bundle piece${missingCount === 1 ? '' : 's'} before queueing.`;
-  badge.textContent = missingCount === 0 ? 'Ready' : (readyCount > 0 ? 'Needs pieces' : 'Incomplete');
+  summary.textContent = guardrailBlockers.length
+    ? `${familyLabel} blocked: ${guardrailBlockers[0]}`
+    : (missingCount === 0
+      ? `${familyLabel} bundle looks complete. Ready to queue once the rest of the workflow is set.`
+      : `${familyLabel} still needs ${missingCount} bundle piece${missingCount === 1 ? '' : 's'} before queueing.`);
+  badge.textContent = guardrailBlockers.length ? 'Blocked' : (missingCount === 0 ? 'Ready' : (readyCount > 0 ? 'Needs pieces' : 'Incomplete'));
   linesHost.innerHTML = checks.map(item => {
     const icon = item.ok ? '✓' : '•';
     const badgeClass = item.ok ? 'badge ok' : 'badge';
     return `<div style="display:flex; gap:8px; align-items:flex-start; margin-top:6px;"><span class="${badgeClass}" style="min-width:26px; justify-content:center;">${icon}</span><div><strong>${escapeHtml(item.label)}:</strong> ${escapeHtml(item.detail)}</div></div>`;
-  }).join('') + `<div style="margin-top:8px; opacity:0.85;">${escapeHtml(aliasPieces.length ? `Alias-aware catalog merge active: ${aliasPieces.join(' + ')}.` : 'Using the live ComfyUI GGUF catalog for this check.')}</div>` + (family === 'qwen_image' ? `<div style="margin-top:6px; opacity:0.85;">Qwen Image stays on the single-encoder path here. Select the main text encoder GGUF only; its matching mmproj file should live beside it in ComfyUI/models/text_encoders. ${qwenMmproj ? `Detected mmproj companion: ${escapeHtml(qwenMmproj)}.` : 'Neo could not confirm the mmproj companion yet from the current catalog.'} Neo will prefer the pig_qwen_image_vae_fp32-f16.gguf VAE when it is available, and can still fall back to compatible Qwen safetensors VAEs.</div>` : '');
+  }).join('') + `<div style="margin-top:8px; opacity:0.85;">${escapeHtml(aliasPieces.length ? `Alias-aware catalog merge active: ${aliasPieces.join(' + ')}.` : 'Using the live ComfyUI GGUF catalog for this check.')}</div>` + (family === 'qwen_image' ? `<div style="margin-top:6px; opacity:0.85;">Qwen Image stays on the single-encoder path here. Select the main text encoder GGUF only; its matching mmproj file should live beside it in ComfyUI/models/text_encoders or models/mmproj. ${qwenMmproj ? `Detected mmproj companion: ${escapeHtml(qwenMmproj)}.` : 'Neo could not confirm the mmproj companion yet from the current catalog.'} Neo will prefer the pig_qwen_image_vae_fp32-f16.gguf VAE when it is available, and can still fall back to compatible Qwen safetensors VAEs.</div>` : '') + (guardrailWarnings.length ? `<div style="margin-top:6px; opacity:0.85;">Guardrail warning: ${escapeHtml(guardrailWarnings[0])}</div>` : '');
 }
 
 window.NeoGenerationRuntimeShell.currentGenerationRuntimeProfile = function currentGenerationRuntimeProfile() {
@@ -304,6 +383,9 @@ window.NeoGenerationRuntimeShell.syncGenerationGGUFUI = function syncGenerationG
   const isGguf = source === 'gguf';
   const isFlux = nextType === 'flux';
   const isQwenImage = nextType === 'qwen_image';
+  if (isGguf && typeof window.NeoGenerationRuntimeShell.refreshGenerationGgufDropdownsForFamily === 'function') {
+    window.NeoGenerationRuntimeShell.refreshGenerationGgufDropdownsForFamily(nextType);
+  }
   $('generation-checkpoint-wrap')?.classList.toggle('is-hidden', isGguf);
   $('generation-gguf-wrap')?.classList.toggle('hidden', !isGguf);
   $('generation-gguf-wrap')?.classList.toggle('is-hidden', !isGguf);

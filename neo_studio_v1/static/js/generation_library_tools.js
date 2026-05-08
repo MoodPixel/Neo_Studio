@@ -1182,6 +1182,90 @@ function sanitizeGenerationPayload(payload) {
   return cleaned;
 }
 
+
+function normalizeGenerationCatalogScalar(item) {
+  if (typeof window !== 'undefined' && window.NeoGenerationRuntimeShell && typeof window.NeoGenerationRuntimeShell.normalizeGenerationCatalogValue === 'function') {
+    return String(window.NeoGenerationRuntimeShell.normalizeGenerationCatalogValue(item) || '').trim();
+  }
+  if (item && typeof item === 'object') {
+    return String(item.value || item.name || item.label || item.filename || '').trim();
+  }
+  return String(item || '').trim();
+}
+
+function collectGenerationGgufEffectivePayload(raw={}) {
+  const payload = (raw && typeof raw === 'object') ? raw : {};
+  const catalog = (typeof generationCatalogState !== 'undefined' && generationCatalogState) ? generationCatalogState : {};
+  const gguf = (catalog.gguf && typeof catalog.gguf === 'object') ? catalog.gguf : {};
+  const qwen = (catalog.qwen_image && typeof catalog.qwen_image === 'object') ? catalog.qwen_image : {};
+  const loaderNodes = (gguf.loader_nodes && typeof gguf.loader_nodes === 'object') ? gguf.loader_nodes : {};
+  const family = String(payload.family || '').trim().toLowerCase();
+  const modelSource = String(payload.model_source || '').trim().toLowerCase();
+  const clipType = family === 'qwen_image_edit'
+    ? 'qwen_image'
+    : (family === 'flux' ? 'flux' : String(payload.gguf_clip_type || 'flux').trim().toLowerCase());
+  const clipMode = clipType === 'qwen_image'
+    ? 'single'
+    : (String(payload.gguf_clip_mode || 'dual').trim().toLowerCase() === 'single' ? 'single' : 'dual');
+  const unet = String(payload.gguf_unet || '').trim();
+  const clipPrimary = String(payload.gguf_clip_primary || '').trim();
+  const clipSecondary = clipMode === 'dual' ? String(payload.gguf_clip_secondary || '').trim() : '';
+  const sources = (typeof window !== 'undefined' && window.NeoGenerationRuntimeShell && typeof window.NeoGenerationRuntimeShell.getGenerationGgufDropdownSources === 'function')
+    ? window.NeoGenerationRuntimeShell.getGenerationGgufDropdownSources(clipType)
+    : { mmproj: [] };
+  let mmproj = String(payload.gguf_mmproj || '').trim();
+  let mmprojSource = mmproj ? 'selected' : 'none';
+  if (!mmproj && clipType === 'qwen_image' && typeof window !== 'undefined' && window.NeoGenerationRuntimeShell && typeof window.NeoGenerationRuntimeShell.findGenerationQwenMmproj === 'function') {
+    mmproj = String(window.NeoGenerationRuntimeShell.findGenerationQwenMmproj(clipPrimary, sources.mmproj || null) || '').trim();
+    mmprojSource = mmproj ? 'auto_detected' : 'missing';
+  }
+  if (!mmproj && Array.isArray(qwen.mmproj_matches) && clipPrimary) {
+    const selectedBase = (window.NeoGenerationRuntimeShell && typeof window.NeoGenerationRuntimeShell.qwenCompanionBaseKey === 'function')
+      ? window.NeoGenerationRuntimeShell.qwenCompanionBaseKey(clipPrimary)
+      : clipPrimary.toLowerCase();
+    const match = qwen.mmproj_matches.find(row => {
+      const encoder = normalizeGenerationCatalogScalar(row?.encoder || row?.text_encoder || row?.name || '');
+      const rowBase = (window.NeoGenerationRuntimeShell && typeof window.NeoGenerationRuntimeShell.qwenCompanionBaseKey === 'function')
+        ? window.NeoGenerationRuntimeShell.qwenCompanionBaseKey(encoder)
+        : encoder.toLowerCase();
+      return rowBase && selectedBase && rowBase === selectedBase;
+    });
+    mmproj = normalizeGenerationCatalogScalar(match?.mmproj || match?.value || '');
+    mmprojSource = mmproj ? 'auto_detected' : mmprojSource;
+  }
+  const unetLoader = String(loaderNodes.unet || '').trim();
+  const clipLoader = clipMode === 'dual'
+    ? String(loaderNodes.clip_dual || '').trim()
+    : String(loaderNodes.clip_single || '').trim();
+  const vaeLoader = String(loaderNodes.vae || '').trim();
+  const mmprojRequired = clipType === 'qwen_image' && ['img2img', 'inpaint'].includes(String(payload.mode || payload.workflow_type || '').trim().toLowerCase());
+  return {
+    gguf_unet: unet,
+    gguf_clip_mode: clipMode,
+    gguf_clip_type: clipType,
+    gguf_clip_primary: clipPrimary,
+    gguf_clip_secondary: clipSecondary,
+    gguf_mmproj: mmproj,
+    _neo_raw_model_source: String($('generation-model-source')?.value || '').trim(),
+    _neo_raw_family: String($('generation-family')?.value || '').trim(),
+    _neo_effective_family: family,
+    _neo_effective_model_source: modelSource,
+    _neo_effective_gguf_unet: unet,
+    _neo_effective_gguf_clip_primary: clipPrimary,
+    _neo_effective_gguf_clip_secondary: clipSecondary,
+    _neo_effective_gguf_clip_mode: clipMode,
+    _neo_effective_gguf_clip_type: clipType,
+    _neo_effective_gguf_mmproj: mmproj,
+    _neo_effective_mmproj_source: mmprojSource,
+    _neo_effective_mmproj_required: mmprojRequired,
+    _neo_effective_gguf_unet_loader: unetLoader,
+    _neo_effective_gguf_clip_loader: clipLoader,
+    _neo_effective_gguf_vae_loader: vaeLoader,
+    _neo_gguf_catalog_source: (gguf.unet || gguf.clip || gguf.mmproj) ? 'explicit_gguf_catalog' : 'legacy_merged_catalog',
+    _neo_payload_transparency_version: 'phase7_gguf_effective_state',
+  };
+}
+
 function clampGenerationNumber(value, fallback, min=null, max=null) {
   const n = Number(value);
   let out = Number.isFinite(n) ? n : fallback;
@@ -1490,6 +1574,10 @@ function buildGenerationPayload() {
     outpaint_feather: Number($('generation-outpaint-feather')?.value || 24),
     notes: $('generation-workflow-notes')?.value || '',
   };
+  if (payload.model_source === 'gguf') {
+    Object.assign(payload, collectGenerationGgufEffectivePayload(payload));
+  }
+
   try {
     if (window.NeoSceneDirectorExtension && (typeof window.NeoSceneDirectorExtension.getGenerationPayload === 'function' || typeof window.NeoSceneDirectorExtension.getState === 'function')) {
       const rawSceneState = typeof window.NeoSceneDirectorExtension.getGenerationPayload === 'function'
