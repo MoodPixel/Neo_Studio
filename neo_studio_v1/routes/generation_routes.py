@@ -5186,6 +5186,84 @@ def _sync_scene_director_preview_execution_state(payload: dict, request_mode: st
         payload['_neo_scene_director_execution_mode'] = execution_mode
     return notes
 
+
+async def _first_available_object_info(adapter, aliases: list[str]) -> str:
+    for alias in aliases:
+        try:
+            info = await adapter.get_object_info(alias)
+            if isinstance(info, dict) and (info.get(alias) or info):
+                return alias
+        except Exception:
+            continue
+    return ''
+
+async def _validate_gguf_workflow_guardrails(adapter, payload: dict, request_mode: str) -> list[str]:
+    """Phase 9 guardrails: block invalid Flux/Qwen GGUF states before workflow compile."""
+    if not isinstance(payload, dict):
+        return []
+    family = str(payload.get('family') or payload.get('_neo_effective_family') or '').strip().lower()
+    if family in {'qwen', 'qwen_image'}:
+        family = 'qwen_image_edit'
+    model_source = str(payload.get('model_source') or payload.get('_neo_effective_model_source') or '').strip().lower()
+    is_flux = family == 'flux'
+    is_qwen = family == 'qwen_image_edit'
+    is_gguf = model_source == 'gguf' or is_flux or is_qwen
+    if not is_gguf:
+        return []
+
+    clip_type = 'qwen_image' if is_qwen else ('flux' if is_flux else str(payload.get('gguf_clip_type') or '').strip().lower())
+    clip_mode = 'single' if clip_type == 'qwen_image' else ('single' if str(payload.get('gguf_clip_mode') or '').strip().lower() == 'single' else 'dual')
+    label = 'Qwen' if is_qwen else ('Flux' if is_flux else 'GGUF')
+    blockers: list[str] = []
+    notes: list[str] = []
+
+    if not str(payload.get('gguf_unet') or payload.get('_neo_effective_gguf_unet') or '').strip():
+        blockers.append(f'{label} GGUF needs a GGUF model before queueing.')
+    if not str(payload.get('gguf_clip_primary') or payload.get('_neo_effective_gguf_clip_primary') or '').strip():
+        blockers.append(f'{label} GGUF needs the primary encoder before queueing.')
+    if clip_mode == 'dual' and not str(payload.get('gguf_clip_secondary') or payload.get('_neo_effective_gguf_clip_secondary') or '').strip():
+        blockers.append('Flux GGUF needs the second encoder before queueing.')
+    if not str(payload.get('vae') or '').strip():
+        blockers.append(f'{label} GGUF needs a VAE before queueing.')
+
+    unet_loader = await _first_available_object_info(adapter, ['UnetLoaderGGUF', 'LoaderGGUF'])
+    if not unet_loader:
+        blockers.append('ComfyUI did not expose LoaderGGUF/UnetLoaderGGUF. Install or enable the GGUF node pack before queueing.')
+    clip_loader = await _first_available_object_info(adapter, ['DualCLIPLoaderGGUF'] if clip_mode == 'dual' else ['CLIPLoaderGGUF', 'ClipLoaderGGUF'])
+    if not clip_loader:
+        if clip_mode == 'dual':
+            blockers.append('Flux GGUF needs DualCLIPLoaderGGUF from ComfyUI before queueing.')
+        else:
+            blockers.append('Qwen GGUF needs CLIPLoaderGGUF/ClipLoaderGGUF from ComfyUI before queueing.')
+    vae_loader = await _first_available_object_info(adapter, ['VaeGGUF', 'VAELoaderGGUF'])
+    if vae_loader:
+        notes.append(f'GGUF guardrail: using {unet_loader or "missing UNet loader"} + {clip_loader or "missing CLIP loader"} + {vae_loader}.')
+    else:
+        notes.append('GGUF guardrail warning: no GGUF VAE loader alias was reported; compiler may use fallback VAE behavior if available.')
+
+    source_fields = payload.get('source_image_fields') if isinstance(payload.get('source_image_fields'), list) else []
+    has_uploaded_qwen_source = bool(str(payload.get('source_image__2_name') or payload.get('source_image__3_name') or '').strip())
+    qwen_uses_image_context = is_qwen and (request_mode in {'img2img', 'inpaint'} or bool(source_fields) or has_uploaded_qwen_source)
+    mmproj = str(payload.get('gguf_mmproj') or payload.get('_neo_effective_gguf_mmproj') or '').strip()
+    if qwen_uses_image_context and not mmproj:
+        blockers.append('Qwen image/reference workflows need a matching mmproj sidecar. Put it in ComfyUI models/mmproj or text_encoders, then refresh the catalog.')
+    if is_qwen and str(payload.get('gguf_clip_mode') or '').strip().lower() == 'dual':
+        notes.append('Qwen guardrail auto-scope: Qwen uses the single-encoder GGUF path; secondary encoder state is ignored.')
+
+    if (is_qwen or is_flux) and (payload.get('ipadapter_units') or payload.get('scene_director_ipadapter_units')):
+        blockers.append(f'{label} GGUF currently blocks IP-Adapter. Disable IP-Adapter or switch to an SDXL checkpoint workflow.')
+
+    if blockers:
+        payload['_neo_gguf_guardrail_status'] = 'blocked'
+        payload['_neo_gguf_guardrail_blockers'] = blockers
+        payload['_neo_gguf_guardrail_version'] = 'phase9_backend_guardrails'
+        raise ValueError(blockers[0])
+    payload['_neo_gguf_guardrail_status'] = 'pass'
+    payload['_neo_gguf_guardrail_family'] = family
+    payload['_neo_gguf_guardrail_version'] = 'phase9_backend_guardrails'
+    return notes
+
+
 @router.post('/api/generation/queue')
 async def api_generation_queue(request: Request, background_tasks: BackgroundTasks):
     adapter, session, error = _image_profile_or_error()
@@ -5311,6 +5389,7 @@ async def api_generation_queue(request: Request, background_tasks: BackgroundTas
         pre_compile_notes.extend(_normalize_scene_director_appearance_lock_payload(payload))
         pre_compile_notes.extend(await _configure_scene_director_node_selection(adapter, payload))
         pre_compile_notes.extend(prepare_detailer_assets_for_payload(payload))
+        pre_compile_notes.extend(await _validate_gguf_workflow_guardrails(adapter, payload, request_mode))
 
         support_check = validate_generation_support(
             payload.get('family') or '',
