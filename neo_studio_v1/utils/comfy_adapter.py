@@ -218,6 +218,7 @@ class ComfyBackendAdapter:
         controlnet = []
         ipadapter = []
         clip_vision = []
+        mmproj_models = []
         upscale_models = []
         facerestore_models = []
         samplers = []
@@ -238,6 +239,8 @@ class ComfyBackendAdapter:
             ('controlnet', 'controlnet'),
             ('ipadapter', 'ipadapter'),
             ('clip_vision', 'clip_vision'),
+            ('mmproj', 'mmproj_models'),
+            ('mmproj_models', 'mmproj_models'),
             ('upscale_models', 'upscale_models'),
             ('facerestore_models', 'facerestore_models'),
         ):
@@ -265,6 +268,8 @@ class ComfyBackendAdapter:
                 ipadapter = values
             elif target == 'clip_vision':
                 clip_vision = values
+            elif target == 'mmproj_models':
+                mmproj_models = self._merge_string_lists(mmproj_models, values)
             elif target == 'upscale_models':
                 upscale_models = values
             elif target == 'facerestore_models':
@@ -299,20 +304,283 @@ class ComfyBackendAdapter:
                     return True
             return False
 
+        async def _first_existing_node_name(*node_names: str) -> str:
+            for node_name in node_names:
+                if await _node_exists(node_name):
+                    return node_name
+            return ''
+
+        async def _existing_node_aliases(*node_names: str) -> list[str]:
+            aliases = []
+            for node_name in node_names:
+                if await _node_exists(node_name):
+                    aliases.append(node_name)
+            return aliases
+
         # GGUF loader nodes on some Comfy builds expose the real model choices only
-        # through object_info, not through /models/* catalog endpoints.
-        gguf_unet_info = await _first_node_info('UnetLoaderGGUF', 'LoaderGGUF')
-        gguf_dual_clip_info = await _get_node_info('DualCLIPLoaderGGUF')
-        gguf_single_clip_info = await _first_node_info('CLIPLoaderGGUF', 'ClipLoaderGGUF')
-        gguf_vae_info = await _get_node_info('VaeGGUF')
+        # through object_info, not through /models/* catalog endpoints. Phase 3 keeps
+        # the alias map explicit so Flux/Qwen compile can use the detected node name
+        # instead of hardcoding one Comfy custom-node spelling.
+        gguf_unet_loader_aliases = ('UnetLoaderGGUF', 'LoaderGGUF')
+        gguf_single_clip_loader_aliases = ('CLIPLoaderGGUF', 'ClipLoaderGGUF')
+        gguf_dual_clip_loader_aliases = ('DualCLIPLoaderGGUF',)
+        gguf_vae_loader_aliases = ('VaeGGUF', 'VAELoaderGGUF')
+
+        gguf_unet_available_aliases = await _existing_node_aliases(*gguf_unet_loader_aliases)
+        gguf_single_clip_available_aliases = await _existing_node_aliases(*gguf_single_clip_loader_aliases)
+        gguf_dual_clip_available_aliases = await _existing_node_aliases(*gguf_dual_clip_loader_aliases)
+        gguf_vae_available_aliases = await _existing_node_aliases(*gguf_vae_loader_aliases)
+
+        gguf_unet_loader_node = gguf_unet_available_aliases[0] if gguf_unet_available_aliases else ''
+        gguf_single_clip_loader_node = gguf_single_clip_available_aliases[0] if gguf_single_clip_available_aliases else ''
+        gguf_dual_clip_loader_node = gguf_dual_clip_available_aliases[0] if gguf_dual_clip_available_aliases else ''
+        gguf_vae_loader_node = gguf_vae_available_aliases[0] if gguf_vae_available_aliases else ''
+
+        gguf_loader_alias_status = {
+            'unet': {
+                'candidates': list(gguf_unet_loader_aliases),
+                'available': gguf_unet_available_aliases,
+                'effective': gguf_unet_loader_node,
+            },
+            'clip_single': {
+                'candidates': list(gguf_single_clip_loader_aliases),
+                'available': gguf_single_clip_available_aliases,
+                'effective': gguf_single_clip_loader_node,
+            },
+            'clip_dual': {
+                'candidates': list(gguf_dual_clip_loader_aliases),
+                'available': gguf_dual_clip_available_aliases,
+                'effective': gguf_dual_clip_loader_node,
+            },
+            'vae': {
+                'candidates': list(gguf_vae_loader_aliases),
+                'available': gguf_vae_available_aliases,
+                'effective': gguf_vae_loader_node,
+            },
+        }
+
+        gguf_unet_info = await _get_node_info(gguf_unet_loader_node) if gguf_unet_loader_node else {}
+        gguf_dual_clip_info = await _get_node_info(gguf_dual_clip_loader_node) if gguf_dual_clip_loader_node else {}
+        gguf_single_clip_info = await _get_node_info(gguf_single_clip_loader_node) if gguf_single_clip_loader_node else {}
+        gguf_vae_info = await _get_node_info(gguf_vae_loader_node) if gguf_vae_loader_node else {}
 
         gguf_unet_choices = self._extract_node_required_choices(gguf_unet_info, 'unet_name', 'gguf_name')
-        gguf_clip_choices = self._merge_string_lists(
-            self._extract_node_required_choices(gguf_dual_clip_info, 'clip_name1', 'clip_name2'),
-            self._extract_node_required_choices(gguf_single_clip_info, 'clip_name'),
-        )
+        gguf_clip_dual_choices = self._extract_node_required_choices(gguf_dual_clip_info, 'clip_name1', 'clip_name2')
+        gguf_clip_single_choices = self._extract_node_required_choices(gguf_single_clip_info, 'clip_name')
+        gguf_clip_choices = self._merge_string_lists(gguf_clip_dual_choices, gguf_clip_single_choices)
         gguf_vae_choices = self._extract_node_required_choices(gguf_vae_info, 'vae_name')
 
+        def _is_mmproj_asset(value: str) -> bool:
+            lowered = str(value or '').casefold()
+            if not lowered:
+                return False
+            return bool(
+                'mmproj' in lowered
+                or 'mm_proj' in lowered
+                or 'mm-proj' in lowered
+                or ('vision' in lowered and ('qwen' in lowered or 'image' in lowered))
+                or ('projector' in lowered and ('qwen' in lowered or 'image' in lowered))
+            )
+
+        def _is_qwen_text_encoder_asset(value: str) -> bool:
+            lowered = str(value or '').casefold()
+            return bool(('qwen' in lowered or 'qw' in lowered) and not _is_mmproj_asset(value))
+
+        def _qwen_mmproj_match_score(encoder: str, mmproj: str) -> int:
+            encoder_key = str(encoder or '').casefold().replace('\\', '/').split('/')[-1]
+            mmproj_key = str(mmproj or '').casefold().replace('\\', '/').split('/')[-1]
+            if not encoder_key or not mmproj_key:
+                return 0
+            score = 0
+            for token in ('qwen', 'qwen2', 'qwen2.5', 'qwen_image', 'image', 'edit', 'vl'):
+                token_key = token.casefold()
+                if token_key in encoder_key and token_key in mmproj_key:
+                    score += 8
+            for token in ('fp8', 'f16', 'bf16', 'gguf', '4bit', '8bit'):
+                token_key = token.casefold()
+                if token_key in encoder_key and token_key in mmproj_key:
+                    score += 2
+            encoder_stem = encoder_key.rsplit('.', 1)[0]
+            mmproj_stem = mmproj_key.rsplit('.', 1)[0]
+            if encoder_stem and encoder_stem in mmproj_stem:
+                score += 20
+            if mmproj_stem and mmproj_stem in encoder_stem:
+                score += 20
+            return score
+
+        def _build_qwen_mmproj_matches(encoders: list[str], mmprojs: list[str]) -> dict:
+            matches = {}
+            for encoder in self._clean_string_list(encoders):
+                ranked = sorted(
+                    (
+                        {
+                            'name': mmproj,
+                            'score': _qwen_mmproj_match_score(encoder, mmproj),
+                            'source': 'catalog_match',
+                        }
+                        for mmproj in self._clean_string_list(mmprojs)
+                    ),
+                    key=lambda item: (-int(item.get('score') or 0), str(item.get('name') or '').casefold()),
+                )
+                positive = [item for item in ranked if int(item.get('score') or 0) > 0]
+                matches[encoder] = {
+                    'auto': positive[0]['name'] if positive else '',
+                    'candidates': positive or ranked[:5],
+                    'status': 'auto_detected' if positive else ('available_unmatched' if ranked else 'missing'),
+                }
+            return matches
+
+        mmproj_source_candidates = self._merge_string_lists(
+            mmproj_models,
+            gguf_clip_single_choices,
+            gguf_clip_choices,
+            text_encoders,
+            clip,
+            clip_vision,
+        )
+        gguf_mmproj_choices = [item for item in mmproj_source_candidates if _is_mmproj_asset(item)]
+        qwen_text_encoder_choices = [item for item in self._merge_string_lists(gguf_clip_single_choices, text_encoders, gguf_clip_choices) if _is_qwen_text_encoder_asset(item)]
+        qwen_preferred_vae_choices = [item for item in self._merge_string_lists(gguf_vae_choices, vae) if 'qwen' in str(item or '').casefold() or 'pig_qwen_image_vae' in str(item or '').casefold()]
+        qwen_mmproj_matches = _build_qwen_mmproj_matches(qwen_text_encoder_choices, gguf_mmproj_choices)
+
+        gguf_catalog = {
+            'unet': self._clean_string_list(gguf_unet_choices),
+            'clip': self._clean_string_list(gguf_clip_choices),
+            'clip_single': self._clean_string_list(gguf_clip_single_choices),
+            'clip_dual': self._clean_string_list(gguf_clip_dual_choices),
+            'mmproj': self._clean_string_list(gguf_mmproj_choices),
+            'mmproj_sources': {
+                'mmproj_folder': self._clean_string_list(mmproj_models),
+                'clip_loader_choices': self._clean_string_list(gguf_clip_choices),
+                'text_encoders_folder': self._clean_string_list(text_encoders),
+                'clip_folder': self._clean_string_list(clip),
+                'clip_vision_folder': self._clean_string_list(clip_vision),
+            },
+            'vae': self._clean_string_list(gguf_vae_choices),
+            'loader_nodes': {
+                'unet': gguf_unet_loader_node,
+                'clip_single': gguf_single_clip_loader_node,
+                'clip_dual': gguf_dual_clip_loader_node,
+                'vae': gguf_vae_loader_node,
+            },
+            'loader_aliases': gguf_loader_alias_status,
+            'loader_available': {
+                'unet': bool(gguf_unet_loader_node),
+                'clip_single': bool(gguf_single_clip_loader_node),
+                'clip_dual': bool(gguf_dual_clip_loader_node),
+                'vae': bool(gguf_vae_loader_node),
+            },
+            'source': 'comfy_object_info',
+            'legacy_merged_into': ['unet', 'clip', 'vae'],
+        }
+        qwen_base_missing = []
+        if not gguf_unet_loader_node:
+            qwen_base_missing.append('GGUF UNet loader node')
+        if not gguf_single_clip_loader_node:
+            qwen_base_missing.append('GGUF single CLIP loader node')
+        if not gguf_unet_choices:
+            qwen_base_missing.append('Qwen GGUF model choice')
+        if not qwen_text_encoder_choices:
+            qwen_base_missing.append('Qwen text encoder GGUF')
+
+        qwen_mmproj_missing = []
+        if not gguf_mmproj_choices:
+            qwen_mmproj_missing.append('Qwen mmproj sidecar')
+
+        qwen_base_ready = bool(
+            gguf_unet_loader_node
+            and gguf_single_clip_loader_node
+            and gguf_unet_choices
+            and qwen_text_encoder_choices
+        )
+        qwen_image_workflow_ready = bool(qwen_base_ready and gguf_mmproj_choices)
+        qwen_missing = self._clean_string_list(qwen_base_missing + qwen_mmproj_missing)
+        qwen_blockers = self._clean_string_list(qwen_base_missing)
+        qwen_warnings = []
+        if qwen_base_ready and not gguf_mmproj_choices:
+            qwen_warnings.append('Qwen base GGUF assets are available, but mmproj is missing; image/reference/img2img/inpaint workflows must stay blocked until mmproj is selected or detected.')
+        if gguf_mmproj_choices and qwen_text_encoder_choices and not any((entry.get('best_match') or {}).get('name') for entry in qwen_mmproj_matches.values() if isinstance(entry, dict)):
+            qwen_warnings.append('Qwen mmproj files are available, but no strong encoder match was detected; UI should expose manual selection before launch.')
+
+        qwen_readiness = {
+            'base_ready': qwen_base_ready,
+            'image_workflow_ready': qwen_image_workflow_ready,
+            'ready': qwen_image_workflow_ready,
+            'mmproj_ready': bool(gguf_mmproj_choices),
+            'mmproj_status': 'available' if gguf_mmproj_choices else 'missing',
+            'required': {
+                'gguf_unet_loader': bool(gguf_unet_loader_node),
+                'gguf_single_clip_loader': bool(gguf_single_clip_loader_node),
+                'gguf_unet_model': bool(gguf_unet_choices),
+                'qwen_text_encoder': bool(qwen_text_encoder_choices),
+                'qwen_mmproj': bool(gguf_mmproj_choices),
+            },
+            'missing': qwen_missing,
+            'blockers': qwen_blockers,
+            'warnings': self._clean_string_list(qwen_warnings),
+            'route_ready': {
+                'txt2img': qwen_base_ready,
+                'img2img': qwen_image_workflow_ready,
+                'inpaint': qwen_image_workflow_ready,
+                'reference_image': qwen_image_workflow_ready,
+                'multi_source_reference': qwen_image_workflow_ready,
+            },
+            'route_blockers': {
+                'txt2img': self._clean_string_list(qwen_base_missing),
+                'img2img': self._clean_string_list(qwen_base_missing + qwen_mmproj_missing),
+                'inpaint': self._clean_string_list(qwen_base_missing + qwen_mmproj_missing),
+                'reference_image': self._clean_string_list(qwen_base_missing + qwen_mmproj_missing),
+                'multi_source_reference': self._clean_string_list(qwen_base_missing + qwen_mmproj_missing),
+            },
+            'source': 'comfy_object_info',
+        }
+
+        qwen_image_catalog = {
+            'text_encoders': self._clean_string_list(qwen_text_encoder_choices),
+            'mmproj': self._clean_string_list(gguf_mmproj_choices),
+            'mmproj_matches': qwen_mmproj_matches,
+            'mmproj_required_for': ['img2img', 'inpaint', 'reference_image', 'multi_source_reference'],
+            'mmproj_status': qwen_readiness['mmproj_status'],
+            'preferred_vae': self._clean_string_list(qwen_preferred_vae_choices),
+            'ready': qwen_readiness['ready'],
+            'base_ready': qwen_readiness['base_ready'],
+            'image_workflow_ready': qwen_readiness['image_workflow_ready'],
+            'missing': qwen_missing,
+            'blockers': qwen_blockers,
+            'warnings': qwen_readiness['warnings'],
+            'readiness': qwen_readiness,
+            'loader_nodes': {
+                'unet': gguf_unet_loader_node,
+                'clip_single': gguf_single_clip_loader_node,
+                'vae': gguf_vae_loader_node,
+            },
+            'source': 'comfy_object_info',
+        }
+        flux_missing = []
+        if not gguf_unet_loader_node:
+            flux_missing.append('GGUF UNet loader node')
+        if not gguf_dual_clip_loader_node:
+            flux_missing.append('GGUF dual CLIP loader node')
+        if not gguf_unet_choices:
+            flux_missing.append('Flux GGUF model choice')
+        if not gguf_clip_dual_choices:
+            flux_missing.append('Flux dual encoder choices')
+        flux_gguf_catalog = {
+            'unet': self._clean_string_list(gguf_unet_choices),
+            'clip': self._clean_string_list(gguf_clip_dual_choices),
+            'vae': self._clean_string_list(gguf_vae_choices),
+            'ready': bool(gguf_unet_loader_node and gguf_dual_clip_loader_node and gguf_unet_choices and gguf_clip_dual_choices),
+            'missing': flux_missing,
+            'loader_nodes': {
+                'unet': gguf_unet_loader_node,
+                'clip_dual': gguf_dual_clip_loader_node,
+                'vae': gguf_vae_loader_node,
+            },
+            'source': 'comfy_object_info',
+        }
+
+        # Backward compatibility: older UI code still reads the normal model lists.
+        # Keep merging GGUF choices there while also exposing the new separated catalog.
         merged_unet = self._merge_string_lists(merged_unet, gguf_unet_choices)
         merged_clip = self._merge_string_lists(merged_clip, gguf_clip_choices)
         vae = self._merge_string_lists(vae, gguf_vae_choices)
@@ -423,10 +691,11 @@ class ComfyBackendAdapter:
             'ipadapter_unified_loader_faceid': await _node_exists('IPAdapterUnifiedLoaderFaceID'),
             'ipadapter_faceid': await _node_exists('IPAdapterFaceID'),
             'supir_upscale': await _node_exists('SUPIR_Upscale'),
-            'gguf_unet_loader': await _node_exists_any('UnetLoaderGGUF', 'LoaderGGUF'),
-            'gguf_dual_clip_loader': await _node_exists('DualCLIPLoaderGGUF'),
-            'gguf_clip_loader': await _node_exists_any('CLIPLoaderGGUF', 'ClipLoaderGGUF'),
-            'gguf_vae_loader': await _node_exists('VaeGGUF'),
+            'gguf_unet_loader': bool(gguf_unet_loader_node),
+            'gguf_dual_clip_loader': bool(gguf_dual_clip_loader_node),
+            'gguf_clip_loader': bool(gguf_single_clip_loader_node),
+            'gguf_vae_loader': bool(gguf_vae_loader_node),
+            'gguf_loader_aliases': gguf_loader_alias_status,
             'qwen_text_encode_plus': await _node_exists('TextEncodeQwenImageEditPlus'),
             'qwen_model_sampling': await _node_exists('ModelSamplingAuraFlow'),
             'qwen_cfgnorm': await _node_exists('CFGNorm'),
@@ -546,11 +815,15 @@ class ComfyBackendAdapter:
             'controlnet': controlnet if isinstance(controlnet, list) else [],
             'ipadapter': ipadapter if isinstance(ipadapter, list) else [],
             'clip_vision': clip_vision if isinstance(clip_vision, list) else [],
+            'mmproj_models': mmproj_models if isinstance(mmproj_models, list) else [],
             'upscale_models': upscale_models if isinstance(upscale_models, list) else [],
             'facerestore_models': facerestore_models if isinstance(facerestore_models, list) else [],
             'samplers': samplers,
             'schedulers': schedulers,
             'features': features,
+            'gguf': gguf_catalog,
+            'qwen_image': qwen_image_catalog,
+            'flux_gguf': flux_gguf_catalog,
             'res4lyf': res4lyf,
             'dynamic_thresholding': dynamic_thresholding,
             'regional_backend_capabilities': regional_backend_capabilities,

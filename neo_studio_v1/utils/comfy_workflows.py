@@ -4165,7 +4165,49 @@ def _build_standard_sdxl_outpaint_sampler_input(
 
 
 
-def _apply_phase9_effective_payload_hygiene(payload: Dict[str, Any], *, mode: str, family: str, model_source: str, inpaint_backend: str, scene_director_requested: bool) -> tuple[str, str, list[str]]:
+
+# Phase 8 GGUF compiler helpers: use alias-aware loader nodes supplied by the
+# catalog/runtime payload. These helpers keep raw UI state intact and only affect
+# the compiled graph node class/input contract.
+def _normalize_gguf_loader_class(value: Any, *, kind: str, fallback: str) -> str:
+    candidate = str(value or '').strip()
+    allowed = {
+        'unet': {'UnetLoaderGGUF', 'LoaderGGUF'},
+        'clip_single': {'CLIPLoaderGGUF', 'ClipLoaderGGUF'},
+        'clip_dual': {'DualCLIPLoaderGGUF'},
+        'vae': {'VaeGGUF', 'VAELoaderGGUF'},
+    }.get(kind, set())
+    return candidate if candidate in allowed else fallback
+
+
+def _gguf_unet_loader_inputs(loader_class: str, unet_name: str) -> dict[str, Any]:
+    # city96/ComfyUI-GGUF has exposed both names across builds. LoaderGGUF uses
+    # gguf_name while UnetLoaderGGUF uses unet_name.
+    if loader_class == 'LoaderGGUF':
+        return {'gguf_name': unet_name}
+    return {'unet_name': unet_name}
+
+
+def _gguf_clip_loader_inputs(loader_class: str, *, clip_name: str, clip_type: str, device: str = 'default') -> dict[str, Any]:
+    # CLIPLoaderGGUF / ClipLoaderGGUF share the same practical contract in the
+    # supported GGUF nodes. Keep the class alias flexible but the input keys stable.
+    inputs: dict[str, Any] = {
+        'clip_name': clip_name,
+        'type': clip_type,
+    }
+    if loader_class in {'CLIPLoaderGGUF', 'ClipLoaderGGUF'}:
+        inputs['device'] = device
+    return inputs
+
+
+def _gguf_dual_clip_loader_inputs(*, clip_name1: str, clip_name2: str, clip_type: str) -> dict[str, Any]:
+    return {
+        'clip_name1': clip_name1,
+        'clip_name2': clip_name2,
+        'type': clip_type,
+    }
+
+def _apply_phase9_effective_payload_hygiene(payload: Dict[str, Any], *, mode: str, family: str, model_source: str, inpaint_backend: str, scene_director_requested: bool, gguf_unet: str = '', gguf_clip_primary: str = '', gguf_clip_secondary: str = '', gguf_clip_mode: str = '', gguf_clip_type: str = '', gguf_mmproj: str = '') -> tuple[str, str, list[str]]:
     """Normalize compiled workflow intent without deleting raw UI state.
 
     Phase 9 policy:
@@ -4205,6 +4247,23 @@ def _apply_phase9_effective_payload_hygiene(payload: Dict[str, Any], *, mode: st
     payload['_neo_effective_inpaint_backend'] = effective_backend
     payload['_neo_effective_lanpaint_route'] = effective_lanpaint_route
     payload['_neo_effective_qwen_route'] = effective_qwen_route
+    if effective_model_source == 'gguf':
+        payload['gguf_clip_mode'] = gguf_clip_mode
+        payload['gguf_clip_type'] = gguf_clip_type
+        payload['gguf_clip_primary'] = gguf_clip_primary
+        payload['gguf_clip_secondary'] = gguf_clip_secondary
+        if gguf_mmproj:
+            payload['gguf_mmproj'] = gguf_mmproj
+        payload['_neo_effective_gguf_unet'] = gguf_unet
+        payload['_neo_effective_gguf_clip_primary'] = gguf_clip_primary
+        payload['_neo_effective_gguf_clip_secondary'] = gguf_clip_secondary
+        payload['_neo_effective_gguf_clip_mode'] = gguf_clip_mode
+        payload['_neo_effective_gguf_clip_type'] = gguf_clip_type
+        payload['_neo_effective_gguf_mmproj'] = gguf_mmproj
+        payload['_neo_effective_mmproj_source'] = str(payload.get('_neo_effective_mmproj_source') or ('selected' if gguf_mmproj else 'missing' if gguf_clip_type == 'qwen_image' else 'none')).strip()
+        payload['_neo_effective_mmproj_required'] = bool(payload.get('_neo_effective_mmproj_required') or (gguf_clip_type == 'qwen_image' and mode in {'img2img', 'inpaint'}))
+        payload['_neo_payload_transparency_version'] = str(payload.get('_neo_payload_transparency_version') or 'phase7_gguf_effective_state')
+        payload['_neo_gguf_catalog_source'] = str(payload.get('_neo_gguf_catalog_source') or 'frontend_effective_state')
     payload['_neo_scene_director_applied'] = effective_scene_director_applied
     payload['_neo_scene_director_mode'] = mode
     scene_state = payload.get('scene_director_state')
@@ -4287,8 +4346,26 @@ def build_generation_workflow(payload: Dict[str, Any]) -> Tuple[Dict[str, Any], 
             gguf_clip_type = 'stable_diffusion'
     gguf_clip_primary = str(payload.get('gguf_clip_primary') or '').strip()
     gguf_clip_secondary = str(payload.get('gguf_clip_secondary') or '').strip()
+    gguf_mmproj = str(payload.get('gguf_mmproj') or payload.get('_neo_effective_gguf_mmproj') or '').strip()
+    if family == 'qwen_image_edit' and gguf_clip_mode == 'single':
+        gguf_clip_secondary = ''
     gguf_guidance_default = 3.0 if gguf_clip_type == 'qwen_image' else 3.5
     gguf_guidance = _clamp_float(payload.get('gguf_guidance') or gguf_guidance_default, gguf_guidance_default, 0.0, 20.0)
+    gguf_unet_loader_class = _normalize_gguf_loader_class(
+        payload.get('_neo_effective_gguf_unet_loader'),
+        kind='unet',
+        fallback='LoaderGGUF' if family == 'qwen_image_edit' else 'UnetLoaderGGUF',
+    )
+    gguf_clip_loader_class = _normalize_gguf_loader_class(
+        payload.get('_neo_effective_gguf_clip_loader'),
+        kind='clip_single' if gguf_clip_mode == 'single' else 'clip_dual',
+        fallback='ClipLoaderGGUF' if family == 'qwen_image_edit' else ('DualCLIPLoaderGGUF' if gguf_clip_mode == 'dual' else 'CLIPLoaderGGUF'),
+    )
+    gguf_vae_loader_class = _normalize_gguf_loader_class(
+        payload.get('_neo_effective_gguf_vae_loader'),
+        kind='vae',
+        fallback='VaeGGUF',
+    )
 
     if model_source == 'gguf':
         if not gguf_unet:
@@ -4375,6 +4452,13 @@ def build_generation_workflow(payload: Dict[str, Any]) -> Tuple[Dict[str, Any], 
     if model_source == 'gguf':
         compile_notes.append(f"GGUF workflow enabled · {gguf_unet}")
         compile_notes.append(f"GGUF encoder path: {gguf_clip_mode} · {gguf_clip_type.replace('_', ' ')}")
+        compile_notes.append(f"GGUF loader classes: UNet={gguf_unet_loader_class}, CLIP={gguf_clip_loader_class}, VAE={gguf_vae_loader_class}")
+        payload['_neo_effective_gguf_unet_loader'] = gguf_unet_loader_class
+        payload['_neo_effective_gguf_clip_loader'] = gguf_clip_loader_class
+        payload['_neo_effective_gguf_vae_loader'] = gguf_vae_loader_class
+        if qwen_mode:
+            payload['_neo_effective_gguf_mmproj'] = gguf_mmproj
+            payload['_neo_effective_mmproj_source'] = str(payload.get('_neo_effective_mmproj_source') or ('selected' if gguf_mmproj else 'missing')).strip()
         if not vae_name:
             raise ValueError('Choose a VAE for the GGUF workflow first.')
 
@@ -4386,6 +4470,12 @@ def build_generation_workflow(payload: Dict[str, Any]) -> Tuple[Dict[str, Any], 
         model_source=model_source,
         inpaint_backend=inpaint_backend,
         scene_director_requested=scene_director_requested,
+        gguf_unet=gguf_unet,
+        gguf_clip_primary=gguf_clip_primary,
+        gguf_clip_secondary=gguf_clip_secondary,
+        gguf_clip_mode=gguf_clip_mode,
+        gguf_clip_type=gguf_clip_type,
+        gguf_mmproj=gguf_mmproj,
     )
     compile_notes.extend(hygiene_notes)
     if scene_director_requested and mode == 'outpaint':
@@ -4526,49 +4616,38 @@ def build_generation_workflow(payload: Dict[str, Any]) -> Tuple[Dict[str, Any], 
     graph: Dict[str, Any] = {}
     next_id = 1
     if model_source == 'gguf':
-        if qwen_mode:
+        graph[str(next_id)] = {
+            'class_type': gguf_unet_loader_class,
+            'inputs': _gguf_unet_loader_inputs(gguf_unet_loader_class, gguf_unet),
+        }
+        model_ref = [str(next_id), 0]
+        next_id += 1
+        if qwen_mode or gguf_clip_mode == 'single':
             graph[str(next_id)] = {
-                'class_type': 'LoaderGGUF',
-                'inputs': {
-                    'gguf_name': gguf_unet,
-                },
+                'class_type': gguf_clip_loader_class,
+                'inputs': _gguf_clip_loader_inputs(
+                    gguf_clip_loader_class,
+                    clip_name=gguf_clip_primary,
+                    clip_type=gguf_clip_type,
+                    device='default',
+                ),
             }
-            model_ref = [str(next_id), 0]
-            next_id += 1
-            graph[str(next_id)] = {
-                'class_type': 'ClipLoaderGGUF',
-                'inputs': {
-                    'clip_name': gguf_clip_primary,
-                    'type': gguf_clip_type,
-                    'device': 'default',
-                },
-            }
+            if qwen_mode and gguf_mmproj:
+                # The Qwen mmproj sidecar is kept as explicit metadata because the
+                # current CLIPLoaderGGUF contract exposes a single clip_name input;
+                # supported Qwen GGUF loaders discover/load the mmproj companion
+                # from the text_encoders catalog/folder. Do not inject a hidden or
+                # unsupported node input here.
+                graph[str(next_id)].setdefault('_meta', {})['neo_mmproj_sidecar'] = gguf_mmproj
         else:
             graph[str(next_id)] = {
-                'class_type': 'UnetLoaderGGUF',
-                'inputs': {
-                    'unet_name': gguf_unet,
-                },
+                'class_type': gguf_clip_loader_class,
+                'inputs': _gguf_dual_clip_loader_inputs(
+                    clip_name1=gguf_clip_primary,
+                    clip_name2=gguf_clip_secondary,
+                    clip_type=gguf_clip_type,
+                ),
             }
-            model_ref = [str(next_id), 0]
-            next_id += 1
-            if gguf_clip_mode == 'dual':
-                graph[str(next_id)] = {
-                    'class_type': 'DualCLIPLoaderGGUF',
-                    'inputs': {
-                        'clip_name1': gguf_clip_primary,
-                        'clip_name2': gguf_clip_secondary,
-                        'type': gguf_clip_type,
-                    },
-                }
-            else:
-                graph[str(next_id)] = {
-                    'class_type': 'CLIPLoaderGGUF',
-                    'inputs': {
-                        'clip_name': gguf_clip_primary,
-                        'type': gguf_clip_type,
-                    },
-                }
         clip_ref = [str(next_id), 0]
         next_id += 1
         vae_ref = None
@@ -4589,8 +4668,10 @@ def build_generation_workflow(payload: Dict[str, Any]) -> Tuple[Dict[str, Any], 
     payload['_neo_checkpoint_vae_ref'] = ['1', 2] if '1' in graph else None
     if vae_name:
         vae_is_gguf = vae_name.lower().endswith('.gguf')
-        vae_loader_class = 'VaeGGUF' if vae_is_gguf else 'VAELoader'
-        if vae_is_gguf and not qwen_mode:
+        vae_loader_class = gguf_vae_loader_class if (vae_is_gguf and model_source == 'gguf') else ('VaeGGUF' if vae_is_gguf else 'VAELoader')
+        if vae_is_gguf and model_source == 'gguf':
+            compile_notes.append(f'GGUF VAE routing engaged through {vae_loader_class}.')
+        elif vae_is_gguf and not qwen_mode:
             compile_notes.append('GGUF VAE routing engaged for the selected VAE asset.')
         graph[str(next_id)] = {
             'class_type': vae_loader_class,
