@@ -57,6 +57,10 @@ Ongoing improvements focus on:
 ---
 
 ## 🛠️ Update
+**May/09/2026 - Image Tab**
+
+| Flux + Qwen GGUF | ✅ GGUF Workflow Recovery Fix | Fixed an issue where GGUF models were not properly loading or appearing under the Flux and Qwen workflow families due to loader alias detection, catalog separation, and workflow routing regressions. Restored GGUF model visibility, mmproj discovery, payload validation, and workflow compatibility across user repositories. |
+
 **May/08/2026 - Image Tab**
 
 | System | Update | Details |
