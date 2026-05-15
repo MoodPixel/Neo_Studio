@@ -7,6 +7,28 @@ Neo Studio does not include AI models or backend engines by itself. Instead, it 
 Instead of juggling separate tools manually, Neo Studio helps connect and organize them so creators can focus on building, testing, and refining their workflows.
 
 ![Image](docs/Assets/Image/Main.png)
+
+---
+# Table of Contents
+
+- [✨ Features](#-features)
+- [🚧 Project Status](#-project-status)
+- [🛠️ Update](#️-update)
+- [🛣️ Roadmap (Planned)](#️-roadmap-planned)
+- [🖼️ Main Tabs Overview](#️-main-tabs-overview)
+- [⚙️ Installation](#️-installation)
+- [🔌 Backend Setup](#-backend-setup)
+- [🧩 ComfyUI Custom Nodes](#-comfyui-custom-nodes)
+- [🧠 Roleplay Memory / Embedding / Reranker Setup](#-roleplay-memory--embedding--reranker-setup)
+- [🧩 Backend Notes & Troubleshooting](#-backend-notes--troubleshooting)
+- [🎥 Setup Guide (Video)](#-setup-guide-video)
+- [📚 Documentation](#-documentation)
+- [🧠 Philosophy](#-philosophy)
+- [⚠️ Known Limitations](#️-known-limitations)
+- [📜 License](#-license)
+- [🚀 Future Direction](#-future-direction)
+- [☕ Support the Project](#-support-the-project)
+
 ---
 
 ## ✨ Features
@@ -57,6 +79,23 @@ Ongoing improvements focus on:
 ---
 
 ## 🛠️ Update
+
+**May/16/2026 - Assistant Tab**
+
+| System | Update | Details |
+|---|---|---|
+| Project Context Aware Chat | ✅ Live Project Context Integration | Added full project-aware Assistant chat support so live conversations now prioritize active project context instead of falling back to only global memory. Assistant responses can now dynamically use project-linked context packs, memory routing, uploaded project data, and retrieval-aware grounding during chat generation. |
+| Assistant Memory System | ✅ Project Memory Retrieval Upgrade | Improved the Assistant memory and retrieval pipeline to support project-scoped semantic memory, retrieval authority enforcement, context-aware prompt injection, and debug validation for active project sessions. Added stronger grounding behavior so project context overrides unrelated global memory when active. |
+| Project Upload Context | ✅ Document Context Upload Support | Added support for uploading project knowledge documents directly inside the Assistant project section. Uploaded files are now processed into retrievable memory chunks for contextual Assistant responses. Recommended formats: `.json` and `.md` for best retrieval accuracy and structured context mapping. |
+| Assistant Debug & Validation | ✅ Context Injection Debug Proof | Added runtime diagnostics and validation visibility for Assistant context injection, including active project detection, context pack hydration, retrieval counts, uploaded file tracking, and memory source verification during live chats. |
+
+**May/16/2026 - Image Tab**
+
+| System | Update | Details |
+|---|---|---|
+| External Extensions | ✅ Dedicated External Extensions Sub Tab | Added a dedicated External Extensions sub tab inside the Image tab to support cleaner separation between native Neo systems and third-party extension workflows. External extension panels can now integrate into the runtime without modifying the core Image UI. |
+| Extension Runtime System | ✅ Extension Runtime & Validation Upgrade | Improved extension workflow support with runtime-safe extension loading, centralized extension state handling, workflow validation routing, output contract enforcement, capability discovery, and metadata-aware execution bridging for external Image tab integrations. |
+
 **May/09/2026 - Image Tab**
 
 | System | Update | Details |
