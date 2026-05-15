@@ -1578,6 +1578,16 @@ function buildGenerationPayload() {
     Object.assign(payload, collectGenerationGgufEffectivePayload(payload));
   }
 
+  if (window.NeoExternalExtensionState && typeof window.NeoExternalExtensionState.applyToPayload === 'function') {
+    window.NeoExternalExtensionState.applyToPayload(payload, {
+      workflow: payload.workflow_type || payload.mode || 'txt2img',
+      family: payload.family || '',
+      batch_size: payload.batch_size || 1,
+      has_source_image: !!$('generation-source-image')?.files?.[0],
+      has_prompt: !!String(payload.positive || '').trim(),
+    });
+  }
+
   try {
     if (window.NeoSceneDirectorExtension && (typeof window.NeoSceneDirectorExtension.getGenerationPayload === 'function' || typeof window.NeoSceneDirectorExtension.getState === 'function')) {
       const rawSceneState = typeof window.NeoSceneDirectorExtension.getGenerationPayload === 'function'

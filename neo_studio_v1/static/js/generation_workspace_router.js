@@ -50,6 +50,13 @@
         'generation-supir-settings',
       ],
     },
+    extensions: {
+      label: 'Extensions',
+      emoji: '🧩',
+      title: 'External Extensions',
+      copy: 'Manage optional external add-ons for Image workflows. Built-in Neo systems such as Scene Director stay in their existing core panels.',
+      items: [],
+    },
     output: {
       label: 'Results / Metadata',
       emoji: '📦',
@@ -61,6 +68,82 @@
       ],
     },
   };
+
+
+  const EXTERNAL_EXTENSION_SLOTS = [
+    {
+      id: 'neo-ext-slot-image-create-base-generation',
+      slot: 'image.create.base_generation.external_extensions',
+      surface: 'image',
+      workspace: 'create',
+      section: 'base_generation',
+      host: 'workflow',
+      label: 'Base Generation external extensions',
+    },
+    {
+      id: 'neo-ext-slot-image-create-build',
+      slot: 'image.create.build.external_extensions',
+      surface: 'image',
+      workspace: 'create',
+      section: 'build',
+      host: 'workflow',
+      label: 'Build external extensions',
+    },
+    {
+      id: 'neo-ext-slot-image-create-prompt-stack',
+      slot: 'image.create.prompt_stack.external_extensions',
+      surface: 'image',
+      workspace: 'create',
+      section: 'prompt_stack',
+      host: 'workflow',
+      label: 'Prompt Stack external extensions',
+    },
+    {
+      id: 'neo-ext-slot-image-guide-match-reference',
+      slot: 'image.guide_match.reference.external_extensions',
+      surface: 'image',
+      workspace: 'guide_match',
+      section: 'reference',
+      host: 'match',
+      label: 'Reference external extensions',
+    },
+    {
+      id: 'neo-ext-slot-image-enhance-finish',
+      slot: 'image.enhance.finish.external_extensions',
+      surface: 'image',
+      workspace: 'enhance',
+      section: 'finish',
+      host: 'enhance',
+      label: 'Finish external extensions',
+    },
+    {
+      id: 'neo-ext-slot-image-assets-reuse-assets',
+      slot: 'image.assets_reuse.assets.external_extensions',
+      surface: 'image',
+      workspace: 'assets_reuse',
+      section: 'assets',
+      host: 'assets',
+      label: 'Assets external extensions',
+    },
+    {
+      id: 'neo-ext-slot-image-results-output',
+      slot: 'image.results.output.external_extensions',
+      surface: 'image',
+      workspace: 'results',
+      section: 'output',
+      host: 'output',
+      label: 'Output external extensions',
+    },
+    {
+      id: 'neo-ext-slot-image-results-preview',
+      slot: 'image.results.preview.external_extensions',
+      surface: 'image',
+      workspace: 'results',
+      section: 'preview',
+      host: 'output',
+      label: 'Preview external extensions',
+    },
+  ];
 
   function ready(fn) {
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn, { once: true });
@@ -287,7 +370,15 @@
     renderTabLane('assets', 'generation-assets-tab-host');
     renderTabLane('guide', 'generation-match-tab-host');
     renderTabLane('enhance', 'generation-enhance-tab-host');
+    renderTabLane('extensions', 'generation-extensions-tab-host');
     renderTabLane('output', 'generation-output-tab-host');
+    ensureExternalExtensionSlots({
+      workflow: $('generation-workflow-host'),
+      assets: $('generation-assets-tab-host'),
+      match: $('generation-match-tab-host'),
+      enhance: $('generation-enhance-tab-host'),
+      output: $('generation-output-tab-host'),
+    });
     forceHelperSectionPlacement();
     const workflowHost = $('generation-workflow-host');
     const workflowNotes = queryAccordion('generation-workflow-notes-wrap');
@@ -296,11 +387,12 @@
   }
 
   function syncSetupTab(key) {
-    const next = ['core', 'assets', 'guide', 'enhance', 'helper', 'output'].includes(key) ? key : 'core';
+    const next = ['core', 'assets', 'guide', 'enhance', 'helper', 'extensions', 'output'].includes(key) ? key : 'core';
     const assetsHost = $('generation-assets-tab-host');
     const matchHost = $('generation-match-tab-host');
     const enhanceHost = $('generation-enhance-tab-host');
     const helperHost = $('generation-helper-tab-host');
+    const extensionsHost = $('generation-extensions-tab-host');
     const outputHost = $('generation-output-tab-host');
     setHidden(getRoot()?.querySelector('.generation-prompt-card'), false);
     setHidden($('generation-workflow-host'), next !== 'core');
@@ -308,12 +400,69 @@
     setHidden(matchHost, next !== 'guide');
     setHidden(enhanceHost, next !== 'enhance');
     setHidden(helperHost, next !== 'helper');
+    setHidden(extensionsHost, next !== 'extensions');
     setHidden(outputHost, next !== 'output');
+    window.dispatchEvent(new CustomEvent('neo:generation-workspace-changed', { detail: { workspace: next } }));
+    if (window.NeoExternalExtensionState && typeof window.NeoExternalExtensionState.revalidate === 'function') {
+      window.NeoExternalExtensionState.revalidate({ workspace: next });
+    }
     renderAllTabLanes();
     forceFinishSectionPlacement();
     forceHelperSectionPlacement();
     updateSetupTabButtons(next);
     persist(SETUP_TAB_STORAGE_KEY, next);
+  }
+
+
+
+  function ensureExternalExtensionSlot(host, spec) {
+    if (!host || !spec?.slot || !spec?.id) return null;
+    let slot = $(spec.id);
+    if (!slot) {
+      slot = makeEl('div', 'neo-external-extension-slot');
+      slot.id = spec.id;
+      slot.dataset.neoExtensionSlot = spec.slot;
+      slot.dataset.neoExternalExtensionSlot = spec.slot;
+      slot.dataset.neoSurface = spec.surface || 'image';
+      slot.dataset.neoWorkspace = spec.workspace || '';
+      slot.dataset.neoSection = spec.section || '';
+      slot.dataset.neoExtensionMount = 'section';
+      slot.dataset.neoSlotEmpty = 'true';
+      slot.setAttribute('aria-label', spec.label || spec.slot);
+      slot.setAttribute('aria-hidden', 'true');
+    }
+    if (slot.parentElement !== host) host.appendChild(slot);
+    return slot;
+  }
+
+  function ensureExternalExtensionSlots(hosts = {}) {
+    EXTERNAL_EXTENSION_SLOTS.forEach(spec => {
+      const host = hosts[spec.host];
+      ensureExternalExtensionSlot(host, spec);
+    });
+  }
+
+  function ensureExternalExtensionsHome(host) {
+    if (!host) return null;
+    let home = $('generation-external-extensions-home');
+    if (!home) {
+      home = makeEl('div', 'card-lite');
+      home.id = 'generation-external-extensions-home';
+      home.dataset.neoExternalExtensionsHome = 'true';
+      home.innerHTML = `
+        <div class="row-between" style="gap:12px; align-items:flex-start; flex-wrap:wrap;">
+          <div>
+            <div class="accordion-title">External Extensions</div>
+            <div class="muted small">Optional add-ons will be managed here. Built-in Neo systems, including Scene Director, remain in their existing core panels.</div>
+          </div>
+          <span class="badge">External only</span>
+        </div>
+        <div class="mini-note" id="generation-external-extensions-empty" style="margin-top:12px;">No external extension UI is mounted yet. Central state is active and ready for future add-ons.</div>
+        <div class="neo-external-extension-slot neo-external-extension-manager-slot" id="neo-ext-slot-image-extensions-manager" data-neo-extension-slot="image.extensions.manager" data-neo-external-extension-slot="image.extensions.manager" data-neo-surface="image" data-neo-workspace="extensions" data-neo-section="manager" data-neo-extension-mount="manager" data-neo-slot-empty="true" aria-label="External extensions manager slot"></div>`;
+    }
+    home.style.marginTop = '0';
+    if (home.parentElement !== host) host.appendChild(home);
+    return home;
   }
 
   function buildSetupTabs(topLeft, workflowHost) {
@@ -331,6 +480,7 @@
         <button type="button" data-generation-setup-tab="guide">Reference</button>
         <button type="button" data-generation-setup-tab="enhance">Finish</button>
         <button type="button" data-generation-setup-tab="helper">Helper</button>
+        <button type="button" data-generation-setup-tab="extensions">Extensions</button>
         <button type="button" data-generation-setup-tab="output">Results</button>`);
       tabs.id = 'generation-setup-tabs-bar';
     }
@@ -359,6 +509,11 @@
       helperHost = makeEl('div', 'generation-assets-tab-host');
       helperHost.id = 'generation-helper-tab-host';
     }
+    let extensionsHost = $('generation-extensions-tab-host');
+    if (!extensionsHost) {
+      extensionsHost = makeEl('div', 'generation-assets-tab-host');
+      extensionsHost.id = 'generation-extensions-tab-host';
+    }
     let outputHost = $('generation-output-tab-host');
     if (!outputHost) {
       outputHost = makeEl('div', 'generation-assets-tab-host');
@@ -372,7 +527,16 @@
     if (matchHost.parentElement !== content) content.appendChild(matchHost);
     if (enhanceHost.parentElement !== content) content.appendChild(enhanceHost);
     if (helperHost.parentElement !== content) content.appendChild(helperHost);
+    if (extensionsHost.parentElement !== content) content.appendChild(extensionsHost);
     if (outputHost.parentElement !== content) content.appendChild(outputHost);
+    ensureExternalExtensionsHome(extensionsHost);
+    ensureExternalExtensionSlots({
+      workflow: workflowHost,
+      assets: assetsHost,
+      match: matchHost,
+      enhance: enhanceHost,
+      output: outputHost,
+    });
 
     const historyCard = $('generation-history-card');
     if (historyCard && outputHost && historyCard.parentElement !== outputHost) {
@@ -384,6 +548,7 @@
     setHidden(matchHost, true);
     setHidden(enhanceHost, true);
     setHidden(helperHost, true);
+    setHidden(extensionsHost, true);
     setHidden(outputHost, true);
 
     tabs.querySelectorAll('[data-generation-setup-tab]').forEach(btn => {
