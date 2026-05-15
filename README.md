@@ -19,7 +19,7 @@ Instead of juggling separate tools manually, Neo Studio helps connect and organi
 - [⚙️ Installation](#️-installation)
 - [🔌 Backend Setup](#-backend-setup)
 - [🧩 ComfyUI Custom Nodes](#-comfyui-custom-nodes)
-- [🧠 Roleplay Memory / Embedding / Reranker Setup](#-roleplay-memory--embedding--reranker-setup)
+- [🧠 Memory / Embedding / Reranker Setup](#-roleplay-memory--embedding--reranker-setup)
 - [🧩 Backend Notes & Troubleshooting](#-backend-notes--troubleshooting)
 - [🎥 Setup Guide (Video)](#-setup-guide-video)
 - [📚 Documentation](#-documentation)
@@ -265,9 +265,9 @@ ComfyUI/custom_nodes/neo_scene_director
 
 ---
 
-## 🧠 Roleplay Memory / Embedding / Reranker Setup
+## 🧠 Memory / Embedding / Reranker Setup
 
-Roleplay memory and retrieval features may require local embedding and reranker models.
+Roleplay/Assistant memory and retrieval features may require local embedding and reranker models.
 
 Recommended models:
 
