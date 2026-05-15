@@ -4,6 +4,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field, asdict
 from typing import Any, Literal
 
+from .external_extension_payloads import stamp_external_extension_payload_contract
 from .image_output_selection import stamp_output_selection_contract
 from .retired_image_sections import sanitize_image_payload_for_retired_sections
 
@@ -146,6 +147,7 @@ def flatten_image_payload_envelope(envelope_or_payload: dict[str, Any] | None) -
         legacy, _stage6_removed = sanitize_image_payload_for_retired_sections(_clean_dict(envelope_or_payload))
         legacy['_neo_image_command_type'] = infer_image_command_type(legacy)
         legacy['_neo_payload_contract_version'] = 'legacy+stage2-detected'
+        legacy = stamp_external_extension_payload_contract(legacy)
         return legacy, None
 
     envelope, _stage6_envelope_removed = sanitize_image_payload_for_retired_sections(_clean_dict(envelope_or_payload))
@@ -201,6 +203,7 @@ def flatten_image_payload_envelope(envelope_or_payload: dict[str, Any] | None) -
         'retired_sections_sanitized': True,
         'retired_sections_version': 'image-retired-sections-v1',
     }
+    legacy = stamp_external_extension_payload_contract(legacy)
     legacy = stamp_output_selection_contract(legacy, envelope)
     legacy, _stage6_final_removed = sanitize_image_payload_for_retired_sections(legacy)
     return legacy, envelope

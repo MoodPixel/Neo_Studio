@@ -5,6 +5,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict
 
+from .external_extension_payloads import build_external_extension_output_metadata_shell
+from .external_extension_run_metadata import build_external_extension_run_metadata
 from .job_records import infer_generation_family
 
 OUTPUT_RECORD_SCHEMA_VERSION = 2
@@ -132,5 +134,15 @@ def build_generation_output_sidecar(*, base_sidecar: Dict[str, Any], job: Dict[s
         'category_slug': category_slug,
         'mode_folder': mode_name,
     })
+    external_extension_metadata = build_external_extension_output_metadata_shell(payload)
+    external_extension_run_metadata = build_external_extension_run_metadata(payload)
+    row['external_extensions'] = external_extension_metadata
+    row['_neo_external_extensions'] = external_extension_metadata
+    row['external_extension_run_metadata'] = external_extension_run_metadata
+    row['_neo_external_extension_run_metadata'] = external_extension_run_metadata
+    row.setdefault('extra_generation_params', {})
+    if isinstance(row['extra_generation_params'], dict):
+        row['extra_generation_params']['external_extensions'] = external_extension_metadata
+        row['extra_generation_params']['external_extension_run_metadata'] = external_extension_run_metadata
     row.setdefault('source_output', source_output)
     return row
