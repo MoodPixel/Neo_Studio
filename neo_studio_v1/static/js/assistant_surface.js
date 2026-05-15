@@ -3,6 +3,7 @@
   let assistantModes = {};
   let assistantSessions = [];
   let assistantProjects = [];
+  let projectProfileDraft = null;
   let assistantSearchResults = [];
   let activeSession = null;
   let activeSaveTimer = null;
@@ -16,6 +17,14 @@
   const STREAM_FIRST_EVENT_TIMEOUT_MS = 90000;
   const STREAM_IDLE_TIMEOUT_MS = 20000;
   const assistantStatusTimers = {};
+
+  function debounce(fn, delay = 250) {
+    let timer = null;
+    return function (...args) {
+      if (timer) window.clearTimeout(timer);
+      timer = window.setTimeout(() => fn.apply(this, args), delay);
+    };
+  }
 
   function scheduleAssistantStatusClear(id, delay = 4200) {
     const el = $(id);
@@ -54,6 +63,10 @@
       chatStatus: $('assistant-chat-status'),
       settingsStatus: $('assistant-settings-status'),
       projectSelect: $('assistant-project-select'),
+      projectType: $('assistant-project-type'),
+      projectCustomLabel: $('assistant-project-custom-label'),
+      projectCustomDescription: $('assistant-project-custom-description'),
+      projectCustomRules: $('assistant-project-custom-rules'),
       mode: $('assistant-mode'),
       modeMeta: $('assistant-mode-meta'),
       threadInstruction: $('assistant-thread-instruction'),
@@ -322,10 +335,21 @@
 
 
 
+  function selectedProjectFilterId() {
+    const value = trim($('assistant-project-filter')?.value || '');
+    if (!value || value === 'all' || value === '__unassigned__') return '';
+    return value;
+  }
+
+  function findAssistantProject(projectId) {
+    const clean = trim(projectId || '');
+    if (!clean) return null;
+    return (assistantProjects || []).find(item => item.id === clean) || null;
+  }
+
   function activeProjectMeta() {
-    const projectId = trim(activeSession?.project_id || $('assistant-project-select')?.value || '');
-    if (!projectId) return null;
-    return (assistantProjects || []).find(item => item.id === projectId) || null;
+    const projectId = trim(activeSession?.project_id || $('assistant-project-select')?.value || selectedProjectFilterId() || '');
+    return findAssistantProject(projectId);
   }
 
 
@@ -341,6 +365,8 @@
       project_id: project.id,
       description: patch.description !== undefined ? patch.description : (project.description || ''),
       brief: patch.brief !== undefined ? patch.brief : (project.brief || ''),
+      project_type: patch.project_type !== undefined ? patch.project_type : (project.project_type || 'general'),
+      custom_profile: patch.custom_profile !== undefined ? patch.custom_profile : (project.custom_profile || {}),
       context_cards: Array.isArray(patch.context_cards) ? patch.context_cards : (Array.isArray(project.context_cards) ? project.context_cards : []),
       context_files: Array.isArray(patch.context_files) ? patch.context_files : (Array.isArray(project.context_files) ? project.context_files : []),
       linked_records: Array.isArray(patch.linked_records) ? patch.linked_records : (Array.isArray(project.linked_records) ? project.linked_records : []),
@@ -466,6 +492,157 @@
         select.appendChild(opt);
       });
     }
+  }
+
+
+
+  function getProjectProfileDraft(project) {
+    if (!project?.id) return null;
+    if (projectProfileDraft?.project_id === project.id) return projectProfileDraft;
+    const custom = project.custom_profile || {};
+    return {
+      project_id: project.id,
+      project_type: project.project_type || 'general',
+      label: custom.label || '',
+      description: custom.description || '',
+      context_rules: Array.isArray(custom.context_rules) ? custom.context_rules.join('\n') : '',
+      dirty: false,
+    };
+  }
+
+  function setProjectProfileDraft(project, patch = {}) {
+    if (!project?.id) return null;
+    const base = getProjectProfileDraft(project) || { project_id: project.id };
+    projectProfileDraft = {
+      ...base,
+      ...patch,
+      project_id: project.id,
+      dirty: patch.dirty !== undefined ? patch.dirty : true,
+    };
+    return projectProfileDraft;
+  }
+
+  function clearProjectProfileDraft(projectId = '') {
+    if (!projectProfileDraft) return;
+    const clean = trim(projectId || '');
+    if (!clean || projectProfileDraft.project_id === clean) projectProfileDraft = null;
+  }
+
+  function updateProjectProfileCustomFieldState() {
+    const typeSel = $('assistant-project-type');
+    const labelInput = $('assistant-project-custom-label');
+    const descInput = $('assistant-project-custom-description');
+    const rulesInput = $('assistant-project-custom-rules');
+    const project = activeProjectMeta();
+    const isCustom = trim(typeSel?.value || '') === 'custom';
+    const hasProject = !!project;
+    if (labelInput) labelInput.disabled = !hasProject || !isCustom;
+    if (descInput) descInput.disabled = !hasProject || !isCustom;
+    if (rulesInput) rulesInput.disabled = !hasProject || !isCustom;
+  }
+
+  function handleProjectProfileInputChange() {
+    const project = activeProjectMeta();
+    if (!project) return;
+    const typeSel = $('assistant-project-type');
+    const labelInput = $('assistant-project-custom-label');
+    const descInput = $('assistant-project-custom-description');
+    const rulesInput = $('assistant-project-custom-rules');
+    setProjectProfileDraft(project, {
+      project_type: trim(typeSel?.value || 'general') || 'general',
+      label: trim(labelInput?.value || ''),
+      description: String(descInput?.value || ''),
+      context_rules: String(rulesInput?.value || ''),
+      dirty: true,
+    });
+    updateProjectProfileCustomFieldState();
+    const btn = $('btn-assistant-save-project-profile');
+    if (btn) btn.disabled = false;
+    const meta = $('assistant-project-profile-meta');
+    if (meta) {
+      const selected = typeSel?.options?.[typeSel.selectedIndex]?.textContent || typeSel?.value || 'General';
+      meta.textContent = `Project profile draft: ${selected}. Save to apply context, memory focus, and repo-index behavior.`;
+    }
+  }
+
+  function renderProjectProfileEditor() {
+    const typeSel = $('assistant-project-type');
+    const labelInput = $('assistant-project-custom-label');
+    const descInput = $('assistant-project-custom-description');
+    const rulesInput = $('assistant-project-custom-rules');
+    const btn = $('btn-assistant-save-project-profile');
+    const meta = $('assistant-project-profile-meta');
+    const project = activeProjectMeta();
+    if (!typeSel || !labelInput || !descInput || !rulesInput || !btn || !meta) return;
+    if (!project) {
+      clearProjectProfileDraft();
+      typeSel.value = 'general';
+      labelInput.value = '';
+      descInput.value = '';
+      rulesInput.value = '';
+      typeSel.disabled = true;
+      labelInput.disabled = true;
+      descInput.disabled = true;
+      rulesInput.disabled = true;
+      btn.disabled = true;
+      meta.textContent = 'Select a project filter or assign this thread to a project, then choose how Neo should scope this project memory.';
+      return;
+    }
+    const draft = getProjectProfileDraft(project);
+    const profile = project.project_profile || {};
+    typeSel.disabled = false;
+    typeSel.value = draft.project_type || project.project_type || 'general';
+    labelInput.value = draft.label || '';
+    descInput.value = draft.description || '';
+    rulesInput.value = draft.context_rules || '';
+    updateProjectProfileCustomFieldState();
+    btn.disabled = false;
+    if (draft.dirty) {
+      const selected = typeSel.options?.[typeSel.selectedIndex]?.textContent || typeSel.value || 'General';
+      meta.textContent = `Project profile draft: ${selected}. Save to apply context, memory focus, and repo-index behavior.`;
+    } else {
+      meta.textContent = `Project profile: ${profile.display_label || profile.label || typeSel.options?.[typeSel.selectedIndex]?.textContent || typeSel.value}. This controls context, memory focus, and repo-index behavior.`;
+    }
+  }
+
+  function collectProjectProfilePatch(project) {
+    const typeSel = $('assistant-project-type');
+    const labelInput = $('assistant-project-custom-label');
+    const descInput = $('assistant-project-custom-description');
+    const rulesInput = $('assistant-project-custom-rules');
+    const draft = getProjectProfileDraft(project);
+    const projectType = trim(draft?.project_type || typeSel?.value || project?.project_type || 'general') || 'general';
+    const label = draft ? draft.label : trim(labelInput?.value || '');
+    const description = draft ? draft.description : String(descInput?.value || '');
+    const contextRulesText = draft ? draft.context_rules : String(rulesInput?.value || '');
+    const rules = String(contextRulesText || '').split(/\r?\n/).map(item => trim(item)).filter(Boolean);
+    return {
+      project_type: projectType,
+      custom_profile: {
+        label: trim(label || ''),
+        description: String(description || ''),
+        context_rules: rules,
+        memory_focus: Array.isArray(project?.custom_profile?.memory_focus) ? project.custom_profile.memory_focus : [],
+        do_not_mix: Array.isArray(project?.custom_profile?.do_not_mix) ? project.custom_profile.do_not_mix : [],
+      },
+    };
+  }
+
+  async function saveProjectProfile() {
+    const project = activeProjectMeta();
+    if (!project) {
+      setStatus('assistant-project-profile-status', 'Select or assign a project first.', 'warn');
+      return;
+    }
+    const data = await saveProjectPatch(project, collectProjectProfilePatch(project));
+    assistantProjects = Array.isArray(data.projects) ? data.projects : assistantProjects;
+    const updated = data.project || project;
+    if (activeSession?.project_id === updated.id) {
+      activeSession.project_id = updated.id;
+    }
+    clearProjectProfileDraft(updated.id);
+    renderSurface();
+    setStatus('assistant-project-profile-status', data.message || 'Project profile saved.', 'ok');
   }
 
   function renderProjectBriefEditor() {
@@ -787,11 +964,63 @@
     note.textContent = segments.length ? segments.join(' · ') : 'Memory backend status will appear here.';
   }
 
+  function renderAssistantModelRuntime(data = null) {
+    const runtime = data && typeof data === 'object' ? data : (memoryBackendStatus?.model_runtime || {});
+    const settings = runtime?.settings || memoryBackendStatus?.model_runtime?.settings || {};
+    const badge = $('assistant-memory-model-runtime-badge');
+    const note = $('assistant-memory-model-runtime-note');
+    if ($('assistant-memory-embedding-model-path')) $('assistant-memory-embedding-model-path').value = settings.embedding_model_path || '';
+    if ($('assistant-memory-reranker-model-path')) $('assistant-memory-reranker-model-path').value = settings.reranker_model_path || '';
+    if ($('assistant-memory-reranker-backend')) $('assistant-memory-reranker-backend').value = settings.reranker_backend || 'local_hybrid';
+    if ($('assistant-memory-embedding-device')) $('assistant-memory-embedding-device').value = settings.embedding_device || 'auto';
+    if ($('assistant-memory-reranker-device')) $('assistant-memory-reranker-device').value = settings.reranker_device || 'auto';
+    const embeddingReady = !!runtime.embedding_ready;
+    const rerankerReady = !!runtime.reranker_ready;
+    if (badge) badge.textContent = embeddingReady ? 'local models ready' : 'fallback';
+    if (note) {
+      const deps = runtime.dependencies || {};
+      const paths = runtime.paths || {};
+      note.textContent = [
+        `sentence-transformers: ${deps.sentence_transformers ? 'yes' : 'no'}`,
+        `embedding path: ${paths.embedding_model_exists ? 'exists' : 'not set/missing'}`,
+        `embedding ready: ${embeddingReady ? 'yes' : 'no'}`,
+        `reranker ready: ${rerankerReady ? 'yes' : 'no'}`,
+      ].join(' · ');
+    }
+  }
+
   async function fetchAssistantMemoryBackendStatus() {
     const data = await safeFetchJson('/api/assistant/memory-backends');
     memoryBackendStatus = data;
     renderAssistantMemoryBackend(data);
+    renderAssistantModelRuntime(data.model_runtime || null);
     return data;
+  }
+
+  async function saveAssistantModelRuntime({ reindex = false } = {}) {
+    setBusy(reindex ? 'btn-assistant-save-model-runtime-reindex' : 'btn-assistant-save-model-runtime', true, reindex ? 'Rebuilding...' : 'Saving...');
+    try {
+      const data = await safeFetchJson('/api/assistant/memory-model-runtime', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          embedding_model_path: trim($('assistant-memory-embedding-model-path')?.value || ''),
+          embedding_device: trim($('assistant-memory-embedding-device')?.value || 'auto'),
+          reranker_backend: trim($('assistant-memory-reranker-backend')?.value || 'local_hybrid'),
+          reranker_model_path: trim($('assistant-memory-reranker-model-path')?.value || ''),
+          reranker_device: trim($('assistant-memory-reranker-device')?.value || 'auto'),
+          reindex,
+        }),
+      });
+      memoryBackendStatus = data.embedding_status || memoryBackendStatus;
+      renderAssistantMemoryBackend(memoryBackendStatus);
+      renderAssistantModelRuntime(data);
+      const indexed = Number(data?.reindex_result?.indexed || 0);
+      setStatus('assistant-memory-status', reindex ? `Model settings saved. Reindexed ${indexed} chunk(s).` : 'Model settings saved.', 'ok');
+      return data;
+    } finally {
+      setBusy(reindex ? 'btn-assistant-save-model-runtime-reindex' : 'btn-assistant-save-model-runtime', false);
+    }
   }
 
   async function applyAssistantMemoryBackend() {
@@ -806,6 +1035,7 @@
       });
       memoryBackendStatus = data;
       renderAssistantMemoryBackend(data);
+      renderAssistantModelRuntime(data.model_runtime || null);
       const indexed = Number(data?.reindex_result?.indexed || 0);
       setStatus('assistant-memory-status', `${data.message || 'Embedding backend updated.'} Reindexed ${indexed} chunk(s).`, 'ok');
       if (activeSession?.id) previewAssistantAdaptiveMemory({ quiet: true }).catch(() => {});
@@ -1128,7 +1358,12 @@
         const pinLabel = item.is_pinned ? 'Unpin' : 'Pin';
         const suppressLabel = item.is_suppressed ? 'Restore' : 'Suppress';
         const note = trim(item.pin_note || item.suppressed_reason || meta.pin_note || '');
-        return `<div class="card-lite assistant-context-item"><div class="row-between" style="gap:10px; align-items:flex-start;"><div><div class="stat-title">${escapeHtml(String(item.chunk_type || 'memory').replace(/_/g, ' '))}${item.is_pinned ? ' · pinned' : ''}${item.is_suppressed ? ' · suppressed' : ''}</div><div class="mini-note" style="margin-top:6px;">${escapeHtml(item.lane || '')} · ${escapeHtml(item.entity_type || '')}${item.entity_id ? `:${escapeHtml(item.entity_id)}` : ''} · ${escapeHtml(item.scope_type || '')}${item.scope_id ? `:${escapeHtml(item.scope_id)}` : ''} · importance ${Number(item.importance || 0).toFixed(2)}</div>${note ? `<div class="mini-note" style="margin-top:6px;">${escapeHtml(note)}</div>` : ''}</div><div class="row" style="gap:8px; flex-wrap:wrap; justify-content:flex-end;"><button class="btn btn-small" data-memory-pin-toggle="${escapeHtml(item.chunk_id || '')}" data-memory-pin-state="${item.is_pinned ? '0' : '1'}" type="button">${pinLabel}</button><button class="btn btn-small" data-memory-suppress-toggle="${escapeHtml(item.chunk_id || '')}" data-memory-suppress-state="${item.is_suppressed ? '0' : '1'}" type="button">${suppressLabel}</button></div></div><div class="muted small" style="margin-top:10px; line-height:1.5;">${escapeHtml(String(item.document || '').slice(0, 320))}${String(item.document || '').length > 320 ? '…' : ''}</div></div>`;
+        const memoryScope = meta.memory_scope || item.scope_type || 'global';
+        const memoryProject = meta.memory_project_id || item.project_id || '';
+        const bleedPolicy = meta.bleed_policy || '';
+        const activeProjectId = activeProject?.id || '';
+        const projectButton = activeProjectId ? `<button class="btn btn-small" data-memory-sandbox-project="${escapeHtml(item.chunk_id || '')}" data-memory-sandbox-project-id="${escapeHtml(activeProjectId)}" type="button">Move to this project</button>` : '';
+        return `<div class="card-lite assistant-context-item"><div class="row-between" style="gap:10px; align-items:flex-start;"><div><div class="stat-title">${escapeHtml(String(item.chunk_type || 'memory').replace(/_/g, ' '))}${item.is_pinned ? ' · pinned' : ''}${item.is_suppressed ? ' · suppressed' : ''}</div><div class="mini-note" style="margin-top:6px;">${escapeHtml(item.lane || '')} · ${escapeHtml(item.entity_type || '')}${item.entity_id ? `:${escapeHtml(item.entity_id)}` : ''} · ${escapeHtml(item.scope_type || '')}${item.scope_id ? `:${escapeHtml(item.scope_id)}` : ''} · importance ${Number(item.importance || 0).toFixed(2)}</div><div class="mini-note" style="margin-top:6px;">Sandbox: ${escapeHtml(memoryScope)}${memoryProject ? ` · ${escapeHtml(memoryProject)}` : ''}${bleedPolicy ? ` · ${escapeHtml(bleedPolicy)}` : ''}</div>${note ? `<div class="mini-note" style="margin-top:6px;">${escapeHtml(note)}</div>` : ''}</div><div class="row" style="gap:8px; flex-wrap:wrap; justify-content:flex-end;"><button class="btn btn-small" data-memory-pin-toggle="${escapeHtml(item.chunk_id || '')}" data-memory-pin-state="${item.is_pinned ? '0' : '1'}" type="button">${pinLabel}</button><button class="btn btn-small" data-memory-suppress-toggle="${escapeHtml(item.chunk_id || '')}" data-memory-suppress-state="${item.is_suppressed ? '0' : '1'}" type="button">${suppressLabel}</button><button class="btn btn-small" data-memory-sandbox-global="${escapeHtml(item.chunk_id || '')}" type="button">Move global</button>${projectButton}<button class="btn btn-small" data-memory-sandbox-quarantine="${escapeHtml(item.chunk_id || '')}" type="button">Quarantine</button></div></div><div class="muted small" style="margin-top:10px; line-height:1.5;">${escapeHtml(String(item.document || '').slice(0, 320))}${String(item.document || '').length > 320 ? '…' : ''}</div></div>`;
       }).join('') : '<div class="assistant-session-empty">No memory items match this filter yet.</div>';
     }
   }
@@ -1164,6 +1399,19 @@
     return data;
   }
 
+  async function updateMemorySandbox(chunkId, updates = {}) {
+    if (!chunkId) return;
+    const data = await safeFetchJson('/api/assistant/memory-sandbox-update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chunk_id: chunkId, ...updates }),
+    });
+    memoryAdminState = data;
+    renderMemoryAdmin(data);
+    if (activeSession?.id) previewAssistantAdaptiveMemory({ quiet: true }).catch(() => {});
+    setStatus('assistant-memory-admin-status', data.message || 'Memory sandbox updated.', 'ok');
+  }
+
   async function resolveMemoryConflict(preferredChunkId, rejectedChunkIds = []) {
     if (!preferredChunkId || !rejectedChunkIds.length) return;
     const data = await safeFetchJson('/api/assistant/memory-conflict-resolve', {
@@ -1197,6 +1445,8 @@
     renderProjectBriefEditor();
     renderProjectCardShelf();
     renderProjectFileShelf();
+    renderProjectKnowledgeImportPanel();
+    renderProjectEntityGraphPanel();
     renderProjectDashboard();
     renderContextShelf();
     renderThreadMemory();
@@ -1281,9 +1531,12 @@
   function renderSurface() {
     renderProfile();
     renderProjectControls();
+    renderProjectProfileEditor();
     renderProjectBriefEditor();
     renderProjectCardShelf();
     renderProjectFileShelf();
+    renderProjectKnowledgeImportPanel();
+    renderProjectEntityGraphPanel();
     renderProjectDashboard();
     renderSessionList();
     renderThreadHeader();
@@ -1439,7 +1692,7 @@
     if (title === null) return;
     const clean = trim(title);
     if (!clean) return;
-    const data = await safeFetchJson('/api/assistant/project-create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: clean }) });
+    const data = await safeFetchJson('/api/assistant/project-create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: clean, project_type: 'general' }) });
     assistantProjects = Array.isArray(data.projects) ? data.projects : assistantProjects;
     renderSurface();
     setStatus('assistant-session-status', data.message || 'Assistant project created.', 'ok');
@@ -1618,9 +1871,13 @@ ${caption}`);
     });
     assistantProjects = Array.isArray(data.projects) ? data.projects : assistantProjects;
     renderProjectControls();
+    renderProjectProfileEditor();
     renderProjectBriefEditor();
     renderProjectCardShelf();
     renderProjectFileShelf();
+    renderProjectKnowledgeImportPanel();
+    renderProjectEntityGraphPanel();
+    renderCanonWorkflowPanel();
     renderSessionList();
     setStatus('assistant-project-status', data.message || 'Project brief saved.', 'ok');
   }
@@ -1656,9 +1913,13 @@ ${caption}`);
     titleInput.value = '';
     contentInput.value = '';
     renderProjectControls();
+    renderProjectProfileEditor();
     renderProjectBriefEditor();
     renderProjectCardShelf();
     renderProjectFileShelf();
+    renderProjectKnowledgeImportPanel();
+    renderProjectEntityGraphPanel();
+    renderCanonWorkflowPanel();
     renderSessionList();
     setStatus('assistant-project-card-status', data.message || 'Project context card added.', 'ok');
   }
@@ -1679,9 +1940,13 @@ ${caption}`);
     });
     assistantProjects = Array.isArray(data.projects) ? data.projects : assistantProjects;
     renderProjectControls();
+    renderProjectProfileEditor();
     renderProjectBriefEditor();
     renderProjectCardShelf();
     renderProjectFileShelf();
+    renderProjectKnowledgeImportPanel();
+    renderProjectEntityGraphPanel();
+    renderCanonWorkflowPanel();
     renderSessionList();
     setStatus('assistant-project-card-status', 'Project context card removed.', 'ok');
   }
@@ -1730,9 +1995,13 @@ ${caption}`);
     assistantProjects = Array.isArray(data.projects) ? data.projects : assistantProjects;
     if (input) input.value = '';
     renderProjectControls();
+    renderProjectProfileEditor();
     renderProjectBriefEditor();
     renderProjectCardShelf();
     renderProjectFileShelf();
+    renderProjectKnowledgeImportPanel();
+    renderProjectEntityGraphPanel();
+    renderCanonWorkflowPanel();
     renderSessionList();
     setStatus('assistant-project-file-status', parsed.message || 'Project file attached.', 'ok');
   }
@@ -1754,11 +2023,832 @@ ${caption}`);
     });
     assistantProjects = Array.isArray(data.projects) ? data.projects : assistantProjects;
     renderProjectControls();
+    renderProjectProfileEditor();
     renderProjectBriefEditor();
     renderProjectCardShelf();
     renderProjectFileShelf();
+    renderProjectKnowledgeImportPanel();
+    renderProjectEntityGraphPanel();
+    renderCanonWorkflowPanel();
     renderSessionList();
     setStatus('assistant-project-file-status', 'Project file removed.', 'ok');
+  }
+
+
+
+
+  async function refreshProjectEntityGraph({ quiet = false } = {}) {
+    const project = activeProjectMeta();
+    const entityWrap = $('assistant-project-entity-list');
+    const relWrap = $('assistant-project-relationship-list');
+    const meta = $('assistant-project-entity-graph-meta');
+    const btn = $('btn-assistant-refresh-entity-graph');
+    if (!entityWrap || !relWrap || !meta || !btn) return;
+    entityWrap.innerHTML = '';
+    relWrap.innerHTML = '';
+    if (!project) {
+      btn.disabled = true;
+      meta.textContent = 'Select a project first to inspect its entity registry and canon graph.';
+      const empty = document.createElement('div');
+      empty.className = 'assistant-session-empty';
+      empty.textContent = 'No project selected.';
+      entityWrap.appendChild(empty.cloneNode(true));
+      relWrap.appendChild(empty);
+      return;
+    }
+    btn.disabled = false;
+    const q = trim($('assistant-project-entity-search')?.value || '');
+    try {
+      const data = await safeFetchJson(`/api/assistant/project-entity-graph?project_id=${encodeURIComponent(project.id)}&q=${encodeURIComponent(q)}&limit=80`);
+      renderProjectEntityGraph(data);
+      if (!quiet) setStatus('assistant-project-entity-graph-status', `Loaded ${Number(data.entity_count || 0)} entities and ${Number(data.relationship_count || 0)} relationships.`, 'ok');
+    } catch (err) {
+      const empty = document.createElement('div');
+      empty.className = 'assistant-session-empty';
+      empty.textContent = err.message || 'Could not load entity graph.';
+      entityWrap.appendChild(empty.cloneNode(true));
+      relWrap.appendChild(empty);
+      if (!quiet) setStatus('assistant-project-entity-graph-status', err.message || 'Could not load entity graph.', 'warn');
+    }
+  }
+
+  function renderProjectEntityGraph(data = {}) {
+    const entityWrap = $('assistant-project-entity-list');
+    const relWrap = $('assistant-project-relationship-list');
+    const meta = $('assistant-project-entity-graph-meta');
+    if (!entityWrap || !relWrap || !meta) return;
+    const entities = Array.isArray(data.entities) ? data.entities : [];
+    const relationships = Array.isArray(data.relationships) ? data.relationships : [];
+    const warnings = Array.isArray(data.warnings) ? data.warnings : [];
+    entityWrap.innerHTML = '';
+    relWrap.innerHTML = '';
+    const kinds = data.counts_by_kind || {};
+    const kindText = Object.keys(kinds).slice(0, 8).map(key => `${key}: ${kinds[key]}`).join(' · ');
+    meta.textContent = `Entity graph: ${Number(data.entity_count || 0)} entities · ${Number(data.relationship_count || 0)} relationships${kindText ? ` · ${kindText}` : ''}`;
+    if (!entities.length) {
+      const empty = document.createElement('div');
+      empty.className = 'assistant-session-empty';
+      empty.textContent = 'No entities found yet. Import structured project knowledge first.';
+      entityWrap.appendChild(empty);
+    } else {
+      entities.slice(0, 30).forEach(entity => {
+        const card = document.createElement('div');
+        card.className = 'card-lite assistant-context-item';
+        const summary = trim(String(entity.summary || '').replace(/\s+/g, ' ')).slice(0, 180);
+        card.innerHTML = `
+          <div class="row-between" style="gap:10px; align-items:flex-start;">
+            <div>
+              <div class="stat-title">${escapeHtml(entity.label || entity.entity_id || 'Entity')}</div>
+              <div class="mini-note" style="margin-top:6px;">${escapeHtml(entity.kind || 'record')} · ${escapeHtml(entity.canon_status || 'draft')} · ${escapeHtml(entity.visibility || 'project_private')}</div>
+            </div>
+            <span class="pill">${escapeHtml(entity.entity_id || 'local')}</span>
+          </div>
+          ${summary ? `<div class="muted small" style="margin-top:10px; line-height:1.5;">${escapeHtml(summary)}${String(entity.summary || '').length > 180 ? '…' : ''}</div>` : ''}
+        `;
+        entityWrap.appendChild(card);
+      });
+    }
+    if (warnings.length) {
+      const warnBox = document.createElement('div');
+      warnBox.className = 'card-lite assistant-context-item';
+      warnBox.innerHTML = `<div class="stat-title">Canon warnings</div>${warnings.slice(0, 10).map(w => `<div class="warn small" style="margin-top:6px;">${escapeHtml(w.type || 'warning')}: ${escapeHtml(w.kind || '')} ${escapeHtml(w.entity_key || '')}</div>`).join('')}`;
+      relWrap.appendChild(warnBox);
+    }
+    if (!relationships.length && !warnings.length) {
+      const empty = document.createElement('div');
+      empty.className = 'assistant-session-empty';
+      empty.textContent = 'No relationships or warnings found yet.';
+      relWrap.appendChild(empty);
+    } else {
+      relationships.slice(0, 40).forEach(rel => {
+        const card = document.createElement('div');
+        card.className = 'card-lite assistant-context-item';
+        card.innerHTML = `
+          <div class="stat-title">${escapeHtml(rel.relationship_type || 'references')}</div>
+          <div class="mini-note" style="margin-top:6px;">${escapeHtml(rel.source_entity_id || rel.source_uid || 'source')} → ${escapeHtml(rel.target_label || rel.target_entity_id || 'target')}</div>
+          <div class="muted small" style="margin-top:6px;">${escapeHtml(rel.target_kind || 'entity')} · ${escapeHtml(rel.canon_status || 'draft')}</div>
+        `;
+        relWrap.appendChild(card);
+      });
+    }
+  }
+
+  function renderProjectEntityGraphPanel() {
+    const project = activeProjectMeta();
+    const search = $('assistant-project-entity-search');
+    const btn = $('btn-assistant-refresh-entity-graph');
+    if (!search || !btn) return;
+    search.disabled = !project;
+    btn.disabled = !project;
+    refreshProjectEntityGraph({ quiet: true }).catch(() => {});
+  }
+
+
+
+  function canonWorkflowFields() {
+    return [
+      'assistant-canon-action', 'assistant-canon-kind', 'assistant-canon-entity-id', 'assistant-canon-label',
+      'assistant-canon-summary', 'assistant-canon-status', 'assistant-canon-visibility', 'assistant-canon-reason',
+      'btn-assistant-canon-analyze', 'btn-assistant-canon-propose', 'btn-assistant-canon-refresh'
+    ].map(id => $(id)).filter(Boolean);
+  }
+
+  function readCanonWorkflowPayload() {
+    const project = activeProjectMeta();
+    return {
+      project_id: project?.id || '',
+      action: $('assistant-canon-action')?.value || 'upsert_entity',
+      kind: trim($('assistant-canon-kind')?.value || 'record') || 'record',
+      entity_id: trim($('assistant-canon-entity-id')?.value || ''),
+      label: trim($('assistant-canon-label')?.value || ''),
+      summary: trim($('assistant-canon-summary')?.value || ''),
+      canon_status: $('assistant-canon-status')?.value || 'draft',
+      visibility: $('assistant-canon-visibility')?.value || 'project_private',
+      reason: trim($('assistant-canon-reason')?.value || ''),
+    };
+  }
+
+  function renderCanonAnalysis(data = {}) {
+    const wrap = $('assistant-canon-analysis-list');
+    if (!wrap) return;
+    wrap.innerHTML = '';
+    const warnings = Array.isArray(data.warnings) ? data.warnings : [];
+    const proposed = data.proposed || {};
+    const existing = data.existing_entity || null;
+    const card = document.createElement('div');
+    card.className = 'card-lite assistant-context-item';
+    card.innerHTML = `
+      <div class="stat-title">${escapeHtml(proposed.label || proposed.entity_id || 'Proposed entity')}</div>
+      <div class="mini-note" style="margin-top:6px;">${escapeHtml(proposed.kind || 'record')} · ${escapeHtml(proposed.canon_status || 'draft')} · ${escapeHtml(proposed.visibility || 'project_private')}</div>
+      ${existing ? `<div class="muted small" style="margin-top:8px;">Existing match: ${escapeHtml(existing.label || existing.entity_id || existing.entity_uid)} · ${escapeHtml(existing.canon_status || 'draft')}</div>` : '<div class="muted small" style="margin-top:8px;">No existing exact entity match found.</div>'}
+    `;
+    wrap.appendChild(card);
+    if (!warnings.length) {
+      const ok = document.createElement('div');
+      ok.className = 'card-lite assistant-context-item';
+      ok.innerHTML = '<div class="ok small">No blocking canon warnings found.</div>';
+      wrap.appendChild(ok);
+      return;
+    }
+    warnings.forEach(w => {
+      const item = document.createElement('div');
+      const sev = w.severity || 'info';
+      item.className = 'card-lite assistant-context-item';
+      item.innerHTML = `<div class="${sev === 'error' ? 'error' : sev === 'warn' ? 'warn' : 'muted'} small"><strong>${escapeHtml(w.type || 'warning')}</strong>: ${escapeHtml(w.message || '')}</div>`;
+      wrap.appendChild(item);
+    });
+  }
+
+  async function analyzeCanonWorkflowChange() {
+    const payload = readCanonWorkflowPayload();
+    if (!payload.project_id) {
+      setStatus('assistant-project-canon-workflow-status', 'Select a project first.', 'warn');
+      return;
+    }
+    if (!payload.label && !payload.entity_id) {
+      setStatus('assistant-project-canon-workflow-status', 'Add an entity ID or label first.', 'warn');
+      return;
+    }
+    setStatus('assistant-project-canon-workflow-status', 'Analyzing canon change...', 'loading');
+    const data = await safeFetchJson('/api/assistant/project-canon-change/analyze', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+    });
+    renderCanonAnalysis(data);
+    setStatus('assistant-project-canon-workflow-status', data.ok ? 'Canon change analyzed.' : 'Canon change has blocking warnings.', data.ok ? 'ok' : 'warn');
+  }
+
+  async function saveCanonWorkflowProposal() {
+    const payload = readCanonWorkflowPayload();
+    if (!payload.project_id) {
+      setStatus('assistant-project-canon-workflow-status', 'Select a project first.', 'warn');
+      return;
+    }
+    if (!payload.label && !payload.entity_id) {
+      setStatus('assistant-project-canon-workflow-status', 'Add an entity ID or label first.', 'warn');
+      return;
+    }
+    setStatus('assistant-project-canon-workflow-status', 'Saving canon proposal...', 'loading');
+    const data = await safeFetchJson('/api/assistant/project-canon-change/propose', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+    });
+    renderCanonAnalysis(data.analysis || {});
+    await refreshCanonWorkflowProposals({ quiet: true });
+    setStatus('assistant-project-canon-workflow-status', data.ok ? 'Canon proposal saved as draft.' : 'Canon proposal saved with warnings/blocked status.', data.ok ? 'ok' : 'warn');
+  }
+
+  async function applyCanonWorkflowProposal(proposalId) {
+    const project = activeProjectMeta();
+    if (!project || !proposalId) return;
+    if (!window.confirm('Apply this canon proposal to the entity registry? This will write change history.')) return;
+    setStatus('assistant-project-canon-workflow-status', 'Applying canon proposal...', 'loading');
+    const data = await safeFetchJson('/api/assistant/project-canon-change/apply', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ project_id: project.id, proposal_id: proposalId, confirm: true }),
+    });
+    await refreshCanonWorkflowProposals({ quiet: true });
+    await refreshProjectEntityGraph({ quiet: true });
+    setStatus('assistant-project-canon-workflow-status', data.message || 'Canon proposal applied.', 'ok');
+  }
+
+  async function refreshCanonWorkflowProposals({ quiet = false } = {}) {
+    const project = activeProjectMeta();
+    const wrap = $('assistant-canon-proposal-list');
+    if (!wrap) return;
+    wrap.innerHTML = '';
+    if (!project) {
+      const empty = document.createElement('div');
+      empty.className = 'assistant-session-empty';
+      empty.textContent = 'No project selected.';
+      wrap.appendChild(empty);
+      return;
+    }
+    try {
+      const data = await safeFetchJson(`/api/assistant/project-canon-change/proposals?project_id=${encodeURIComponent(project.id)}&limit=30`);
+      renderCanonWorkflowProposals(data.proposals || []);
+      if (!quiet) setStatus('assistant-project-canon-workflow-status', `Loaded ${(data.proposals || []).length} canon proposal(s).`, 'ok');
+    } catch (err) {
+      const empty = document.createElement('div');
+      empty.className = 'assistant-session-empty';
+      empty.textContent = err.message || 'Could not load canon proposals.';
+      wrap.appendChild(empty);
+      if (!quiet) setStatus('assistant-project-canon-workflow-status', empty.textContent, 'warn');
+    }
+  }
+
+  function renderCanonWorkflowProposals(proposals = []) {
+    const wrap = $('assistant-canon-proposal-list');
+    if (!wrap) return;
+    wrap.innerHTML = '';
+    if (!proposals.length) {
+      const empty = document.createElement('div');
+      empty.className = 'assistant-session-empty';
+      empty.textContent = 'No canon proposals yet.';
+      wrap.appendChild(empty);
+      return;
+    }
+    proposals.slice(0, 20).forEach(item => {
+      const warnings = Array.isArray(item.warnings) ? item.warnings : [];
+      const card = document.createElement('div');
+      card.className = 'card-lite assistant-context-item';
+      const canApply = item.status !== 'applied' && item.status !== 'blocked';
+      card.innerHTML = `
+        <div class="row-between" style="gap:10px; align-items:flex-start;">
+          <div>
+            <div class="stat-title">${escapeHtml(item.label || item.target_entity_id || 'Canon proposal')}</div>
+            <div class="mini-note" style="margin-top:6px;">${escapeHtml(item.action || 'upsert')} · ${escapeHtml(item.kind || 'record')} · ${escapeHtml(item.canon_status || 'draft')} · ${escapeHtml(item.status || 'draft')}</div>
+          </div>
+          ${canApply ? `<button class="btn btn-small" type="button" data-canon-apply="${escapeHtml(item.proposal_id)}">Apply</button>` : `<span class="pill">${escapeHtml(item.status || '')}</span>`}
+        </div>
+        ${item.summary ? `<div class="muted small" style="margin-top:8px; line-height:1.5;">${escapeHtml(String(item.summary).slice(0, 180))}${String(item.summary).length > 180 ? '…' : ''}</div>` : ''}
+        ${warnings.length ? `<div class="warn small" style="margin-top:8px;">${escapeHtml(warnings.slice(0, 3).map(w => w.type || w.message || 'warning').join(' · '))}</div>` : ''}
+      `;
+      wrap.appendChild(card);
+    });
+    wrap.querySelectorAll('[data-canon-apply]').forEach(btn => {
+      btn.addEventListener('click', () => applyCanonWorkflowProposal(btn.getAttribute('data-canon-apply')).catch(err => setStatus('assistant-project-canon-workflow-status', err.message || 'Could not apply canon proposal.', 'warn')));
+    });
+  }
+
+  function renderCanonWorkflowPanel() {
+    const project = activeProjectMeta();
+    const meta = $('assistant-project-canon-workflow-meta');
+    const fields = canonWorkflowFields();
+    if (!meta || !fields.length) return;
+    fields.forEach(el => { el.disabled = !project; });
+    if (!project) {
+      meta.textContent = 'Select a project first to create canon proposals.';
+      renderCanonWorkflowProposals([]);
+      const analysis = $('assistant-canon-analysis-list');
+      if (analysis) analysis.innerHTML = '<div class="assistant-session-empty">No project selected.</div>';
+      return;
+    }
+    meta.textContent = `Canon workflow for ${project.title || 'project'} · proposals save as draft until applied.`;
+    refreshCanonWorkflowProposals({ quiet: true }).catch(() => {});
+  }
+
+
+  async function refreshProjectKnowledgeImports({ quiet = false } = {}) {
+    const project = activeProjectMeta();
+    const wrap = $('assistant-project-knowledge-import-list');
+    if (!wrap) return;
+    wrap.innerHTML = '';
+    if (!project) {
+      const empty = document.createElement('div');
+      empty.className = 'assistant-session-empty';
+      empty.textContent = 'No project selected.';
+      wrap.appendChild(empty);
+      return;
+    }
+    try {
+      const data = await safeFetchJson(`/api/assistant/project-knowledge-imports?project_id=${encodeURIComponent(project.id)}`);
+      renderProjectKnowledgeImports(data.imports || []);
+      if (!quiet) setStatus('assistant-project-knowledge-status', `Loaded ${(data.imports || []).length} import report(s).`, 'ok');
+    } catch (err) {
+      renderProjectKnowledgeImports([]);
+      if (!quiet) setStatus('assistant-project-knowledge-status', err.message || 'Could not load import reports.', 'warn');
+    }
+  }
+
+  function compactObjectBreakdown(obj = {}, limit = 4) {
+    if (!obj || typeof obj !== 'object') return '';
+    return Object.entries(obj).slice(0, limit).map(([key, value]) => `${key}: ${value}`).join(' · ');
+  }
+
+  function renderImportDiagnostics(item = {}) {
+    const diag = item.import_diagnostics || {};
+    const summary = diag.summary || {};
+    const counts = diag.counts || {};
+    const quality = diag.quality || {};
+    const breakdown = diag.breakdown || {};
+    const risks = Array.isArray(diag.risk_flags) ? diag.risk_flags : [];
+    const actions = Array.isArray(diag.recommended_actions) ? diag.recommended_actions : [];
+    const warnings = Array.isArray(diag.warnings) ? diag.warnings : (Array.isArray(item.warnings) ? item.warnings : []);
+    const confidence = Number(summary.confidence_percent || item.import_confidence || 0);
+    const qualityLabel = summary.quality_label || 'unknown';
+    const riskHtml = risks.length ? `<div class="warn small" style="margin-top:8px;">Flags: ${escapeHtml(risks.slice(0, 4).join(' · '))}</div>` : '';
+    const actionHtml = actions.length ? `<ul class="mini-note" style="margin:8px 0 0 18px; padding:0; line-height:1.45;">${actions.slice(0, 3).map(action => `<li>${escapeHtml(action)}</li>`).join('')}</ul>` : '';
+    const warningHtml = warnings.length ? `<details style="margin-top:8px;"><summary class="warn small">${warnings.length} warning(s)</summary><div class="warn small" style="margin-top:6px; line-height:1.45;">${escapeHtml(warnings.slice(0, 8).join(' · '))}</div></details>` : '';
+    const sectionBreakdown = compactObjectBreakdown(breakdown.section_roles || {});
+    const typeBreakdown = compactObjectBreakdown(breakdown.chunk_types || {});
+    const tierBreakdown = compactObjectBreakdown(breakdown.evidence_tiers || {});
+    const aliases = Array.isArray(breakdown.detected_aliases) ? breakdown.detected_aliases.slice(0, 6).join(', ') : '';
+    return `
+      <div class="assistant-import-diagnostics" style="margin-top:10px; border-top:1px solid var(--border, rgba(255,255,255,.12)); padding-top:10px;">
+        <div class="row" style="gap:8px; flex-wrap:wrap;">
+          <span class="pill">${escapeHtml(summary.detected_import_type || item.import_type || 'unknown')}</span>
+          <span class="pill">${escapeHtml(summary.domain_label || item.assistant_domain || 'General')}</span>
+          <span class="pill">${confidence}% confidence</span>
+          <span class="pill">quality: ${escapeHtml(qualityLabel)}</span>
+        </div>
+        <div class="mini-note" style="margin-top:8px; line-height:1.5;">
+          Strategy: ${escapeHtml(summary.chunking_strategy || item.chunking_strategy || 'paragraph_chunking')} ·
+          Sections: ${Number(counts.sections || item.section_count || 0)} ·
+          Chunks: ${Number(counts.chunks || item.chunk_count || 0)} ·
+          Records: ${Number(counts.structured_records || item.structured_record_count || 0)} ·
+          Entities: ${Number(counts.entities || item.entity_graph_count || 0)}
+        </div>
+        <div class="mini-note" style="margin-top:6px; line-height:1.5;">
+          Metadata avg: ${Number(quality.metadata_quality_average || 0).toFixed(2)} · Truth rank: ${Number(quality.average_truth_priority_rank || 0).toFixed(1)}${tierBreakdown ? ` · Evidence: ${escapeHtml(tierBreakdown)}` : ''}
+        </div>
+        ${sectionBreakdown ? `<div class="mini-note" style="margin-top:6px;">Sections: ${escapeHtml(sectionBreakdown)}</div>` : ''}
+        ${typeBreakdown ? `<div class="mini-note" style="margin-top:6px;">Chunk types: ${escapeHtml(typeBreakdown)}</div>` : ''}
+        ${aliases ? `<div class="mini-note" style="margin-top:6px;">Aliases: ${escapeHtml(aliases)}</div>` : ''}
+        ${riskHtml}
+        ${actionHtml}
+        ${warningHtml}
+      </div>
+    `;
+  }
+
+  function renderProjectKnowledgeImports(imports = []) {
+    const wrap = $('assistant-project-knowledge-import-list');
+    if (!wrap) return;
+    wrap.innerHTML = '';
+    if (!imports.length) {
+      const empty = document.createElement('div');
+      empty.className = 'assistant-session-empty';
+      empty.textContent = 'No structured knowledge imports yet.';
+      wrap.appendChild(empty);
+      return;
+    }
+    imports.slice(0, 8).forEach(item => {
+      const card = document.createElement('div');
+      card.className = 'card-lite assistant-context-item';
+      const entities = Array.isArray(item.entities) ? item.entities : [];
+      const entityPreview = entities.slice(0, 5).map(row => row.label || row.id || row.kind).filter(Boolean).join(', ');
+      card.innerHTML = `
+        <div class="row-between" style="gap:10px; align-items:flex-start;">
+          <div>
+            <div class="stat-title">${escapeHtml(item.filename || 'Knowledge import')}</div>
+            <div class="mini-note" style="margin-top:6px;">${escapeHtml(item.document_kind || 'knowledge')} · ${escapeHtml(item.canon_status || 'draft')} · ${Number(item.chunk_count || 0)} chunks · ${escapeHtml(formatDateTime(item.created_at))}</div>
+          </div>
+          <span class="pill">${escapeHtml(item.project_type || 'general')}</span>
+        </div>
+        <div class="muted small" style="margin-top:10px; line-height:1.5;">${entityPreview ? `Entities: ${escapeHtml(entityPreview)}` : 'No entities detected in report preview.'}</div>
+        <div class="row" style="margin-top:10px; gap:8px; flex-wrap:wrap;">
+          <button class="btn btn-small" type="button" data-assistant-generate-retrieval-tests="${escapeHtml(item.import_id || '')}">Generate test questions</button>
+          <button class="btn btn-small" type="button" data-assistant-run-retrieval-tests="${escapeHtml(item.import_id || '')}">Run retrieval tests</button>
+        </div>
+        <div class="assistant-context-list" data-assistant-retrieval-test-output="${escapeHtml(item.import_id || '')}" style="margin-top:10px;"></div>
+        ${renderImportDiagnostics(item)}
+      `;
+      wrap.appendChild(card);
+    });
+  }
+
+  function renderProjectKnowledgeImportPanel() {
+    const meta = $('assistant-project-knowledge-meta');
+    const input = $('assistant-project-knowledge-upload');
+    const pasteTitle = $('assistant-project-knowledge-paste-title');
+    const pasteBox = $('assistant-project-knowledge-paste');
+    const canon = $('assistant-project-knowledge-canon');
+    const visibility = $('assistant-project-knowledge-visibility');
+    const importBtn = $('btn-assistant-import-project-knowledge');
+    const pasteBtn = $('btn-assistant-import-pasted-knowledge');
+    const previewRecordsBtn = $('btn-assistant-preview-record-conversion');
+    const convertRecordsBtn = $('btn-assistant-convert-raw-records');
+    const refreshBtn = $('btn-assistant-refresh-project-imports');
+    const liveRefreshBtn = $('btn-assistant-refresh-live-memory-index');
+    const project = activeProjectMeta();
+    if (!meta || !input || !canon || !visibility || !importBtn || !refreshBtn) return;
+    if (!project) {
+      input.value = '';
+      input.disabled = true;
+      if (pasteTitle) { pasteTitle.value = ''; pasteTitle.disabled = true; }
+      if (pasteBox) { pasteBox.value = ''; pasteBox.disabled = true; }
+      canon.disabled = true;
+      visibility.disabled = true;
+      importBtn.disabled = true;
+      if (pasteBtn) pasteBtn.disabled = true;
+      if (previewRecordsBtn) previewRecordsBtn.disabled = true;
+      if (convertRecordsBtn) convertRecordsBtn.disabled = true;
+      refreshBtn.disabled = true;
+      if (liveRefreshBtn) liveRefreshBtn.disabled = true;
+      meta.textContent = 'Select a project first, then import structured knowledge into project-scoped memory.';
+      renderProjectKnowledgeImports([]);
+      const previewWrap = $('assistant-record-conversion-preview');
+      if (previewWrap) previewWrap.innerHTML = '<div class="assistant-session-empty">No record conversion preview.</div>';
+      return;
+    }
+    input.disabled = false;
+    if (pasteTitle) pasteTitle.disabled = false;
+    if (pasteBox) pasteBox.disabled = false;
+    canon.disabled = false;
+    visibility.disabled = false;
+    importBtn.disabled = false;
+    if (pasteBtn) pasteBtn.disabled = false;
+    if (previewRecordsBtn) previewRecordsBtn.disabled = false;
+    if (convertRecordsBtn) convertRecordsBtn.disabled = false;
+    refreshBtn.disabled = false;
+    if (liveRefreshBtn) liveRefreshBtn.disabled = false;
+    const profile = project.project_profile || {};
+    meta.textContent = `Import knowledge for ${project.title || 'project'} · ${profile.display_label || profile.label || project.project_type || 'General'}.`;
+    refreshProjectKnowledgeImports({ quiet: true }).catch(() => {});
+  }
+
+  function renderAssistantMemoryIndexState(state = {}, statusId = 'assistant-project-knowledge-status') {
+    const badge = state.badge || (state.state === 'dirty' ? '🔴 Reindex required' : (state.state === 'refreshing' ? '🟡 Updating' : '🟢 Synced'));
+    const dirty = Number(state.dirty_count || 0);
+    const last = state.last_refresh || {};
+    const extra = dirty ? ` · ${dirty} dirty scope(s)` : '';
+    setStatus(statusId, `Memory State: ${badge}${extra}${last.error ? ` · ${last.error}` : ''}`, dirty ? 'warn' : 'ok');
+  }
+
+  async function refreshAssistantMemoryIndexState(statusId = 'assistant-project-knowledge-status') {
+    const state = await safeFetchJson('/api/assistant/memory-index-state');
+    renderAssistantMemoryIndexState(state, statusId);
+    return state;
+  }
+
+  async function requestAssistantMemoryRefresh(statusId = 'assistant-project-knowledge-status', payload = {}) {
+    setStatus(statusId, 'Refreshing live memory index...', 'loading');
+    const state = await safeFetchJson('/api/assistant/memory-index-refresh', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload || {}),
+    });
+    renderAssistantMemoryIndexState(state, statusId);
+    return state;
+  }
+
+  async function importProjectKnowledge() {
+    const project = activeProjectMeta();
+    const input = $('assistant-project-knowledge-upload');
+    const file = input?.files?.[0];
+    if (!project || !input) {
+      setStatus('assistant-project-knowledge-status', 'Select a project first.', 'warn');
+      return;
+    }
+    if (!file) {
+      setStatus('assistant-project-knowledge-status', 'Choose a knowledge file first.', 'warn');
+      return;
+    }
+    const form = new FormData();
+    form.append('project_id', project.id);
+    form.append('canon_status', $('assistant-project-knowledge-canon')?.value || 'draft');
+    form.append('visibility', $('assistant-project-knowledge-visibility')?.value || 'project_private');
+    form.append('import_mode', 'memory');
+    form.append('file', file);
+    setStatus('assistant-project-knowledge-status', 'Importing knowledge into project memory...', 'loading');
+    const data = await safeFetchJson('/api/assistant/project-knowledge-import', { method: 'POST', body: form });
+    assistantProjects = Array.isArray(data.projects) ? data.projects : assistantProjects;
+    if (data.project) {
+      assistantProjects = assistantProjects.map(item => item.id === data.project.id ? data.project : item);
+    }
+    input.value = '';
+    renderProjectControls();
+    renderProjectDashboard();
+    renderProjectKnowledgeImportPanel();
+    renderProjectEntityGraphPanel();
+    renderCanonWorkflowPanel();
+    renderSessionList();
+    const report = data.report || {};
+    const entityCount = Array.isArray(report.entities) ? report.entities.length : 0;
+    setStatus('assistant-project-knowledge-status', `${data.message || 'Knowledge imported.'} ${entityCount ? `${entityCount} entities detected.` : ''} Diagnostics added. ${report.memory_index_state?.badge || '🟢 Synced'}`, 'ok');
+  }
+
+  async function importPastedProjectKnowledge() {
+    const project = activeProjectMeta();
+    const pasteBox = $('assistant-project-knowledge-paste');
+    const text = trim(pasteBox?.value || '');
+    if (!project) {
+      setStatus('assistant-project-knowledge-status', 'Select a project first.', 'warn');
+      return;
+    }
+    if (!text) {
+      setStatus('assistant-project-knowledge-status', 'Paste some knowledge text first.', 'warn');
+      return;
+    }
+    const title = trim($('assistant-project-knowledge-paste-title')?.value || '') || 'Pasted knowledge';
+    setStatus('assistant-project-knowledge-status', 'Importing pasted text into project memory...', 'loading');
+    const data = await safeFetchJson('/api/assistant/project-knowledge-import-text', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        project_id: project.id,
+        session_id: activeSession?.id || '',
+        title,
+        text,
+        canon_status: $('assistant-project-knowledge-canon')?.value || 'draft',
+        visibility: $('assistant-project-knowledge-visibility')?.value || 'project_private',
+        capture_type: 'pasted_knowledge',
+      }),
+    });
+    assistantProjects = Array.isArray(data.projects) ? data.projects : assistantProjects;
+    if (data.project) assistantProjects = assistantProjects.map(item => item.id === data.project.id ? data.project : item);
+    if (pasteBox) pasteBox.value = '';
+    if ($('assistant-project-knowledge-paste-title')) $('assistant-project-knowledge-paste-title').value = '';
+    renderProjectControls();
+    renderProjectDashboard();
+    renderProjectKnowledgeImportPanel();
+    renderProjectEntityGraphPanel();
+    renderCanonWorkflowPanel();
+    renderSessionList();
+    const report = data.report || {};
+    const entityCount = Array.isArray(report.entities) ? report.entities.length : 0;
+    setStatus('assistant-project-knowledge-status', `${data.message || 'Pasted knowledge imported.'} ${entityCount ? `${entityCount} entities detected.` : ''} Diagnostics added. ${report.memory_index_state?.badge || '🟢 Synced'}`, 'ok');
+  }
+
+
+  function renderRecordConversionPreview(preview = {}) {
+    const wrap = $('assistant-record-conversion-preview');
+    if (!wrap) return;
+    const records = Array.isArray(preview.records) ? preview.records : [];
+    const sections = Array.isArray(preview.sections) ? preview.sections : [];
+    const warnings = Array.isArray(preview.warnings) ? preview.warnings : [];
+    if (!records.length && !sections.length) {
+      wrap.innerHTML = '';
+      return;
+    }
+    const recordHtml = records.slice(0, 8).map(record => `
+      <div class="card-lite" style="margin-top:8px;">
+        <div class="row-between" style="gap:8px; align-items:flex-start;">
+          <div>
+            <div class="stat-title">${escapeHtml(record.label || record.id || 'Record')}</div>
+            <div class="mini-note" style="margin-top:4px;">${escapeHtml(record.kind || 'record')} · ${Math.round(Number(record.confidence || 0) * 100)}% confidence</div>
+          </div>
+          <span class="pill">${escapeHtml((record.field_keys || []).slice(0, 2).join(', ') || 'fields')}</span>
+        </div>
+        ${record.summary ? `<div class="muted small" style="margin-top:8px; line-height:1.45;">${escapeHtml(String(record.summary).slice(0, 240))}${String(record.summary).length > 240 ? '…' : ''}</div>` : ''}
+      </div>
+    `).join('');
+    const warningHtml = warnings.length ? `<div class="warn small" style="margin-top:10px; line-height:1.45;">${escapeHtml(warnings.slice(0, 5).join(' · '))}</div>` : '';
+    wrap.innerHTML = `
+      <div class="card-lite assistant-context-item">
+        <div class="row-between" style="gap:10px; align-items:flex-start;">
+          <div>
+            <div class="stat-title">Raw text → structured records preview</div>
+            <div class="mini-note" style="margin-top:6px;">${escapeHtml(preview.detected_import_type || 'unknown')} · ${escapeHtml(preview.assistant_domain || 'reference')} · ${Number(preview.record_count || records.length || 0)} records · ${Number(preview.section_count || sections.length || 0)} sections</div>
+          </div>
+          <span class="pill">${Math.round(Number(preview.confidence || 0) * 100)}%</span>
+        </div>
+        ${warningHtml}
+        <div style="margin-top:10px;">${recordHtml || '<div class="assistant-session-empty">No records generated.</div>'}</div>
+      </div>
+    `;
+  }
+
+  async function previewRawTextRecordConversion() {
+    const project = activeProjectMeta();
+    const pasteBox = $('assistant-project-knowledge-paste');
+    const text = trim(pasteBox?.value || '');
+    if (!project) {
+      setStatus('assistant-project-knowledge-status', 'Select a project first.', 'warn');
+      return;
+    }
+    if (!text) {
+      setStatus('assistant-project-knowledge-status', 'Paste raw text before previewing records.', 'warn');
+      return;
+    }
+    const title = trim($('assistant-project-knowledge-paste-title')?.value || '') || 'Pasted raw text';
+    setStatus('assistant-project-knowledge-status', 'Previewing raw text record conversion...', 'loading');
+    const data = await safeFetchJson('/api/assistant/project-knowledge-record-preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        project_id: project.id,
+        title,
+        text,
+        canon_status: $('assistant-project-knowledge-canon')?.value || 'draft',
+        visibility: $('assistant-project-knowledge-visibility')?.value || 'project_private',
+      }),
+    });
+    renderRecordConversionPreview(data.preview || {});
+    setStatus('assistant-project-knowledge-status', data.message || 'Record preview ready.', 'ok');
+  }
+
+
+
+  function renderRetrievalTestQuestions(importId, tests = {}) {
+    const safeImportId = (window.CSS && CSS.escape) ? CSS.escape(importId) : String(importId || '').replace(/[^a-zA-Z0-9_-]/g, '\\$&');
+    const selector = `[data-assistant-retrieval-test-output="${safeImportId}"]`;
+    const wrap = document.querySelector(selector);
+    if (!wrap) return;
+    const questions = Array.isArray(tests.questions) ? tests.questions : [];
+    if (!questions.length) {
+      wrap.innerHTML = '<div class="assistant-session-empty">No retrieval questions generated.</div>';
+      return;
+    }
+    const rows = questions.slice(0, 10).map(item => `
+      <div class="card-lite" style="margin-top:8px;">
+        <div class="row-between" style="gap:8px; align-items:flex-start;">
+          <div class="muted small" style="line-height:1.45;">${escapeHtml(item.question || '')}</div>
+          <span class="pill">${escapeHtml(item.kind || 'test')}</span>
+        </div>
+      </div>
+    `).join('');
+    wrap.innerHTML = `
+      <div class="card-lite assistant-context-item">
+        <div class="stat-title">Retrieval test questions</div>
+        <div class="mini-note" style="margin-top:6px;">${escapeHtml(tests.assistant_domain || 'reference')} · ${escapeHtml(tests.import_type || 'unknown')} · ${Number(tests.question_count || questions.length || 0)} probes</div>
+        ${rows}
+      </div>
+    `;
+  }
+
+  function renderRetrievalTestResults(importId, result = {}) {
+    const safeImportId = (window.CSS && CSS.escape) ? CSS.escape(importId) : String(importId || '').replace(/[^a-zA-Z0-9_-]/g, '\\$&');
+    const selector = `[data-assistant-retrieval-test-output="${safeImportId}"]`;
+    const wrap = document.querySelector(selector);
+    if (!wrap) return;
+    const rows = Array.isArray(result.results) ? result.results : [];
+    const recommendations = Array.isArray(result.recommendations) ? result.recommendations : [];
+    const resultHtml = rows.slice(0, 10).map(row => {
+      const selected = Array.isArray(row.selected) ? row.selected : [];
+      const selectedHtml = selected.slice(0, 3).map(item => `
+        <div class="mini-note" style="margin-top:5px; line-height:1.35;">${escapeHtml(item.chunk_type || 'chunk')} · ${Number(item.score || 0).toFixed(2)} · ${escapeHtml(item.snippet || '')}</div>
+      `).join('');
+      return `
+        <div class="card-lite" style="margin-top:8px;">
+          <div class="row-between" style="gap:8px; align-items:flex-start;">
+            <div>
+              <div class="muted small" style="line-height:1.45;">${escapeHtml(row.question || '')}</div>
+              <div class="mini-note" style="margin-top:5px;">Selected: ${Number((row.quality || {}).item_count || selected.length || 0)} · Types: ${escapeHtml(((row.quality || {}).selected_chunk_types || []).slice(0, 4).join(', ') || 'none')}</div>
+            </div>
+            <span class="pill">${escapeHtml(row.status || 'unknown')}</span>
+          </div>
+          ${selectedHtml || '<div class="assistant-session-empty" style="margin-top:8px;">No selected chunks.</div>'}
+        </div>
+      `;
+    }).join('');
+    const recHtml = recommendations.length ? `<ul class="mini-note" style="margin:8px 0 0 18px; padding:0; line-height:1.45;">${recommendations.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>` : '';
+    wrap.innerHTML = `
+      <div class="card-lite assistant-context-item">
+        <div class="row-between" style="gap:10px; align-items:flex-start;">
+          <div>
+            <div class="stat-title">Retrieval test results</div>
+            <div class="mini-note" style="margin-top:6px;">Health: ${Number(result.retrieval_health_score || 0).toFixed(2)} · ${Number(result.pass_count || 0)} pass · ${Number(result.weak_count || 0)} weak · ${Number(result.fail_count || 0)} fail</div>
+          </div>
+          <span class="pill">${escapeHtml(result.status || 'unknown')}</span>
+        </div>
+        ${recHtml}
+        ${resultHtml || '<div class="assistant-session-empty">No retrieval test results.</div>'}
+      </div>
+    `;
+  }
+
+  async function generateRetrievalTestQuestions(importId) {
+    const project = activeProjectMeta();
+    if (!project || !importId) {
+      setStatus('assistant-project-knowledge-status', 'Select a project and import first.', 'warn');
+      return;
+    }
+    setStatus('assistant-project-knowledge-status', 'Generating retrieval test questions...', 'loading');
+    const data = await safeFetchJson('/api/assistant/project-knowledge-retrieval-tests/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ project_id: project.id, import_id: importId, limit: 14 }),
+    });
+    renderRetrievalTestQuestions(importId, data.tests || {});
+    setStatus('assistant-project-knowledge-status', data.message || 'Retrieval test questions generated.', 'ok');
+  }
+
+  async function runRetrievalTestQuestions(importId) {
+    const project = activeProjectMeta();
+    if (!project || !importId) {
+      setStatus('assistant-project-knowledge-status', 'Select a project and import first.', 'warn');
+      return;
+    }
+    setStatus('assistant-project-knowledge-status', 'Running retrieval tests...', 'loading');
+    const data = await safeFetchJson('/api/assistant/project-knowledge-retrieval-tests/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ project_id: project.id, import_id: importId, limit: 10 }),
+    });
+    renderRetrievalTestResults(importId, data.result || {});
+    setStatus('assistant-project-knowledge-status', data.message || 'Retrieval tests complete.', 'ok');
+  }
+
+  async function convertRawTextToRecords() {
+    const project = activeProjectMeta();
+    const pasteBox = $('assistant-project-knowledge-paste');
+    const text = trim(pasteBox?.value || '');
+    if (!project) {
+      setStatus('assistant-project-knowledge-status', 'Select a project first.', 'warn');
+      return;
+    }
+    if (!text) {
+      setStatus('assistant-project-knowledge-status', 'Paste raw text before converting to records.', 'warn');
+      return;
+    }
+    const title = trim($('assistant-project-knowledge-paste-title')?.value || '') || 'Converted raw text';
+    setStatus('assistant-project-knowledge-status', 'Converting raw text into records and memory chunks...', 'loading');
+    const data = await safeFetchJson('/api/assistant/project-knowledge-record-convert', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        project_id: project.id,
+        title,
+        text,
+        canon_status: $('assistant-project-knowledge-canon')?.value || 'draft',
+        visibility: $('assistant-project-knowledge-visibility')?.value || 'project_private',
+      }),
+    });
+    assistantProjects = Array.isArray(data.projects) ? data.projects : assistantProjects;
+    if (data.project) assistantProjects = assistantProjects.map(item => item.id === data.project.id ? data.project : item);
+    if (pasteBox) pasteBox.value = '';
+    if ($('assistant-project-knowledge-paste-title')) $('assistant-project-knowledge-paste-title').value = '';
+    renderRecordConversionPreview({});
+    renderProjectControls();
+    renderProjectDashboard();
+    renderProjectKnowledgeImportPanel();
+    renderProjectEntityGraphPanel();
+    renderCanonWorkflowPanel();
+    renderSessionList();
+    setStatus('assistant-project-knowledge-status', data.message || 'Raw text converted to records.', 'ok');
+  }
+
+  function selectedAssistantText() {
+    const selection = String(window.getSelection?.().toString?.() || '').trim();
+    if (selection) return selection;
+    const composerText = trim($('assistant-composer')?.value || '');
+    if (composerText) return composerText;
+    const messages = Array.isArray(activeSession?.messages) ? activeSession.messages : [];
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      const content = trim(messages[i]?.content || '');
+      if (content) return content;
+    }
+    return '';
+  }
+
+  async function captureSelectedAssistantText(captureType = 'memory') {
+    const text = selectedAssistantText();
+    if (!text) {
+      setStatus('assistant-chat-status', 'Select text, write something in the composer, or keep a recent message first.', 'warn');
+      return;
+    }
+    const project = activeProjectMeta();
+    if (['project_lore', 'canon_draft', 'active_canon'].includes(captureType) && !project) {
+      setStatus('assistant-chat-status', 'Select a project before saving project lore or canon.', 'warn');
+      return;
+    }
+    const titleDefault = captureType === 'canon_draft' ? 'Canon draft from chat' : captureType === 'project_lore' ? 'Project lore from chat' : 'Saved chat memory';
+    const title = window.prompt('Memory title:', titleDefault);
+    if (title === null) return;
+    const payload = {
+      project_id: project?.id || activeSession?.project_id || '',
+      session_id: activeSession?.id || '',
+      title: trim(title || titleDefault) || titleDefault,
+      text,
+      capture_type: captureType,
+      canon_status: captureType === 'canon_draft' ? 'draft' : ($('assistant-project-knowledge-canon')?.value || 'draft'),
+      visibility: $('assistant-project-knowledge-visibility')?.value || 'project_private',
+      source: 'chat',
+    };
+    setStatus('assistant-chat-status', 'Saving selected text to memory...', 'loading');
+    const data = await safeFetchJson('/api/assistant/manual-memory-capture', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    assistantProjects = Array.isArray(data.projects) ? data.projects : assistantProjects;
+    if (data.project) assistantProjects = assistantProjects.map(item => item.id === data.project.id ? data.project : item);
+    renderProjectControls();
+    renderProjectDashboard();
+    renderProjectKnowledgeImportPanel();
+    renderProjectEntityGraphPanel();
+    renderCanonWorkflowPanel();
+    setStatus('assistant-chat-status', data.message || 'Selected text saved to memory.', 'ok');
   }
 
 
@@ -1855,6 +2945,23 @@ ${caption}`);
     return err;
   }
 
+
+  function formatAssistantContextDebug(diagnostics = {}) {
+    const diag = diagnostics && typeof diagnostics === 'object' ? diagnostics : {};
+    const projectLabel = trim(diag.project_title || diag.project_id || 'No project');
+    const pieces = [
+      `Context Pack: ${projectLabel}`,
+      `${Number(diag.project_card_count || 0)} card(s)`,
+      `${Number(diag.project_file_count || 0)} file(s)`,
+      `${Number(diag.total_memory_items ?? diag.assistant_items ?? 0)} memory item(s)`,
+      `${Number(diag.section_count || 0)} section(s)`,
+      `${Number(diag.prompt_block_chars || 0)} chars injected`,
+    ];
+    if (diag.repo_index_enabled) pieces.push(`${Number(diag.repo_index_result_count || 0)} repo result(s)`);
+    if (trim(diag.retrieval_error || diag.repo_index_error || '')) pieces.push('diagnostic warning');
+    return pieces.join(' · ');
+  }
+
   async function readStreamChunkWithTimeout(reader, timeoutMs, code) {
     let timeoutId = null;
     try {
@@ -1924,10 +3031,14 @@ ${caption}`);
     currentPlaceholderId = addLocalMessage('assistant', '', { streaming: true })?.id || '';
     let assistantText = '';
     try {
+      const threadSnapshot = collectThreadFromDom();
+      const resolvedProjectId = trim(threadSnapshot?.project_id || $('assistant-project-select')?.value || activeProjectMeta()?.id || selectedProjectFilterId() || '');
+      if (threadSnapshot && resolvedProjectId && !trim(threadSnapshot.project_id || '')) threadSnapshot.project_id = resolvedProjectId;
       const payload = {
         model: typeof currentModel === 'function' ? currentModel() : 'default',
         profile: assistantProfile || {},
-        session: collectThreadFromDom(),
+        session: threadSnapshot,
+        project_id: resolvedProjectId,
         messages: sourceMessages,
       };
       const response = await fetch('/api/assistant/chat-stream', {
@@ -1950,13 +3061,15 @@ ${caption}`);
         final(data) {
           assistantText = String(data.reply || assistantText || '');
           const finishReason = trim(data.finish_reason || '');
-          replaceMessageContent(currentPlaceholderId, assistantText, { streaming: false, finish_reason: finishReason, warning: trim(data.warning || '') });
+          const contextDiagnostics = data.context_pack_diagnostics && typeof data.context_pack_diagnostics === 'object' ? data.context_pack_diagnostics : {};
+          const contextDebug = formatAssistantContextDebug(contextDiagnostics);
+          replaceMessageContent(currentPlaceholderId, assistantText, { streaming: false, finish_reason: finishReason, warning: trim(data.warning || ''), context_pack_diagnostics: contextDiagnostics, memory_item_count: Number(data.memory_item_count || 0) });
           const placeholder = (activeSession?.messages || []).find(item => item.id === currentPlaceholderId);
-          if (placeholder) placeholder.meta = { ...(placeholder.meta || {}), streaming: false, finish_reason: finishReason, warning: trim(data.warning || '') };
+          if (placeholder) placeholder.meta = { ...(placeholder.meta || {}), streaming: false, finish_reason: finishReason, warning: trim(data.warning || ''), context_pack_diagnostics: contextDiagnostics, memory_item_count: Number(data.memory_item_count || 0), context_debug: contextDebug };
           if (shouldKeepContinueAvailable(finishReason)) markPendingContinue(finishReason);
           else clearPendingContinue();
-          if (trim(data.warning || '')) setStatus('assistant-chat-status', data.warning || 'Assistant reply ready.', 'warn');
-          else setStatus('assistant-chat-status', data.message || 'Assistant reply ready.', 'ok');
+          const baseStatus = trim(data.warning || '') || trim(data.message || '') || 'Assistant reply ready.';
+          setStatus('assistant-chat-status', `${baseStatus} ${contextDebug}`, trim(data.warning || '') ? 'warn' : 'ok');
         },
         error(data) {
           throw new Error(data.error || 'Assistant streaming failed.');
@@ -2114,10 +3227,17 @@ ${caption}`);
     $('btn-assistant-new-project')?.addEventListener('click', () => createProject().catch(err => setStatus('assistant-session-status', err.message || 'Could not create the project.', 'warn')));
     $('btn-assistant-rename-project')?.addEventListener('click', () => renameSelectedProject().catch(err => setStatus('assistant-session-status', err.message || 'Could not rename the project.', 'warn')));
     $('btn-assistant-delete-project')?.addEventListener('click', () => deleteSelectedProject().catch(err => setStatus('assistant-session-status', err.message || 'Could not delete the project.', 'warn')));
+    $('btn-assistant-save-project-profile')?.addEventListener('click', () => saveProjectProfile().catch(err => setStatus('assistant-project-profile-status', err.message || 'Could not save the project profile.', 'warn')));
+    $('assistant-project-type')?.addEventListener('change', handleProjectProfileInputChange);
+    $('assistant-project-custom-label')?.addEventListener('input', handleProjectProfileInputChange);
+    $('assistant-project-custom-description')?.addEventListener('input', handleProjectProfileInputChange);
+    $('assistant-project-custom-rules')?.addEventListener('input', handleProjectProfileInputChange);
     $('btn-assistant-add-context-file')?.addEventListener('click', () => uploadContextFile().catch(err => setStatus('assistant-context-status', err.message || 'Could not add that context file.', 'warn')));
     $('btn-assistant-add-image-bridge')?.addEventListener('click', () => addImageBridgeContext().catch(() => {}));
     $('btn-assistant-refresh-memory')?.addEventListener('click', () => refreshThreadMemory().catch(() => {}));
     $('btn-assistant-apply-memory-backend')?.addEventListener('click', () => applyAssistantMemoryBackend().catch(err => setStatus('assistant-memory-status', err.message || 'Could not switch the embedding backend.', 'warn')));
+    $('btn-assistant-save-model-runtime')?.addEventListener('click', () => saveAssistantModelRuntime({ reindex: false }).catch(err => setStatus('assistant-memory-status', err.message || 'Could not save model settings.', 'warn')));
+    $('btn-assistant-save-model-runtime-reindex')?.addEventListener('click', () => saveAssistantModelRuntime({ reindex: true }).catch(err => setStatus('assistant-memory-status', err.message || 'Could not save and rebuild model index.', 'warn')));
     $('btn-assistant-preview-memory')?.addEventListener('click', () => previewAssistantAdaptiveMemory().catch(err => setStatus('assistant-memory-status', err.message || 'Could not preview adaptive memory.', 'warn')));
     $('btn-assistant-repair-memory')?.addEventListener('click', () => repairAssistantAdaptiveMemory().catch(err => setStatus('assistant-memory-status', err.message || 'Could not rebuild adaptive memory.', 'warn')));
     $('btn-assistant-reset-session-memory')?.addEventListener('click', () => resetAssistantAdaptiveMemory('session').catch(err => setStatus('assistant-memory-status', err.message || 'Could not reset thread memory.', 'warn')));
@@ -2135,11 +3255,26 @@ ${caption}`);
     $('btn-assistant-save-project-brief')?.addEventListener('click', () => saveSelectedProjectBrief().catch(err => setStatus('assistant-project-status', err.message || 'Could not save the project brief.', 'warn')));
     $('btn-assistant-add-project-card')?.addEventListener('click', () => addProjectContextCard().catch(err => setStatus('assistant-project-card-status', err.message || 'Could not add the project context card.', 'warn')));
     $('btn-assistant-add-project-file')?.addEventListener('click', () => addProjectContextFile().catch(err => setStatus('assistant-project-file-status', err.message || 'Could not add the project file.', 'warn')));
+    $('btn-assistant-import-project-knowledge')?.addEventListener('click', () => importProjectKnowledge().catch(err => setStatus('assistant-project-knowledge-status', err.message || 'Could not import that knowledge file.', 'warn')));
+    $('btn-assistant-preview-record-conversion')?.addEventListener('click', () => previewRawTextRecordConversion().catch(err => setStatus('assistant-project-knowledge-status', err.message || 'Could not preview record conversion.', 'warn')));
+    $('btn-assistant-convert-raw-records')?.addEventListener('click', () => convertRawTextToRecords().catch(err => setStatus('assistant-project-knowledge-status', err.message || 'Could not convert raw text to records.', 'warn')));
+    $('btn-assistant-import-pasted-knowledge')?.addEventListener('click', () => importPastedProjectKnowledge().catch(err => setStatus('assistant-project-knowledge-status', err.message || 'Could not import pasted text.', 'warn')));
+    $('btn-assistant-refresh-project-imports')?.addEventListener('click', () => refreshProjectKnowledgeImports().catch(err => setStatus('assistant-project-knowledge-status', err.message || 'Could not refresh imports.', 'warn')));
+    $('btn-assistant-refresh-live-memory-index')?.addEventListener('click', () => requestAssistantMemoryRefresh('assistant-project-knowledge-status', { lane: 'assistant', project_id: activeProjectMeta()?.id || '', force: true }).catch(err => setStatus('assistant-project-knowledge-status', err.message || 'Could not refresh live memory index.', 'warn')));
+    $('btn-assistant-refresh-entity-graph')?.addEventListener('click', () => refreshProjectEntityGraph().catch(err => setStatus('assistant-project-entity-graph-status', err.message || 'Could not refresh entity graph.', 'warn')));
+    $('btn-assistant-canon-analyze')?.addEventListener('click', () => analyzeCanonWorkflowChange().catch(err => setStatus('assistant-project-canon-workflow-status', err.message || 'Could not analyze canon change.', 'warn')));
+    $('btn-assistant-canon-propose')?.addEventListener('click', () => saveCanonWorkflowProposal().catch(err => setStatus('assistant-project-canon-workflow-status', err.message || 'Could not save canon proposal.', 'warn')));
+    $('btn-assistant-canon-refresh')?.addEventListener('click', () => refreshCanonWorkflowProposals().catch(err => setStatus('assistant-project-canon-workflow-status', err.message || 'Could not refresh canon proposals.', 'warn')));
+    $('assistant-project-entity-search')?.addEventListener('input', debounce(() => refreshProjectEntityGraph({ quiet: true }).catch(() => {}), 300));
     $('btn-assistant-add-project-record')?.addEventListener('click', () => addProjectLinkedRecord().catch(err => setStatus('assistant-project-record-status', err.message || 'Could not add the linked record.', 'warn')));
     $('btn-assistant-rename-session')?.addEventListener('click', () => renameActiveSession().catch(err => setStatus('assistant-session-status', err.message || 'Could not rename the chat.', 'warn')));
     $('btn-assistant-continue')?.addEventListener('click', () => continueAssistantReply().catch(err => setStatus('assistant-chat-status', err.message || 'Could not continue the reply.', 'warn')));
     $('btn-assistant-delete-session')?.addEventListener('click', () => deleteActiveSession().catch(err => setStatus('assistant-session-status', err.message || 'Could not delete the chat.', 'warn')));
     $('btn-assistant-clear-thread')?.addEventListener('click', () => clearThread().catch(err => setStatus('assistant-chat-status', err.message || 'Could not clear the thread.', 'warn')));
+    $('btn-assistant-save-chat')?.addEventListener('click', () => saveActiveSession({ silent: false }).catch(err => setStatus('assistant-chat-status', err.message || 'Could not save this chat.', 'warn')));
+    $('btn-assistant-save-selection-memory')?.addEventListener('click', () => captureSelectedAssistantText('memory').catch(err => setStatus('assistant-chat-status', err.message || 'Could not save selected text as memory.', 'warn')));
+    $('btn-assistant-add-selection-project-lore')?.addEventListener('click', () => captureSelectedAssistantText('project_lore').catch(err => setStatus('assistant-chat-status', err.message || 'Could not add selected text to project lore.', 'warn')));
+    $('btn-assistant-add-selection-canon-draft')?.addEventListener('click', () => captureSelectedAssistantText('canon_draft').catch(err => setStatus('assistant-chat-status', err.message || 'Could not add selected text as canon draft.', 'warn')));
     $('btn-assistant-send')?.addEventListener('click', () => sendComposerMessage().catch(err => setStatus('assistant-chat-status', err.message || 'Could not send the message.', 'warn')));
     $('btn-assistant-stop')?.addEventListener('click', () => { if (streamController) streamController.abort(); });
     $('btn-assistant-regenerate')?.addEventListener('click', () => regenerateLastReply().catch(err => setStatus('assistant-chat-status', err.message || 'Could not regenerate that reply.', 'warn')));
@@ -2160,7 +3295,7 @@ ${caption}`);
         renderAssistantSearchResults([], '');
       }
     });
-    $('assistant-project-filter')?.addEventListener('change', renderSessionList);
+    $('assistant-project-filter')?.addEventListener('change', () => { clearProjectProfileDraft(); renderSessionList(); renderProjectProfileEditor(); renderProjectBriefEditor(); renderProjectCardShelf(); renderProjectFileShelf(); renderProjectKnowledgeImportPanel(); renderProjectEntityGraphPanel(); renderCanonWorkflowPanel(); renderProjectDashboard(); });
     $('btn-assistant-search-context')?.addEventListener('click', () => searchAssistantContext().catch(err => setStatus('assistant-session-status', err.message || 'Could not search Assistant content.', 'warn')));
     $('btn-assistant-clear-search-results')?.addEventListener('click', () => {
       assistantSearchResults = [];
@@ -2280,6 +3415,21 @@ ${caption}`);
         const chunkId = suppressBtn.getAttribute('data-memory-suppress-toggle') || '';
         const nextState = String(suppressBtn.getAttribute('data-memory-suppress-state') || '0') === '1';
         updateMemoryItemState(chunkId, { is_suppressed: nextState, suppressed_reason: nextState ? 'Suppressed in global memory admin' : '' }).catch(err => setStatus('assistant-memory-admin-status', err.message || 'Could not update that memory item.', 'warn'));
+        return;
+      }
+      const globalBtn = event.target.closest('[data-memory-sandbox-global]');
+      if (globalBtn) {
+        updateMemorySandbox(globalBtn.getAttribute('data-memory-sandbox-global') || '', { memory_scope: 'global', visibility: 'assistant_wide', bleed_policy: 'allow_global', sandbox_policy: 'global_visible' }).catch(err => setStatus('assistant-memory-admin-status', err.message || 'Could not move memory to global.', 'warn'));
+        return;
+      }
+      const projectBtn = event.target.closest('[data-memory-sandbox-project]');
+      if (projectBtn) {
+        updateMemorySandbox(projectBtn.getAttribute('data-memory-sandbox-project') || '', { memory_scope: 'project', project_id: projectBtn.getAttribute('data-memory-sandbox-project-id') || '', visibility: 'project_private', bleed_policy: 'deny_global', sandbox_policy: 'project_boxed' }).catch(err => setStatus('assistant-memory-admin-status', err.message || 'Could not move memory to project.', 'warn'));
+        return;
+      }
+      const quarantineBtn = event.target.closest('[data-memory-sandbox-quarantine]');
+      if (quarantineBtn) {
+        updateMemorySandbox(quarantineBtn.getAttribute('data-memory-sandbox-quarantine') || '', { memory_scope: 'quarantine', visibility: 'hidden_until_review', bleed_policy: 'quarantine', sandbox_policy: 'deny_until_reviewed' }).catch(err => setStatus('assistant-memory-admin-status', err.message || 'Could not quarantine memory.', 'warn'));
       }
     });
 
@@ -2337,6 +3487,16 @@ ${caption}`);
     });
 
     document.addEventListener('click', event => {
+      const genTestsBtn = event.target.closest('[data-assistant-generate-retrieval-tests]');
+      if (genTestsBtn) {
+        generateRetrievalTestQuestions(genTestsBtn.getAttribute('data-assistant-generate-retrieval-tests') || '').catch(err => setStatus('assistant-project-knowledge-status', err.message || 'Could not generate retrieval tests.', 'warn'));
+        return;
+      }
+      const runTestsBtn = event.target.closest('[data-assistant-run-retrieval-tests]');
+      if (runTestsBtn) {
+        runRetrievalTestQuestions(runTestsBtn.getAttribute('data-assistant-run-retrieval-tests') || '').catch(err => setStatus('assistant-project-knowledge-status', err.message || 'Could not run retrieval tests.', 'warn'));
+        return;
+      }
       const starter = event.target.closest('[data-assistant-starter]');
       if (!starter) return;
       handleStarter(starter.getAttribute('data-assistant-starter') || '');
