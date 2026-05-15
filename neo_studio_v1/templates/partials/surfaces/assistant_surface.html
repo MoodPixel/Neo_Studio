@@ -122,6 +122,13 @@
     <button aria-selected="false" data-assistant-workspace-tab="assistant" role="tab" type="button">Assistant</button>
     <button aria-selected="false" data-assistant-workspace-tab="memory" role="tab" type="button">Memory</button>
     <button aria-selected="false" data-assistant-workspace-tab="project" role="tab" type="button">Project</button>
+    <button aria-selected="false" data-assistant-workspace-tab="context" role="tab" type="button">Context</button>
+    <button aria-selected="false" data-assistant-workspace-tab="tools" role="tab" type="button">Tools</button>
+    <button aria-selected="false" data-assistant-workspace-tab="local" role="tab" type="button">Local Control</button>
+    <button aria-selected="false" data-assistant-workspace-tab="patch" role="tab" type="button">Patch Plan</button>
+    <button aria-selected="false" data-assistant-workspace-tab="tasks" role="tab" type="button">Task History</button>
+    <button aria-selected="false" data-assistant-workspace-tab="persona" role="tab" type="button">Persona</button>
+    <button aria-selected="false" data-assistant-workspace-tab="validation" role="tab" type="button">Validation</button>
     <button aria-selected="false" data-assistant-workspace-tab="bridge" role="tab" type="button">Creative Bridge</button>
   </div>
   <section class="assistant-workspace-tabpanel active" data-assistant-workspace-panel="chat" role="tabpanel">
@@ -192,8 +199,10 @@
 <button class="btn btn-primary" id="btn-assistant-send" type="button">Send</button>
 <button class="btn" disabled="" id="btn-assistant-stop" type="button">Stop</button>
 <button class="btn" id="btn-assistant-clear-thread" type="button">Clear thread</button>
+<button class="btn" id="btn-assistant-save-chat" type="button">Save chat</button>
 <button class="btn" id="btn-assistant-open-manager" type="button">Open shared model controls</button>
 </div>
+<div class="row assistant-memory-chip-row" style="margin-top:10px; gap:8px; flex-wrap:wrap;"><button class="btn btn-small" id="btn-assistant-save-selection-memory" type="button">Save selected as memory</button><button class="btn btn-small" id="btn-assistant-add-selection-project-lore" type="button">Add to project lore</button><button class="btn btn-small" id="btn-assistant-add-selection-canon-draft" type="button">Add to canon draft</button></div>
 <div class="status" id="assistant-chat-status" style="margin-top:12px;"></div>
 </div>
 </div>
@@ -283,6 +292,43 @@
 <button class="btn btn-small" id="btn-assistant-apply-memory-backend" type="button">Apply backend</button>
 </div>
 <div class="mini-note" id="assistant-memory-backend-note" style="margin-top:8px;">Memory backend status will appear here.</div>
+<div class="panel" style="margin-top:14px; padding:12px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06);">
+<div class="row-between"><div><div class="stat-title">Local embedding / reranker models</div><div class="mini-note">Optional stronger retrieval. Leave empty to keep Hashing local / local hybrid fallback.</div></div><span class="badge" id="assistant-memory-model-runtime-badge">fallback</span></div>
+<div class="grid grid-2" style="margin-top:12px; gap:12px; align-items:end;">
+<div>
+<label for="assistant-memory-embedding-device">Embedding device</label>
+<select id="assistant-memory-embedding-device">
+<option value="auto">auto</option>
+<option value="cuda">cuda</option>
+<option value="cpu">cpu</option>
+</select>
+</div>
+<div>
+<label for="assistant-memory-reranker-backend">Reranker</label>
+<select id="assistant-memory-reranker-backend">
+<option value="local_hybrid">local_hybrid</option>
+<option value="cross_encoder_local">cross_encoder_local</option>
+</select>
+</div>
+</div>
+<label for="assistant-memory-embedding-model-path" style="margin-top:12px;">Embedding model folder</label>
+<input id="assistant-memory-embedding-model-path" type="text" placeholder="F:\LLM\models\embeddings\bge-base-en-v1.5"/>
+<label for="assistant-memory-reranker-model-path" style="margin-top:12px;">Reranker model folder</label>
+<input id="assistant-memory-reranker-model-path" type="text" placeholder="F:\LLM\models\rerankers\bge-reranker-base"/>
+<div class="row" style="margin-top:12px; gap:10px; flex-wrap:wrap; align-items:end;">
+<div style="width:180px;">
+<label for="assistant-memory-reranker-device">Reranker device</label>
+<select id="assistant-memory-reranker-device">
+<option value="auto">auto</option>
+<option value="cuda">cuda</option>
+<option value="cpu">cpu</option>
+</select>
+</div>
+<button class="btn btn-small" id="btn-assistant-save-model-runtime" type="button">Save model settings</button>
+<button class="btn btn-small btn-primary" id="btn-assistant-save-model-runtime-reindex" type="button">Save + rebuild index</button>
+</div>
+<div class="mini-note" id="assistant-memory-model-runtime-note" style="margin-top:8px;">Local model status will appear here.</div>
+</div>
 <label for="assistant-memory-chunk-type-filter" style="margin-top:14px;">Forget filter</label>
 <select id="assistant-memory-chunk-type-filter">
 <option value="all">All chunk types</option>
@@ -362,6 +408,7 @@
 </section>
 <section class="assistant-workspace-tabpanel" data-assistant-workspace-panel="project" role="tabpanel">
 <div class="assistant-grouped-tools-stack">
+<details class="assistant-tools-section" open=""><summary class="assistant-tools-section-summary">Project profile</summary><div class="assistant-tools-section-body"><div class="mini-note" id="assistant-project-profile-meta" style="margin-top:10px;">Assign this thread to a project, then choose how Neo should treat this project memory.</div><div class="grid grid-2" style="margin-top:14px; gap:14px;"><div><label for="assistant-project-type">Project type</label><select disabled="" id="assistant-project-type"><option value="general">General</option><option value="software">Software / Codebase</option><option value="universe">Universe / Worldbuilding</option><option value="freelance_business">Freelance Business / Client Work</option><option value="creative_library">Creative Library / Assets</option><option value="custom">Custom</option></select></div><div><label for="assistant-project-custom-label">Custom type label</label><input disabled="" id="assistant-project-custom-label" placeholder="AI music release system, modding library, client CRM..." type="text"/></div></div><label for="assistant-project-custom-description" style="margin-top:14px;">Custom type description</label><textarea disabled="" id="assistant-project-custom-description" placeholder="Define what this project is and how Neo should think about it." rows="3"></textarea><label for="assistant-project-custom-rules" style="margin-top:14px;">Custom context rules</label><textarea disabled="" id="assistant-project-custom-rules" placeholder="One rule per line. Example: Keep client pricing separate from personal creative lore." rows="4"></textarea><div class="row" style="margin-top:10px; gap:10px; flex-wrap:wrap;"><button class="btn btn-small" disabled="" id="btn-assistant-save-project-profile" type="button">Save project profile</button></div><div class="status" id="assistant-project-profile-status" style="margin-top:12px;"></div></div></details>
 <details class="assistant-tools-section"><summary class="assistant-tools-section-summary">Project brief</summary><div class="assistant-tools-section-body"><div class="mini-note" id="assistant-project-brief-meta" style="margin-top:10px;">Assign this thread to a project to keep a shared brief and context that every related chat can inherit.</div><label for="assistant-project-brief" style="margin-top:12px;">Shared project brief</label><textarea disabled="" id="assistant-project-brief" placeholder="Select a project above to edit the shared project brief." rows="5"></textarea><div class="row" style="margin-top:10px; gap:10px; flex-wrap:wrap;">
 <button class="btn btn-small" disabled="" id="btn-assistant-save-project-brief" type="button">Save project brief</button>
 </div><div class="status" id="assistant-project-status" style="margin-top:12px;"></div></div></details>
@@ -369,11 +416,203 @@
 <details class="assistant-tools-section"><summary class="assistant-tools-section-summary">Project context cards</summary><div class="assistant-tools-section-body"><div class="mini-note" id="assistant-project-cards-meta" style="margin-top:10px;">Reusable project-level context blocks for voice, client notes, lore rules, constraints, or any shared grounding.</div><label for="assistant-project-card-title" style="margin-top:12px;">Card title</label><input disabled="" id="assistant-project-card-title" placeholder="Brand voice, Client notes, World rules..." type="text"/><label for="assistant-project-card-content" style="margin-top:12px;">Card content</label><textarea disabled="" id="assistant-project-card-content" placeholder="Add reusable context this whole project should carry." rows="4"></textarea><div class="row" style="margin-top:10px; gap:10px; flex-wrap:wrap;">
 <button class="btn btn-small" disabled="" id="btn-assistant-add-project-card" type="button">Add context card</button>
 </div><div class="assistant-context-list" id="assistant-project-card-list" style="margin-top:14px;"></div><div class="status" id="assistant-project-card-status" style="margin-top:12px;"></div></div></details>
+
+<details class="assistant-tools-section"><summary class="assistant-tools-section-summary">Structured knowledge import</summary><div class="assistant-tools-section-body"><div class="mini-note" id="assistant-project-knowledge-meta" style="margin-top:10px;">Import project knowledge into scoped Assistant memory. Neo now shows import diagnostics: detected type/domain, chunking strategy, structured records, entity links, warnings, and recommended follow-up actions.</div><label for="assistant-project-knowledge-upload" style="margin-top:12px;">Knowledge file</label><input accept=".txt,.md,.markdown,.json,.json5,.csv,.log,.yaml,.yml,text/plain,application/json,text/markdown,text/csv" disabled="" id="assistant-project-knowledge-upload" type="file"/><label for="assistant-project-knowledge-paste-title" style="margin-top:14px;">Paste title</label><input disabled="" id="assistant-project-knowledge-paste-title" placeholder="Great Soul chapter, client notes, lore primer..." type="text"/><label for="assistant-project-knowledge-paste" style="margin-top:12px;">Paste raw knowledge</label><textarea disabled="" id="assistant-project-knowledge-paste" placeholder="Paste raw lore, notes, client details, project rules, or research here when you do not have a file." rows="8"></textarea><div class="grid grid-2" style="margin-top:14px; gap:14px;"><div><label for="assistant-project-knowledge-canon">Canon status</label><select disabled="" id="assistant-project-knowledge-canon"><option value="draft">Draft</option><option value="active">Active</option><option value="primary_canon">Primary canon</option><option value="secondary_canon">Secondary canon</option><option value="speculative">Speculative</option><option value="deprecated">Deprecated</option><option value="archived">Archived</option></select></div><div><label for="assistant-project-knowledge-visibility">Visibility</label><select disabled="" id="assistant-project-knowledge-visibility"><option value="project_private">Project private</option><option value="public">Public</option><option value="restricted">Restricted</option><option value="author_private">Author private</option><option value="under_veil">Under-Veil</option></select></div></div><div class="row" style="margin-top:10px; gap:10px; flex-wrap:wrap;"><button class="btn btn-small" disabled="" id="btn-assistant-import-project-knowledge" type="button">Import file to memory</button><button class="btn btn-small" disabled="" id="btn-assistant-preview-record-conversion" type="button">Preview records</button><button class="btn btn-small" disabled="" id="btn-assistant-convert-raw-records" type="button">Convert to records</button><button class="btn btn-small" disabled="" id="btn-assistant-import-pasted-knowledge" type="button">Import pasted text</button><button class="btn btn-small" disabled="" id="btn-assistant-refresh-project-imports" type="button">Refresh imports</button><button class="btn btn-small" disabled="" id="btn-assistant-refresh-live-memory-index" type="button">Refresh live memory index</button></div><div class="assistant-context-list" id="assistant-record-conversion-preview" style="margin-top:14px;"></div><div class="assistant-context-list" id="assistant-project-knowledge-import-list" style="margin-top:14px;"></div><div class="status" id="assistant-project-knowledge-status" style="margin-top:12px;"></div></div></details>
+<details class="assistant-tools-section"><summary class="assistant-tools-section-summary">Entity registry + canon graph</summary><div class="assistant-tools-section-body"><div class="mini-note" id="assistant-project-entity-graph-meta" style="margin-top:10px;">Entity graph turns imported knowledge into project-scoped entities, relationships, and canon warnings.</div><div class="row" style="margin-top:10px; gap:10px; flex-wrap:wrap;"><input id="assistant-project-entity-search" placeholder="Search entities, worlds, factions..." style="max-width:360px;" type="text"/><button class="btn btn-small" disabled="" id="btn-assistant-refresh-entity-graph" type="button">Refresh graph</button></div><div class="grid grid-2" style="gap:14px; margin-top:14px;"><div><div class="stat-title">Entities</div><div class="assistant-context-list" id="assistant-project-entity-list" style="margin-top:10px;"></div></div><div><div class="stat-title">Relationships / warnings</div><div class="assistant-context-list" id="assistant-project-relationship-list" style="margin-top:10px;"></div></div></div><div class="status" id="assistant-project-entity-graph-status" style="margin-top:12px;"></div></div></details>
+<details class="assistant-tools-section"><summary class="assistant-tools-section-summary">Canon conflict + update workflow</summary><div class="assistant-tools-section-body"><div class="mini-note" id="assistant-project-canon-workflow-meta" style="margin-top:10px;">Create draft canon changes, analyze warnings, apply confirmed updates, and track entity change history.</div><div class="grid grid-2" style="gap:14px; margin-top:14px;"><div><label for="assistant-canon-action">Action</label><select disabled="" id="assistant-canon-action"><option value="upsert_entity">Add / update entity</option><option value="promote_entity">Promote entity</option><option value="deprecate_entity">Deprecate entity</option><option value="archive_entity">Archive entity</option></select></div><div><label for="assistant-canon-kind">Kind</label><input disabled="" id="assistant-canon-kind" placeholder="world, city, faction, character..." value="record"/></div></div><div class="grid grid-2" style="gap:14px; margin-top:10px;"><div><label for="assistant-canon-entity-id">Entity ID</label><input disabled="" id="assistant-canon-entity-id" placeholder="world_eldraeth-prime"/></div><div><label for="assistant-canon-label">Label</label><input disabled="" id="assistant-canon-label" placeholder="Display name"/></div></div><label for="assistant-canon-summary" style="margin-top:10px;">Canon summary / proposed change</label><textarea disabled="" id="assistant-canon-summary" rows="5" placeholder="Describe the entity or the canon change to save."></textarea><div class="grid grid-2" style="gap:14px; margin-top:10px;"><div><label for="assistant-canon-status">Canon status</label><select disabled="" id="assistant-canon-status"><option value="draft">Draft</option><option value="active">Active</option><option value="primary_canon">Primary canon</option><option value="secondary_canon">Secondary canon</option><option value="speculative">Speculative</option><option value="disputed">Disputed</option><option value="deprecated">Deprecated</option><option value="archived">Archived</option><option value="contradicted">Contradicted</option></select></div><div><label for="assistant-canon-visibility">Visibility</label><select disabled="" id="assistant-canon-visibility"><option value="project_private">Project private</option><option value="public">Public</option><option value="restricted">Restricted</option><option value="author_private">Author private</option><option value="under_veil">Under-Veil</option></select></div></div><label for="assistant-canon-reason" style="margin-top:10px;">Reason / note</label><input disabled="" id="assistant-canon-reason" placeholder="Why this change is being proposed"/><div class="row" style="margin-top:10px; gap:10px; flex-wrap:wrap;"><button class="btn btn-small" disabled="" id="btn-assistant-canon-analyze" type="button">Analyze</button><button class="btn btn-small" disabled="" id="btn-assistant-canon-propose" type="button">Save proposal</button><button class="btn btn-small" disabled="" id="btn-assistant-canon-refresh" type="button">Refresh proposals</button></div><div class="grid grid-2" style="gap:14px; margin-top:14px;"><div><div class="stat-title">Analysis / warnings</div><div class="assistant-context-list" id="assistant-canon-analysis-list" style="margin-top:10px;"></div></div><div><div class="stat-title">Draft proposals / history</div><div class="assistant-context-list" id="assistant-canon-proposal-list" style="margin-top:10px;"></div></div></div><div class="status" id="assistant-project-canon-workflow-status" style="margin-top:12px;"></div></div></details>
 <details class="assistant-tools-section"><summary class="assistant-tools-section-summary">Project text attachments</summary><div class="assistant-tools-section-body"><div class="mini-note" id="assistant-project-files-meta" style="margin-top:10px;">Attach reusable text files to this project so every related Assistant thread can inherit them.</div><label for="assistant-project-file-upload" style="margin-top:12px;">Upload text file</label><input accept=".txt,.md,.markdown,.json,.csv,.log,.py,.js,.ts,.html,.css,.xml,.yaml,.yml,text/plain,application/json,text/markdown,text/csv" disabled="" id="assistant-project-file-upload" type="file"/><div class="row" style="margin-top:10px; gap:10px; flex-wrap:wrap;">
 <button class="btn btn-small" disabled="" id="btn-assistant-add-project-file" type="button">Add project file</button>
 </div><div class="assistant-context-list" id="assistant-project-file-list" style="margin-top:14px;"></div><div class="status" id="assistant-project-file-status" style="margin-top:12px;"></div></div></details>
 </div>
 </section>
+
+<section class="assistant-workspace-tabpanel" data-assistant-workspace-panel="context" role="tabpanel">
+  <div class="assistant-grouped-tools-stack">
+    <details class="assistant-tools-section is-wide" open=""><summary class="assistant-tools-section-summary">Context pack preview</summary><div class="assistant-tools-section-body">
+      <div class="mini-note">Preview the exact Assistant context bundle built from profile, thread, project, memory, and repo index before a reply is generated.</div>
+      <label for="assistant-phase10-context-query" style="margin-top:12px;">Preview query</label>
+      <textarea id="assistant-phase10-context-query" placeholder="Optional query override. Leave blank to use latest thread/composer context." rows="3"></textarea>
+      <div class="row" style="margin-top:10px; gap:10px; flex-wrap:wrap;">
+        <button class="btn btn-small" id="btn-assistant-phase10-refresh-context" type="button">Refresh context pack</button>
+      </div>
+      <div class="grid grid-3" id="assistant-phase10-context-stats" style="margin-top:14px; gap:12px;"></div>
+      <label style="margin-top:14px;">Prompt sections</label>
+      <div class="assistant-context-list" id="assistant-phase10-context-sections" style="margin-top:12px;"></div>
+      <label style="margin-top:14px;">Prompt block preview</label>
+      <pre class="card-lite" id="assistant-phase10-context-prompt" style="white-space:pre-wrap; max-height:320px; overflow:auto; margin-top:12px;"></pre>
+      <div class="status" id="assistant-phase10-context-status" style="margin-top:12px;"></div>
+    </div></details>
+    <details class="assistant-tools-section"><summary class="assistant-tools-section-summary">Repo index controls</summary><div class="assistant-tools-section-body">
+      <div class="mini-note">Search or rebuild the local repo index used by Assistant project context.</div>
+      <label for="assistant-phase10-repo-query" style="margin-top:12px;">Repo query</label>
+      <input id="assistant-phase10-repo-query" placeholder="assistant routes, memory retriever, extension manifest..." type="text" />
+      <div class="row" style="margin-top:10px; gap:10px; flex-wrap:wrap;">
+        <button class="btn btn-small" id="btn-assistant-phase10-search-repo" type="button">Search repo index</button>
+        <button class="btn btn-small" id="btn-assistant-phase10-rebuild-repo" type="button">Rebuild repo index</button>
+      </div>
+      <div class="grid grid-3" id="assistant-phase10-repo-stats" style="margin-top:14px; gap:12px;"></div>
+      <div class="assistant-context-list" id="assistant-phase10-repo-results" style="margin-top:12px;"></div>
+      <div class="status" id="assistant-phase10-repo-status" style="margin-top:12px;"></div>
+    </div></details>
+  </div>
+</section>
+<section class="assistant-workspace-tabpanel" data-assistant-workspace-panel="tools" role="tabpanel">
+  <div class="assistant-grouped-tools-stack">
+    <details class="assistant-tools-section is-wide" open=""><summary class="assistant-tools-section-summary">Assistant tool catalog</summary><div class="assistant-tools-section-body">
+      <div class="mini-note">Phase 10 UI for registered Assistant tools. Safe read-only tools can execute directly; medium-risk tools require explicit confirmation.</div>
+      <div class="row" style="margin-top:10px; gap:10px; flex-wrap:wrap; align-items:end;">
+        <div style="flex:1 1 220px;"><label for="assistant-phase10-tool-category">Category</label><select id="assistant-phase10-tool-category"><option value="">All categories</option></select></div>
+        <button class="btn btn-small" id="btn-assistant-phase10-load-tools" type="button">Load tools</button>
+      </div>
+      <div class="assistant-context-list" id="assistant-phase10-tool-list" style="margin-top:14px;"></div>
+      <div class="status" id="assistant-phase10-tool-status" style="margin-top:12px;"></div>
+    </div></details>
+    <details class="assistant-tools-section is-wide"><summary class="assistant-tools-section-summary">Tool preview / execute</summary><div class="assistant-tools-section-body">
+      <label for="assistant-phase10-tool-id" style="margin-top:12px;">Tool ID</label>
+      <input id="assistant-phase10-tool-id" placeholder="repo.search" type="text" />
+      <label for="assistant-phase10-tool-args" style="margin-top:12px;">Arguments JSON</label>
+      <textarea id="assistant-phase10-tool-args" placeholder='{"query":"assistant routes","limit":8}' rows="7"></textarea>
+      <label class="mini-note" style="display:flex; align-items:center; gap:8px; margin-top:10px;"><input id="assistant-phase10-tool-confirmed" type="checkbox"/> Confirm medium-risk tool execution</label>
+      <div class="row" style="margin-top:10px; gap:10px; flex-wrap:wrap;">
+        <button class="btn btn-small" id="btn-assistant-phase10-preview-tool" type="button">Preview tool</button>
+        <button class="btn btn-small btn-primary" id="btn-assistant-phase10-execute-tool" type="button">Execute tool</button>
+      </div>
+      <pre class="card-lite" id="assistant-phase10-tool-output" style="white-space:pre-wrap; max-height:360px; overflow:auto; margin-top:12px;"></pre>
+    </div></details>
+  </div>
+</section>
+
+<section class="assistant-workspace-tabpanel" data-assistant-workspace-panel="local" role="tabpanel">
+  <div class="assistant-grouped-tools-stack">
+    <details class="assistant-tools-section is-wide" open=""><summary class="assistant-tools-section-summary">Local app control</summary><div class="assistant-tools-section-body">
+      <div class="mini-note">Guarded local actions for opening folders/files, launching approved apps, and running approved command presets. No raw shell, no password entry, no keyboard/mouse automation.</div>
+      <div class="row" style="margin-top:10px; gap:10px; flex-wrap:wrap; align-items:end;">
+        <button class="btn btn-small" id="btn-assistant-phase12-load-local-actions" type="button">Load local actions</button>
+        <button class="btn btn-small" id="btn-assistant-phase12-refresh-local-history" type="button">Refresh local history</button>
+        <span class="badge" id="assistant-phase12-local-platform">Platform: unknown</span>
+      </div>
+      <div class="grid grid-3" id="assistant-phase12-local-stats" style="margin-top:14px; gap:12px;"></div>
+      <label style="margin-top:14px;">Available local actions</label>
+      <div class="assistant-context-list" id="assistant-phase12-local-action-list" style="margin-top:12px;"></div>
+      <label style="margin-top:14px;">Approved app presets</label>
+      <div class="assistant-context-list" id="assistant-phase12-local-app-presets" style="margin-top:12px;"></div>
+      <label style="margin-top:14px;">Approved command presets</label>
+      <div class="assistant-context-list" id="assistant-phase12-local-command-presets" style="margin-top:12px;"></div>
+      <div class="status" id="assistant-phase12-local-catalog-status" style="margin-top:12px;"></div>
+    </div></details>
+
+    <details class="assistant-tools-section is-wide" open=""><summary class="assistant-tools-section-summary">Preview / execute local action</summary><div class="assistant-tools-section-body">
+      <div class="grid grid-2" style="gap:14px;">
+        <div>
+          <label for="assistant-phase12-local-action-type">Action type</label>
+          <select id="assistant-phase12-local-action-type">
+            <option value="open_path">open_path</option>
+            <option value="reveal_path">reveal_path</option>
+            <option value="launch_app">launch_app</option>
+            <option value="run_command_preset">run_command_preset</option>
+          </select>
+        </div>
+        <div>
+          <label for="assistant-phase12-local-risk-preview">Risk preview</label>
+          <input id="assistant-phase12-local-risk-preview" readonly="" value="Preview required" type="text" />
+        </div>
+      </div>
+      <label for="assistant-phase12-local-args" style="margin-top:12px;">Arguments JSON</label>
+      <textarea id="assistant-phase12-local-args" rows="7" placeholder='{"path":"F:/LLM/sd-webui-forge-neo"}'></textarea>
+      <label class="mini-note" style="display:flex; align-items:center; gap:8px; margin-top:10px;"><input id="assistant-phase12-local-confirmed" type="checkbox"/> I reviewed the preview and confirm execution if required</label>
+      <div class="row" style="margin-top:10px; gap:10px; flex-wrap:wrap;">
+        <button class="btn btn-small" id="btn-assistant-phase12-preview-local-action" type="button">Preview local action</button>
+        <button class="btn btn-small btn-primary" id="btn-assistant-phase12-execute-local-action" type="button">Execute confirmed action</button>
+      </div>
+      <pre class="card-lite" id="assistant-phase12-local-output" style="white-space:pre-wrap; max-height:420px; overflow:auto; margin-top:12px;"></pre>
+      <div class="status" id="assistant-phase12-local-action-status" style="margin-top:12px;"></div>
+    </div></details>
+
+    <details class="assistant-tools-section is-wide"><summary class="assistant-tools-section-summary">Recent local action memory</summary><div class="assistant-tools-section-body">
+      <div class="mini-note">Shows local-action writebacks captured through the Assistant action-memory lane.</div>
+      <div class="assistant-context-list" id="assistant-phase12-local-history" style="margin-top:12px;"></div>
+      <div class="status" id="assistant-phase12-local-history-status" style="margin-top:12px;"></div>
+    </div></details>
+  </div>
+</section>
+
+<section class="assistant-workspace-tabpanel" data-assistant-workspace-panel="patch" role="tabpanel">
+  <div class="assistant-grouped-tools-stack">
+    <details class="assistant-tools-section is-wide" open=""><summary class="assistant-tools-section-summary">Patch plan workspace</summary><div class="assistant-tools-section-body">
+      <div class="mini-note">Validate, preview, and apply guarded Assistant patch plans. Apply requires explicit confirmation and creates backups.</div>
+      <label for="assistant-phase10-patch-json" style="margin-top:12px;">Patch plan JSON</label>
+      <textarea id="assistant-phase10-patch-json" rows="14" placeholder='{"title":"Example patch","summary":"Small safe change","changes":[{"path":"neo_system_records/02_TABS/assistant/notes.md","action":"create","content":"# Notes\n"}]}'></textarea>
+      <label class="mini-note" style="display:flex; align-items:center; gap:8px; margin-top:10px;"><input id="assistant-phase10-patch-confirmed" type="checkbox"/> Confirm apply</label>
+      <label class="mini-note" style="display:flex; align-items:center; gap:8px; margin-top:8px;"><input id="assistant-phase10-patch-allow-delete" type="checkbox"/> Allow explicit deletes</label>
+      <div class="row" style="margin-top:10px; gap:10px; flex-wrap:wrap;">
+        <button class="btn btn-small" id="btn-assistant-phase10-validate-patch" type="button">Validate</button>
+        <button class="btn btn-small" id="btn-assistant-phase10-preview-patch" type="button">Preview diff</button>
+        <button class="btn btn-small btn-primary" id="btn-assistant-phase10-apply-patch" type="button">Apply confirmed plan</button>
+      </div>
+      <pre class="card-lite" id="assistant-phase10-patch-output" style="white-space:pre-wrap; max-height:420px; overflow:auto; margin-top:12px;"></pre>
+      <div class="status" id="assistant-phase10-patch-status" style="margin-top:12px;"></div>
+    </div></details>
+  </div>
+</section>
+<section class="assistant-workspace-tabpanel" data-assistant-workspace-panel="tasks" role="tabpanel">
+  <div class="assistant-grouped-tools-stack">
+    <details class="assistant-tools-section" open=""><summary class="assistant-tools-section-summary">Write task memory</summary><div class="assistant-tools-section-body">
+      <label for="assistant-phase10-task-summary" style="margin-top:12px;">Task summary</label>
+      <textarea id="assistant-phase10-task-summary" rows="4" placeholder="What did we do or decide?"></textarea>
+      <label for="assistant-phase10-task-outcome" style="margin-top:12px;">Outcome</label>
+      <textarea id="assistant-phase10-task-outcome" rows="3" placeholder="What changed, passed, failed, or remains?"></textarea>
+      <div class="row" style="margin-top:10px; gap:10px; flex-wrap:wrap;"><button class="btn btn-small btn-primary" id="btn-assistant-phase10-write-task" type="button">Save task memory</button><button class="btn btn-small" id="btn-assistant-phase10-refresh-actions" type="button">Refresh action history</button></div>
+      <div class="status" id="assistant-phase10-task-status" style="margin-top:12px;"></div>
+    </div></details>
+    <details class="assistant-tools-section is-wide" open=""><summary class="assistant-tools-section-summary">Recent action memory</summary><div class="assistant-tools-section-body"><div class="assistant-context-list" id="assistant-phase10-action-list" style="margin-top:12px;"></div></div></details>
+  </div>
+</section>
+<section class="assistant-workspace-tabpanel" data-assistant-workspace-panel="persona" role="tabpanel">
+  <div class="assistant-grouped-tools-stack">
+    <details class="assistant-tools-section is-wide" open=""><summary class="assistant-tools-section-summary">Persona diagnostics</summary><div class="assistant-tools-section-body">
+      <div class="mini-note">Preview how the Assistant profile + memory shaping layer affects tone, continuity, boundaries, and response style.</div>
+      <label for="assistant-phase10-persona-query" style="margin-top:12px;">Persona preview query</label>
+      <textarea id="assistant-phase10-persona-query" rows="3" placeholder="Optional query for persona preview."></textarea>
+      <div class="row" style="margin-top:10px; gap:10px; flex-wrap:wrap;"><button class="btn btn-small" id="btn-assistant-phase10-preview-persona" type="button">Preview persona</button></div>
+      <div class="grid grid-3" id="assistant-phase10-persona-stats" style="margin-top:14px; gap:12px;"></div>
+      <pre class="card-lite" id="assistant-phase10-persona-output" style="white-space:pre-wrap; max-height:420px; overflow:auto; margin-top:12px;"></pre>
+      <div class="status" id="assistant-phase10-persona-status" style="margin-top:12px;"></div>
+    </div></details>
+  </div>
+</section>
+
+
+<section class="assistant-workspace-tabpanel" data-assistant-workspace-panel="validation" role="tabpanel">
+  <div class="assistant-grouped-tools-stack">
+    <details class="assistant-tools-section is-wide" open=""><summary class="assistant-tools-section-summary">Validation suite</summary><div class="assistant-tools-section-body">
+      <div class="mini-note">Run the Phase 13 Assistant validation suite for imports, tool registry, patch planner, local control guardrails, context pack, repo index, memory retrieval, and docs.</div>
+      <div class="row" style="margin-top:10px; gap:10px; flex-wrap:wrap;">
+        <button class="btn btn-small btn-primary" id="btn-assistant-phase13-run-validation" type="button">Run validation suite</button>
+        <button class="btn btn-small" id="btn-assistant-phase13-load-validation" type="button">Load latest validation log</button>
+      </div>
+      <div class="grid grid-3" id="assistant-phase13-validation-stats" style="margin-top:14px; gap:12px;"></div>
+      <label style="margin-top:14px;">Check results</label>
+      <div class="assistant-context-list" id="assistant-phase13-validation-results" style="margin-top:12px;"></div>
+      <label style="margin-top:14px;">Raw validation payload</label>
+      <pre class="card-lite" id="assistant-phase13-validation-output" style="white-space:pre-wrap; max-height:360px; overflow:auto; margin-top:12px;"></pre>
+      <div class="status" id="assistant-phase13-validation-status" style="margin-top:12px;"></div>
+    </div></details>
+    <details class="assistant-tools-section is-wide"><summary class="assistant-tools-section-summary">Structured Assistant logs</summary><div class="assistant-tools-section-body">
+      <div class="mini-note">View JSONL Assistant event/validation logs and add a manual audit note when needed.</div>
+      <div class="grid grid-2" style="margin-top:14px; gap:14px;">
+        <div><label for="assistant-phase13-log-kind">Log kind</label><select id="assistant-phase13-log-kind"><option value="events">Events</option><option value="validation">Validation</option></select></div>
+        <div><label for="assistant-phase13-manual-log">Manual log note</label><input id="assistant-phase13-manual-log" placeholder="Optional short audit note" type="text" /></div>
+      </div>
+      <div class="row" style="margin-top:10px; gap:10px; flex-wrap:wrap;">
+        <button class="btn btn-small" id="btn-assistant-phase13-load-logs" type="button">Load logs</button>
+        <button class="btn btn-small" id="btn-assistant-phase13-write-log" type="button">Write manual log</button>
+      </div>
+      <div class="assistant-context-list" id="assistant-phase13-log-list" style="margin-top:12px;"></div>
+      <div class="status" id="assistant-phase13-log-status" style="margin-top:12px;"></div>
+    </div></details>
+  </div>
+</section>
+
 <section class="assistant-workspace-tabpanel" data-assistant-workspace-panel="bridge" role="tabpanel">
 <div class="assistant-grouped-tools-stack">
 <details class="assistant-tools-section"><summary class="assistant-tools-section-summary">Image context bridge</summary><div class="assistant-tools-section-body"><div class="mini-note" style="margin-top:10px;">Upload an image here and Neo will turn it into text context for this thread using the existing captioning path. This gives the Assistant grounded image context without pretending the text model can see the file directly.</div><label for="assistant-image-bridge-upload" style="margin-top:12px;">Upload image</label><input accept="image/*" id="assistant-image-bridge-upload" type="file"/><label for="assistant-image-bridge-instruction" style="margin-top:14px;">Optional focus</label><textarea id="assistant-image-bridge-instruction" placeholder="Example: describe this for a Patreon post, focus on outfit and mood, or tell Neo what matters in the image." rows="4"></textarea><div class="row" style="margin-top:10px; gap:10px; flex-wrap:wrap;"><button class="btn btn-small" id="btn-assistant-add-image-bridge" type="button">Describe image for Assistant</button></div><div class="status" id="assistant-image-bridge-status" style="margin-top:12px;"></div></div></details>
