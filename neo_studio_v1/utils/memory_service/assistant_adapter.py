@@ -172,12 +172,18 @@ def sync_assistant_project(project: dict[str, Any], *, source_json_path: str = '
             updated_at=updated_at,
         )
         chunks = extract_memory_candidates('assistant', 'project', project, source_ref=source_json_path)
+        # Project context files can be added, edited, or removed. Clear prior project chunks
+        # before re-upserting the deterministic current set so stale removed file chunks do
+        # not remain retrievable after a project save. SQLite upsert restores current chunks
+        # and preserves pin/suppression fields on matching chunk ids.
+        deleted_sqlite_chunks = delete_memory_chunks_for_entity_sqlite(lane='assistant', entity_id=project_id)
+        delete_memory_chunks_for_entity(ASSISTANT_COLLECTION, entity_id=project_id)
         sqlite_chunk_count = upsert_memory_chunks_sqlite(lane='assistant', collection_name=ASSISTANT_COLLECTION, chunks=chunks)
         chroma_ok = upsert_memory_chunks(ASSISTANT_COLLECTION, chunks)
         record_memory_write(
             write_log_id=f'awl_{uuid4().hex}', lane='assistant', entity_type='project', entity_id=project_id,
             operation='upsert', source_ref=str(source_json_path or '').strip(),
-            details={'updated_at': updated_at, 'summary_length': len(summary), 'chunk_count': len(chunks), 'sqlite_chunk_count': sqlite_chunk_count, 'chroma_upserted': chroma_ok}, created_at=updated_at or created_at,
+            details={'updated_at': updated_at, 'summary_length': len(summary), 'chunk_count': len(chunks), 'sqlite_chunk_count': sqlite_chunk_count, 'deleted_sqlite_chunks': deleted_sqlite_chunks, 'chroma_upserted': chroma_ok}, created_at=updated_at or created_at,
         )
         return True
     except Exception:

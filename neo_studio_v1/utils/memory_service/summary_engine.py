@@ -60,11 +60,19 @@ def build_assistant_project_summary(project: dict[str, Any] | None) -> str:
     context_cards = project.get('context_cards') if isinstance(project.get('context_cards'), list) else []
     context_files = project.get('context_files') if isinstance(project.get('context_files'), list) else []
     linked_records = project.get('linked_records') if isinstance(project.get('linked_records'), list) else []
+    project_profile = project.get('project_profile') if isinstance(project.get('project_profile'), dict) else {}
+    custom_profile = project.get('custom_profile') if isinstance(project.get('custom_profile'), dict) else {}
+    profile_label = _clean(project_profile.get('display_label') or project_profile.get('label') or project.get('project_type') or 'General', 160)
     lines = [
         f"Project: {_clean(project.get('title') or 'Project', 160)}",
+        f"Project type: {profile_label}",
         f"Description: {_clean(project.get('description') or '', 700)}",
         f"Brief: {_clean(project.get('brief') or '', 1200)}",
     ]
+    if _clean(custom_profile.get('description')):
+        lines.append(f"Custom profile: {_clean(custom_profile.get('description'), 700)}")
+    if isinstance(project_profile.get('memory_focus'), list) and project_profile.get('memory_focus'):
+        lines.append('Memory focus: ' + _join_unique([str(item) for item in project_profile.get('memory_focus')], limit=12))
     if context_cards:
         lines.append('Context cards: ' + _join_unique([str(item.get('title') or '') for item in context_cards], limit=10))
     if context_files:

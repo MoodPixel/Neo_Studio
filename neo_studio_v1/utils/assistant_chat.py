@@ -6,6 +6,10 @@ from .assistant_store import DEFAULT_MODES
 from .config import CHAT_TIMEOUT_SECONDS
 from .kobold import clamp_float, clamp_int, get_kobold_chat_url, _post_chat, _strip_visible_reasoning
 from .memory_service.retriever import build_memory_pack
+from .assistant_persona_layer import build_assistant_persona_context
+from .assistant_project_profiles import project_profile_prompt_block, resolve_project_profile
+from .assistant_retrieval_authority import build_authority_prompt_block, authority_metadata
+from .assistant_context_builder import build_assistant_context_pack
 from .stream_transport import stream_chat_events
 
 TRANSFORM_INSTRUCTIONS: Dict[str, str] = {
@@ -58,6 +62,10 @@ def _build_assistant_memory_scope(profile: Dict[str, Any], session: Dict[str, An
         'context_note': str(session.get('context_note') or '').strip(),
         'project_title': str(project_context.get('title') or '').strip(),
         'project_brief': str(project_context.get('brief') or '').strip(),
+        'project_type': str(project_context.get('project_type') or 'general').strip(),
+        'project_profile_label': str((project_context.get('project_profile') or {}).get('display_label') or (project_context.get('project_profile') or {}).get('label') or '').strip() if isinstance(project_context.get('project_profile'), dict) else '',
+        'authority_mode': str(session.get('authority_mode') or project_context.get('authority_mode') or (project_context.get('custom_profile') or {}).get('authority_mode') if isinstance(project_context.get('custom_profile'), dict) else session.get('authority_mode') or project_context.get('authority_mode') or '').strip(),
+        'allow_external_blending': bool(project_context.get('allow_external_blending')) if 'allow_external_blending' in project_context else None,
         'latest_user_message': latest_user,
     }
 
@@ -71,10 +79,17 @@ def _build_assistant_memory_pack(profile: Dict[str, Any], session: Dict[str, Any
         scope.get('project_title') or '',
         scope.get('project_brief') or '',
     ]
-    return build_memory_pack('assistant', scope=scope, query_text='\n'.join(bit for bit in query_bits if bit))
+    query_text = '\n'.join(bit for bit in query_bits if bit)
+    scope['authority'] = authority_metadata(scope=scope, query_text=query_text)
+    return build_memory_pack('assistant', scope=scope, query_text=query_text)
 
 
-def build_assistant_system_prompt(profile: Dict[str, Any], session: Dict[str, Any], memory_pack: Dict[str, Any] | None = None) -> str:
+def build_assistant_system_prompt(
+    profile: Dict[str, Any],
+    session: Dict[str, Any],
+    memory_pack: Dict[str, Any] | None = None,
+    context_pack: Dict[str, Any] | None = None,
+) -> str:
     assistant_name = _clean_text(profile.get('assistant_name') or 'Neo', 80) or 'Neo'
     user_name = _clean_text(profile.get('user_name') or '', 80)
     address_style = _clean_text(profile.get('address_style') or 'adaptive', 40) or 'adaptive'
@@ -106,6 +121,8 @@ def build_assistant_system_prompt(profile: Dict[str, Any], session: Dict[str, An
     project_title = _clean_text(project_context.get('title') or '', 160)
     project_description = _clean_text(project_context.get('description') or '', 3000)
     project_brief = _clean_text(project_context.get('brief') or '', 12000)
+    project_profile = resolve_project_profile(project_context)
+    project_profile_block = project_profile_prompt_block(project_context)
     raw_project_cards = project_context.get('context_cards') if isinstance(project_context.get('context_cards'), list) else []
     project_cards = []
     for entry in raw_project_cards[:8]:
@@ -135,20 +152,52 @@ def build_assistant_system_prompt(profile: Dict[str, Any], session: Dict[str, An
         'Be honest about limitations. Do not pretend to be human or claim real-world actions you cannot take.',
         f'Current thread mode: {mode_data.get("label") or mode.title()}.',
         f'Mode behavior: {mode_data.get("system_hint") or "Be useful and adaptive."}',
+    ]
+    context_pack_block = _clean_text((context_pack or {}).get('prompt_block') or '', 12000) if isinstance(context_pack, dict) else ''
+    context_pack_project = ((context_pack or {}).get('explicit') or {}).get('project') if isinstance(context_pack, dict) and isinstance((context_pack or {}).get('explicit'), dict) else {}
+    has_context_pack_project = bool(isinstance(context_pack_project, dict) and (context_pack_project.get('title') or context_pack_project.get('brief') or context_pack_project.get('context_cards') or context_pack_project.get('context_files')))
+    if context_pack_block:
+        lines.append(
+            'Runtime prompt hierarchy: use the Normalized Assistant Context Pack as the live source of truth. '
+            'Legacy Assistant profile/persona guidance below controls tone and formatting only; it must not override active project facts, attached files, thread context, or retrieval authority rules.'
+        )
+        if has_context_pack_project:
+            lines.append(
+                'Project authority rule: when Active Project Context is present, answer from that project context before global/profile/older memory. '
+                'Do not replace project facts with generic/global knowledge. If the project context does not contain the answer, say what is missing and ask for the needed project detail.'
+            )
+        lines.append('Normalized Assistant Context Pack:\n' + context_pack_block)
+
+    legacy_lines = [
         f'Address style: {address_style}.',
         f'Response detail: {response_detail}.',
         f'Support style: {support_style}.',
     ]
     if user_name:
-        lines.append(f'Address the user as: {user_name}.')
+        legacy_lines.append(f'Address the user as: {user_name}.')
     if about_user:
-        lines.append(f'About the user:\n{about_user}')
+        legacy_lines.append(f'About the user:\n{about_user}')
     if preferences:
-        lines.append(f'User preferences:\n{preferences}')
+        legacy_lines.append(f'User preferences:\n{preferences}')
     if avoid:
-        lines.append(f'Avoid these response patterns when possible:\n{avoid}')
-    if project_title:
+        legacy_lines.append(f'Avoid these response patterns when possible:\n{avoid}')
+    persona_context = build_assistant_persona_context(profile, session, memory_pack)
+    if persona_context:
+        legacy_lines.append(persona_context)
+    lines.append(
+        'Legacy Assistant Profile / Persona Guidance (fallback only; never override the Normalized Assistant Context Pack):\n'
+        + '\n\n'.join(bit for bit in legacy_lines if bit)
+    )
+
+    authority_scope = _build_assistant_memory_scope(profile, session, [{'role': 'user', 'content': ''}])
+    authority_query = str((memory_pack or {}).get('query_text') or authority_scope.get('latest_user_message') or session.get('context_note') or '')
+    authority_block = build_authority_prompt_block(scope=authority_scope, memory_pack=memory_pack, query_text=authority_query)
+    if authority_block and not context_pack_block:
+        lines.append(authority_block)
+    if project_title and not context_pack_block:
         project_lines = [f'Active project: {project_title}.']
+        if project_profile_block:
+            project_lines.append(project_profile_block)
         if project_description:
             project_lines.append(f'Project description:\n{project_description}')
         if project_brief:
@@ -164,9 +213,9 @@ def build_assistant_system_prompt(profile: Dict[str, Any], session: Dict[str, An
                 file_blocks.append(f"[{idx}] {item['title']} ({item['source_kind']})\n{item['content']}")
             project_lines.append('Project reference files:\n' + '\n\n'.join(file_blocks))
         lines.append('\n\n'.join(project_lines))
-    if thread_instruction:
+    if thread_instruction and not context_pack_block:
         lines.append(f'Thread-specific instruction:\n{thread_instruction}')
-    if helper_context:
+    if helper_context and not context_pack_block:
         helper_lines = []
         if helper_context.get('workspace'):
             helper_lines.append(f"Workspace: {_clean_text(helper_context.get('workspace'), 80)}")
@@ -184,19 +233,20 @@ def build_assistant_system_prompt(profile: Dict[str, Any], session: Dict[str, An
             helper_lines.append('Preferred response sections: ' + ', '.join([_clean_text(v, 80) for v in helper_context.get('response_sections') if v][:12]))
         if helper_lines:
             lines.append('Workspace helper context:\n' + '\n'.join(helper_lines))
-    if context_note:
+    if context_note and not context_pack_block:
         lines.append(f'Pinned thread context:\n{context_note}')
-    if context_items:
+    if context_items and not context_pack_block:
         context_blocks = []
         for idx, item in enumerate(context_items, start=1):
             context_blocks.append(f"[{idx}] {item['title']} ({item['source_kind']})\n{item['content']}")
         lines.append('Attached thread context items:\n' + '\n\n'.join(context_blocks))
-    if memory_summary:
+    if memory_summary and not context_pack_block:
         lines.append(f'Older conversation memory summary:\n{memory_summary}')
-    memory_summary_block = _clean_text((memory_pack or {}).get('summary') or '', 5000) if isinstance(memory_pack, dict) else ''
-    if memory_summary_block:
-        lines.append(memory_summary_block)
-        lines.append('Use retrieved memory only when it clearly helps the current request. Prefer the most specific current context over older memory if they conflict.')
+    if not context_pack_block:
+        memory_summary_block = _clean_text((memory_pack or {}).get('summary') or '', 5000) if isinstance(memory_pack, dict) else ''
+        if memory_summary_block:
+            lines.append(memory_summary_block)
+            lines.append('Use retrieved memory only when it clearly helps the current request. Prefer the most specific current context over older memory if they conflict.')
     lines.append('Keep answers adaptive to the request. For emotional or reflective chats, be grounded and supportive. For work or writing tasks, be clear and directly useful.')
     return '\n\n'.join(lines).strip()
 
@@ -215,9 +265,10 @@ async def stream_assistant_reply(
     history = sanitize_conversation_messages(messages)
     if len(history) > 10:
         history = history[-10:]
-    memory_pack = _build_assistant_memory_pack(profile, session, history)
+    context_pack = build_assistant_context_pack(profile, session, history)
+    memory_pack = context_pack.get('memory') if isinstance(context_pack.get('memory'), dict) else {}
     request_messages: List[Dict[str, str]] = [
-        {'role': 'system', 'content': build_assistant_system_prompt(profile, session, memory_pack)},
+        {'role': 'system', 'content': build_assistant_system_prompt(profile, session, memory_pack, context_pack)},
         *history,
     ]
     request_payload = {
@@ -275,6 +326,7 @@ async def stream_assistant_reply(
             'warning': f'Live streaming was unavailable, so Neo used a one-shot fallback. ({exc})' if visible_accum else f'Assistant request failed: {exc}',
             'reasoning_stripped': reasoning_stripped,
             'memory_item_count': int(memory_pack.get('item_count') or 0),
+            'context_pack_diagnostics': context_pack.get('diagnostics') if isinstance(context_pack, dict) else {},
             'message': 'Assistant reply ready.' if visible_accum else 'Assistant request failed.',
         }
         return
@@ -291,6 +343,7 @@ async def stream_assistant_reply(
         'warning': warning,
         'reasoning_stripped': reasoning_stripped,
         'memory_item_count': int(memory_pack.get('item_count') or 0),
+        'context_pack_diagnostics': context_pack.get('diagnostics') if isinstance(context_pack, dict) else {},
         'message': 'Assistant reply ready.',
     }
 
@@ -309,12 +362,13 @@ async def generate_assistant_reply(
     history = sanitize_conversation_messages(messages)
     if len(history) > 10:
         history = history[-10:]
-    memory_pack = _build_assistant_memory_pack(profile, session, history)
+    context_pack = build_assistant_context_pack(profile, session, history)
+    memory_pack = context_pack.get('memory') if isinstance(context_pack.get('memory'), dict) else {}
     result = await _post_chat(
         {
             'model': model,
             'messages': [
-                {'role': 'system', 'content': build_assistant_system_prompt(profile, session, memory_pack)},
+                {'role': 'system', 'content': build_assistant_system_prompt(profile, session, memory_pack, context_pack)},
                 *history,
             ],
             'max_tokens': clamp_int(max_tokens, 96, 4000, 640),
@@ -327,6 +381,7 @@ async def generate_assistant_reply(
     )
     result['text'] = str(result.get('content') or '').strip()
     result['memory_item_count'] = int(memory_pack.get('item_count') or 0)
+    result['context_pack_diagnostics'] = context_pack.get('diagnostics') if isinstance(context_pack, dict) else {}
     return result
 
 
@@ -342,9 +397,11 @@ async def transform_assistant_text(
     instruction = TRANSFORM_INSTRUCTIONS.get(transform_key)
     if not instruction:
         return {'ok': False, 'message': f'Unsupported transform: {transform_key or "(none)"}'}
-    memory_pack = _build_assistant_memory_pack(profile, session, [{'role': 'user', 'content': str(source_text or '').strip()}])
+    transform_messages = [{'role': 'user', 'content': str(source_text or '').strip()}]
+    context_pack = build_assistant_context_pack(profile, session, transform_messages, preview_text=str(source_text or '').strip())
+    memory_pack = context_pack.get('memory') if isinstance(context_pack.get('memory'), dict) else {}
     system_prompt = (
-        f'{build_assistant_system_prompt(profile, session, memory_pack)}\n\n'
+        f'{build_assistant_system_prompt(profile, session, memory_pack, context_pack)}\n\n'
         'You are rewriting or reformatting an existing assistant response. '
         'Return only the transformed output. Do not explain your changes.'
     )
@@ -371,4 +428,5 @@ async def transform_assistant_text(
         'finish_reason': str(result.get('finish_reason') or '').strip(),
         'reasoning_stripped': bool(result.get('reasoning_stripped')),
         'memory_item_count': int(memory_pack.get('item_count') or 0),
+        'context_pack_diagnostics': context_pack.get('diagnostics') if isinstance(context_pack, dict) else {},
     }

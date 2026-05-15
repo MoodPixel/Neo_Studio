@@ -9,6 +9,7 @@ from uuid import uuid4
 from .library_common import atomic_write_json, ensure_dir, read_json_dict
 from .library_constants import DEFAULT_ROOT
 from ..contracts.memory_records import build_memory_manifest, normalize_session_index_entry
+from .assistant_project_profiles import clean_project_type, resolve_project_profile, sanitize_custom_profile
 from .memory_service.assistant_adapter import (
     mark_assistant_project_deleted,
     mark_assistant_session_deleted,
@@ -91,6 +92,11 @@ DEFAULT_PROFILE: Dict[str, Any] = {
     'about_user': '',
     'preferences': '',
     'avoid': '',
+    'persona_enabled': True,
+    'continuity_style': 'project-aware familiar assistant',
+    'voice_rules': '',
+    'relationship_notes': '',
+    'response_boundaries': '',
     'updated_at': '',
 }
 
@@ -143,6 +149,11 @@ def _sanitize_profile(data: Dict[str, Any] | None = None) -> Dict[str, Any]:
         'about_user': str(src.get('about_user') or '').strip()[:5000],
         'preferences': str(src.get('preferences') or '').strip()[:4000],
         'avoid': str(src.get('avoid') or '').strip()[:3000],
+        'persona_enabled': bool(src.get('persona_enabled')) if isinstance(src.get('persona_enabled'), bool) else str(src.get('persona_enabled') or 'true').strip().lower() not in {'0', 'false', 'no', 'off', 'disabled'},
+        'continuity_style': str(src.get('continuity_style') or DEFAULT_PROFILE['continuity_style']).strip()[:120] or DEFAULT_PROFILE['continuity_style'],
+        'voice_rules': str(src.get('voice_rules') or '').strip()[:3000],
+        'relationship_notes': str(src.get('relationship_notes') or '').strip()[:3000],
+        'response_boundaries': str(src.get('response_boundaries') or '').strip()[:3000],
         'updated_at': str(src.get('updated_at') or _now_iso()).strip() or _now_iso(),
     }
 
@@ -247,11 +258,15 @@ def _sanitize_project(data: Dict[str, Any] | None = None) -> Dict[str, Any]:
     context_files = [item for item in (_sanitize_project_context_file(entry) for entry in raw_context_files if isinstance(entry, dict)) if item][:10]
     raw_linked_records = src.get('linked_records') if isinstance(src.get('linked_records'), list) else []
     linked_records = [item for item in (_sanitize_project_linked_record(entry) for entry in raw_linked_records if isinstance(entry, dict)) if item][:40]
-    return {
+    project_type = clean_project_type(src.get('project_type'))
+    custom_profile = sanitize_custom_profile(src.get('custom_profile'))
+    project = {
         'id': str(src.get('id') or _new_id('assistant_project')).strip() or _new_id('assistant_project'),
         'title': str(src.get('title') or 'New project').strip()[:160] or 'New project',
         'description': str(src.get('description') or '').strip()[:3000],
         'brief': str(src.get('brief') or '').strip()[:12000],
+        'project_type': project_type,
+        'custom_profile': custom_profile,
         'context_cards': context_cards,
         'context_files': context_files,
         'linked_records': linked_records,
@@ -259,6 +274,8 @@ def _sanitize_project(data: Dict[str, Any] | None = None) -> Dict[str, Any]:
         'updated_at': updated_at,
         'thread_count': int(src.get('thread_count') or 0),
     }
+    project['project_profile'] = resolve_project_profile(project)
+    return project
 
 
 def _project_thread_counts() -> Dict[str, int]:
@@ -296,6 +313,9 @@ def _upsert_project_index(project: Dict[str, Any]) -> None:
         'title': project['title'],
         'description': project.get('description') or '',
         'brief': project.get('brief') or '',
+        'project_type': project.get('project_type') or 'general',
+        'custom_profile': project.get('custom_profile') if isinstance(project.get('custom_profile'), dict) else {},
+        'project_profile': project.get('project_profile') if isinstance(project.get('project_profile'), dict) else resolve_project_profile(project),
         'created_at': project['created_at'],
         'updated_at': project['updated_at'],
         'thread_count': counts.get(project['id'], int(project.get('thread_count') or 0)),

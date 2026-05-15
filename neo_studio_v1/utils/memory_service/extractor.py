@@ -19,26 +19,66 @@ def _clean(value: Any, limit: int = 1200) -> str:
     return text[:limit]
 
 
-def _chunk(chunk_id: str, document: str, *, lane: str, chunk_type: str, entity_type: str, entity_id: str, source_ref: str = '', scope_type: str = '', scope_id: str = '', importance: float = 0.5, created_at: str = '') -> dict[str, Any] | None:
+def _chunk(chunk_id: str, document: str, *, lane: str, chunk_type: str, entity_type: str, entity_id: str, source_ref: str = '', scope_type: str = '', scope_id: str = '', importance: float = 0.5, created_at: str = '', extra_metadata: dict[str, Any] | None = None) -> dict[str, Any] | None:
     doc = _clean(document, 2200)
     if not doc:
         return None
+    metadata = {
+        'lane': str(lane or '').strip(),
+        'chunk_type': str(chunk_type or '').strip(),
+        'entity_type': str(entity_type or '').strip(),
+        'entity_id': str(entity_id or '').strip(),
+        'scope_type': str(scope_type or entity_type or '').strip(),
+        'scope_id': str(scope_id or entity_id or '').strip(),
+        'source_ref': str(source_ref or '').strip(),
+        'importance': float(importance or 0.0),
+        'created_at': str(created_at or '').strip(),
+    }
+    if isinstance(extra_metadata, dict):
+        for key, value in extra_metadata.items():
+            if value is not None:
+                metadata[str(key)] = value
     return {
         'id': chunk_id,
         'document': doc,
-        'metadata': {
-            'lane': str(lane or '').strip(),
-            'chunk_type': str(chunk_type or '').strip(),
-            'entity_type': str(entity_type or '').strip(),
-            'entity_id': str(entity_id or '').strip(),
-            'scope_type': str(scope_type or entity_type or '').strip(),
-            'scope_id': str(scope_id or entity_id or '').strip(),
-            'source_ref': str(source_ref or '').strip(),
-            'importance': float(importance or 0.0),
-            'created_at': str(created_at or '').strip(),
-        },
+        'metadata': metadata,
     }
 
+
+
+def _split_project_file_content(content: Any, *, max_chars: int = 1800, max_parts: int = 8) -> list[str]:
+    text = str(content or '').replace('\r\n', '\n').replace('\r', '\n').strip()
+    if not text:
+        return []
+    paragraphs = [part.strip() for part in re.split(r'\n\s*\n+', text) if part.strip()] or [text]
+    parts: list[str] = []
+    current = ''
+    for paragraph in paragraphs:
+        cleaned = re.sub(r'\s+', ' ', paragraph).strip()
+        if not cleaned:
+            continue
+        if len(cleaned) > max_chars:
+            if current:
+                parts.append(current.strip())
+                current = ''
+            for start in range(0, len(cleaned), max_chars):
+                chunk = cleaned[start:start + max_chars].strip()
+                if chunk:
+                    parts.append(chunk)
+                if len(parts) >= max_parts:
+                    return parts
+            continue
+        candidate = f'{current}\n\n{cleaned}'.strip() if current else cleaned
+        if len(candidate) > max_chars and current:
+            parts.append(current.strip())
+            current = cleaned
+            if len(parts) >= max_parts:
+                return parts
+        else:
+            current = candidate
+    if current and len(parts) < max_parts:
+        parts.append(current.strip())
+    return parts[:max_parts]
 
 def _append(out: list[dict[str, Any]], item: dict[str, Any] | None) -> None:
     if item:
@@ -56,13 +96,29 @@ def _assistant_chunks(entity_type: str, record: dict[str, Any], *, source_ref: s
             _append(out, _chunk('assistant::profile::preferences', f"User preferences: {_clean(record.get('preferences'), 1200)}", lane='assistant', chunk_type='preference', entity_type='profile', entity_id='default', source_ref=source_ref, importance=0.98, created_at=created_at))
         if _clean(record.get('avoid')):
             _append(out, _chunk('assistant::profile::avoid', f"Avoid patterns: {_clean(record.get('avoid'), 900)}", lane='assistant', chunk_type='preference', entity_type='profile', entity_id='default', source_ref=source_ref, importance=0.95, created_at=created_at))
-        style_doc = f"Address style: {_clean(record.get('address_style'), 40)} | Response detail: {_clean(record.get('response_detail'), 40)} | Support style: {_clean(record.get('support_style'), 40)} | Default mode: {_clean(record.get('default_mode'), 40)}"
+        if _clean(record.get('voice_rules')):
+            _append(out, _chunk('assistant::profile::voice_rules', f"Assistant voice rules: {_clean(record.get('voice_rules'), 1200)}", lane='assistant', chunk_type='assistant_voice_rule', entity_type='profile', entity_id='default', source_ref=source_ref, importance=1.0, created_at=created_at))
+        if _clean(record.get('relationship_notes')):
+            _append(out, _chunk('assistant::profile::relationship_notes', f"Assistant relationship/familiarity notes: {_clean(record.get('relationship_notes'), 1200)}", lane='assistant', chunk_type='relationship_belief', entity_type='profile', entity_id='default', source_ref=source_ref, importance=0.92, created_at=created_at))
+        if _clean(record.get('response_boundaries')):
+            _append(out, _chunk('assistant::profile::response_boundaries', f"Assistant response boundaries: {_clean(record.get('response_boundaries'), 1200)}", lane='assistant', chunk_type='guardrail', entity_type='profile', entity_id='default', source_ref=source_ref, importance=1.0, created_at=created_at))
+        style_doc = f"Address style: {_clean(record.get('address_style'), 40)} | Response detail: {_clean(record.get('response_detail'), 40)} | Support style: {_clean(record.get('support_style'), 40)} | Default mode: {_clean(record.get('default_mode'), 40)} | Continuity style: {_clean(record.get('continuity_style'), 80)} | Persona enabled: {_clean(record.get('persona_enabled'), 20)}"
         _append(out, _chunk('assistant::profile::style', style_doc, lane='assistant', chunk_type='style_shift', entity_type='profile', entity_id='default', source_ref=source_ref, importance=0.82, created_at=created_at))
     elif entity_type == 'project':
+        project_title = _clean(record.get('title') or 'New project', 160)
+        project_meta = {
+            'project_id': entity_id,
+            'memory_project_id': entity_id,
+            'project_title': project_title,
+            'memory_scope': 'project',
+            'visibility': 'project_private',
+            'bleed_policy': 'deny_global',
+            'sandbox_policy': 'project_boxed',
+        }
         summary = build_assistant_project_summary(record)
-        _append(out, _chunk(f'assistant::project::{entity_id}::summary', summary, lane='assistant', chunk_type='summary', entity_type='project', entity_id=entity_id, source_ref=source_ref, importance=0.88, created_at=created_at))
+        _append(out, _chunk(f'assistant::project::{entity_id}::summary', summary, lane='assistant', chunk_type='summary', entity_type='project', entity_id=entity_id, scope_type='project', scope_id=entity_id, source_ref=source_ref, importance=0.88, created_at=created_at, extra_metadata=project_meta))
         if _clean(record.get('brief')):
-            _append(out, _chunk(f'assistant::project::{entity_id}::brief', f"Project brief: {_clean(record.get('brief'), 1800)}", lane='assistant', chunk_type='project_fact', entity_type='project', entity_id=entity_id, source_ref=source_ref, importance=0.94, created_at=created_at))
+            _append(out, _chunk(f'assistant::project::{entity_id}::brief', f"Project brief: {_clean(record.get('brief'), 1800)}", lane='assistant', chunk_type='project_fact', entity_type='project', entity_id=entity_id, scope_type='project', scope_id=entity_id, source_ref=source_ref, importance=0.94, created_at=created_at, extra_metadata=project_meta))
         for idx, card in enumerate((record.get('context_cards') if isinstance(record.get('context_cards'), list) else [])[:6], start=1):
             if not isinstance(card, dict):
                 continue
@@ -71,7 +127,25 @@ def _assistant_chunks(entity_type: str, record: dict[str, Any], *, source_ref: s
             if not content:
                 continue
             chunk_type = 'workflow' if re.search(r'voice|style|tone|workflow|process|rules?', f'{title} {content}', re.IGNORECASE) else 'project_fact'
-            _append(out, _chunk(f'assistant::project::{entity_id}::card::{idx}', f"{title}: {content}", lane='assistant', chunk_type=chunk_type, entity_type='project', entity_id=entity_id, source_ref=source_ref, importance=0.78, created_at=created_at))
+            _append(out, _chunk(f'assistant::project::{entity_id}::card::{idx}', f"Project card — {title}: {content}", lane='assistant', chunk_type=chunk_type, entity_type='project', entity_id=entity_id, scope_type='project', scope_id=entity_id, source_ref=source_ref, importance=0.78, created_at=created_at, extra_metadata={**project_meta, 'source_kind': 'context_card', 'source_title': title}))
+        for idx, file_item in enumerate((record.get('context_files') if isinstance(record.get('context_files'), list) else [])[:10], start=1):
+            if not isinstance(file_item, dict):
+                continue
+            title = _clean(file_item.get('title') or f'Project file {idx}', 160)
+            source_kind = _clean(file_item.get('source_kind') or 'text', 80)
+            file_id = _clean(file_item.get('id') or str(idx), 120)
+            for part_idx, part in enumerate(_split_project_file_content(file_item.get('content')), start=1):
+                file_meta = {
+                    **project_meta,
+                    'chunk_type': 'project_docs',
+                    'source_kind': 'context_file',
+                    'source_title': title,
+                    'source_file_id': file_id,
+                    'document_kind': source_kind,
+                    'part_index': part_idx,
+                }
+                label = f"Project file — {title}" if part_idx == 1 else f"Project file — {title} (part {part_idx})"
+                _append(out, _chunk(f'assistant::project::{entity_id}::file::{idx}::{part_idx}', f"{label}: {part}", lane='assistant', chunk_type='project_docs', entity_type='project', entity_id=entity_id, scope_type='project', scope_id=entity_id, source_ref=source_ref, importance=0.9, created_at=str(file_item.get('created_at') or created_at).strip(), extra_metadata=file_meta))
     elif entity_type == 'session':
         summary = build_assistant_session_summary(record)
         project_id = str(record.get('project_id') or '').strip()

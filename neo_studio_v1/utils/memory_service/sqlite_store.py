@@ -663,3 +663,76 @@ def fetch_memory_admin_overview() -> dict[str, Any]:
             lane_map = overview['by_lane_chunk_type'].setdefault(lane, {})
             lane_map[chunk_type] = count
     return overview
+
+
+def update_memory_chunk_sandbox(*, chunk_id: str, memory_scope: str | None = None, project_id: str | None = None, visibility: str | None = None, bleed_policy: str | None = None, sandbox_policy: str | None = None) -> bool:
+    """Update chunk sandbox metadata and matching indexed columns.
+
+    This supports Memory Manager actions such as move to project/global,
+    quarantine, or release from quarantine without deleting the source.
+    """
+    clean_id = str(chunk_id or '').strip()
+    if not clean_id:
+        return False
+    with sqlite_conn() as conn:
+        row = conn.execute('SELECT * FROM memory_chunks WHERE chunk_id=?', (clean_id,)).fetchone()
+        if not row:
+            return False
+        metadata = _loads_json(row['metadata_json'] or '{}', {})
+        metadata = metadata if isinstance(metadata, dict) else {}
+        if memory_scope is not None:
+            metadata['memory_scope'] = str(memory_scope or '').strip()
+        if project_id is not None:
+            metadata['memory_project_id'] = str(project_id or '').strip()
+            metadata['project_id'] = str(project_id or '').strip()
+        if visibility is not None:
+            metadata['visibility'] = str(visibility or '').strip()
+        if bleed_policy is not None:
+            metadata['bleed_policy'] = str(bleed_policy or '').strip()
+        if sandbox_policy is not None:
+            metadata['sandbox_policy'] = str(sandbox_policy or '').strip()
+
+        scope = str(metadata.get('memory_scope') or row['scope_type'] or '').strip()
+        proj = str(metadata.get('memory_project_id') or metadata.get('project_id') or '').strip()
+        if scope in {'global', 'profile', 'assistant_wide'}:
+            scope_type = 'profile' if scope == 'profile' else 'global'
+            scope_id = ''
+            db_project_id = ''
+            metadata['project_id'] = ''
+            metadata['memory_project_id'] = ''
+        elif scope in {'quarantine', 'review'}:
+            scope_type = 'quarantine'
+            scope_id = proj
+            db_project_id = proj
+        elif scope in {'session', 'thread'}:
+            scope_type = 'session'
+            scope_id = str(metadata.get('memory_session_id') or row['scope_id'] or '').strip()
+            db_project_id = proj
+        else:
+            scope_type = 'project'
+            scope_id = proj
+            db_project_id = proj
+        cursor = conn.execute(
+            '''
+            UPDATE memory_chunks
+            SET scope_type=?, scope_id=?, project_id=?, metadata_json=?, updated_at=CURRENT_TIMESTAMP
+            WHERE chunk_id=?
+            ''',
+            (scope_type, scope_id, db_project_id, _json(metadata, '{}'), clean_id),
+        )
+        return bool(cursor.rowcount or 0)
+
+
+def bulk_update_memory_chunk_sandbox(*, chunk_ids: list[str], memory_scope: str | None = None, project_id: str | None = None, visibility: str | None = None, bleed_policy: str | None = None, sandbox_policy: str | None = None) -> int:
+    count = 0
+    for chunk_id in chunk_ids or []:
+        if update_memory_chunk_sandbox(
+            chunk_id=str(chunk_id or '').strip(),
+            memory_scope=memory_scope,
+            project_id=project_id,
+            visibility=visibility,
+            bleed_policy=bleed_policy,
+            sandbox_policy=sandbox_policy,
+        ):
+            count += 1
+    return count

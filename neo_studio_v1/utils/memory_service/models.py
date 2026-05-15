@@ -26,3 +26,10 @@ class RoleplayMirrorPayload:
     entity_id: str
     source_json_path: str
     record: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class NeoProjectMemoryPayload:
+    entity_id: str
+    source_json_path: str
+    record: dict[str, Any] = field(default_factory=dict)

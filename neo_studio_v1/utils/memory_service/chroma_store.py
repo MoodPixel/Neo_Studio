@@ -10,10 +10,17 @@ from typing import Any
 from ..library_constants import DEFAULT_ROOT
 from ..logging_utils import get_logger
 from .sqlite_store import get_memory_meta_value, set_memory_meta_value, sqlite_conn
+from .assistant_embedding_runtime import (
+    EMBEDDING_BACKEND_SENTENCE_TRANSFORMER,
+    get_assistant_model_status,
+    get_sentence_transformer_embedding_function,
+    embed_query_with_local_model,
+)
 
 logger = get_logger(__name__)
 
 ASSISTANT_COLLECTION = 'assistant_memory'
+NEO_PROJECT_COLLECTION = 'neo_project_memory'
 ROLEPLAY_COLLECTION = 'roleplay_memory'
 ROLEPLAY_V2_COLLECTION = 'roleplay_v2_memory'
 CHROMA_ROOT = DEFAULT_ROOT / 'memory' / 'chroma'
@@ -107,6 +114,13 @@ def list_embedding_backends() -> list[dict[str, Any]]:
             'needs_download': True,
             'description': 'Lets Chroma use its default embedding stack. Better semantic quality, but first use may download model/tokenizer assets depending on the environment.',
         },
+        {
+            'key': EMBEDDING_BACKEND_SENTENCE_TRANSFORMER,
+            'label': 'SentenceTransformer local',
+            'available': bool(CHROMA_AVAILABLE and get_assistant_model_status().get('embedding_ready')),
+            'needs_download': False,
+            'description': 'Uses a local sentence-transformers embedding model folder configured in Assistant memory settings. No web access required after models exist on disk.',
+        },
     ]
 
 
@@ -139,6 +153,8 @@ def set_active_embedding_backend(backend_key: str) -> dict[str, Any]:
 def _embedding_function_for_backend(backend_key: str):
     if backend_key == 'hashing_local':
         return _HASHING_EMBEDDING_FUNCTION
+    if backend_key == EMBEDDING_BACKEND_SENTENCE_TRANSFORMER:
+        return get_sentence_transformer_embedding_function()
     return None
 
 
@@ -165,9 +181,12 @@ def get_embedding_backend_status() -> dict[str, Any]:
     chroma_available = bool(CHROMA_AVAILABLE)
     resolved_collections = {
         'assistant': _resolved_collection_name(ASSISTANT_COLLECTION, active_backend),
+        'neo_project': _resolved_collection_name(NEO_PROJECT_COLLECTION, active_backend),
         'roleplay': _resolved_collection_name(ROLEPLAY_COLLECTION, active_backend),
         'roleplay_v2': _resolved_collection_name(ROLEPLAY_V2_COLLECTION, active_backend),
     }
+
+    model_status = get_assistant_model_status()
 
     if not chroma_available:
         state = 'sqlite_only'
@@ -185,6 +204,15 @@ def get_embedding_backend_status() -> dict[str, Any]:
         storage_mode_label = 'SQLite + Chroma mirror'
         summary = 'Hashing local keeps memory fully local and stable while the Chroma mirror stays available for semantic lookup.'
         ui_message = 'Stable local mode: no external embedding download is required. Semantic lookup works through the local hashing mirror.'
+    elif active_backend == EMBEDDING_BACKEND_SENTENCE_TRANSFORMER:
+        ready = bool(model_status.get('embedding_ready'))
+        state = 'ready' if ready else 'misconfigured'
+        tone = 'ok' if ready else 'warning'
+        reason = '' if ready else 'local_embedding_model_unavailable'
+        storage_mode = 'sqlite_and_chroma'
+        storage_mode_label = 'SQLite + Chroma mirror'
+        summary = 'SentenceTransformer local uses your configured embedding model folder for stronger semantic memory lookup.'
+        ui_message = 'Local embedding model is active.' if ready else 'Set a valid embedding model folder and make sure sentence-transformers is installed before using this backend.'
     else:
         state = 'ready'
         tone = 'ok'
@@ -194,7 +222,7 @@ def get_embedding_backend_status() -> dict[str, Any]:
         summary = 'Chroma default is active, so semantic lookup can use the Chroma mirror with the default embedding stack.'
         ui_message = 'Semantic lookup is available. Depending on the environment, first use may download embedding assets.'
 
-    downloads_note = 'No external model downloads.' if active_backend == 'hashing_local' else 'May download model assets on first semantic use.'
+    downloads_note = 'No external model downloads.' if active_backend in {'hashing_local', EMBEDDING_BACKEND_SENTENCE_TRANSFORMER} else 'May download model assets on first semantic use.'
 
     return {
         'active_backend': active_backend,
@@ -212,6 +240,7 @@ def get_embedding_backend_status() -> dict[str, Any]:
         'ui_message': ui_message,
         'downloads_note': downloads_note,
         'resolved_collections': resolved_collections,
+        'model_runtime': model_status,
     }
 
 
@@ -220,6 +249,7 @@ def ensure_chroma_foundation() -> bool:
     if client is None:
         return False
     get_collection(ASSISTANT_COLLECTION)
+    get_collection(NEO_PROJECT_COLLECTION)
     get_collection(ROLEPLAY_COLLECTION)
     get_collection(ROLEPLAY_V2_COLLECTION)
     return True
@@ -286,11 +316,24 @@ def query_memory(collection_name: str, *, query_text: str, n_results: int = 12) 
     if collection is None:
         return []
     try:
-        response = collection.query(
+        active_backend = get_active_embedding_backend()
+        if active_backend == 'hashing_local':
+            response = collection.query(
                 query_embeddings=[_HASHING_EMBEDDING_FUNCTION._embed(clean_query)],
                 n_results=max(1, int(n_results or 12)),
                 include=['documents', 'metadatas', 'distances'],
-            ) if get_active_embedding_backend() == 'hashing_local' else collection.query(
+            )
+        elif active_backend == EMBEDDING_BACKEND_SENTENCE_TRANSFORMER:
+            query_vector = embed_query_with_local_model(clean_query)
+            if query_vector is None:
+                return []
+            response = collection.query(
+                query_embeddings=[query_vector],
+                n_results=max(1, int(n_results or 12)),
+                include=['documents', 'metadatas', 'distances'],
+            )
+        else:
+            response = collection.query(
                 query_texts=[clean_query],
                 n_results=max(1, int(n_results or 12)),
                 include=['documents', 'metadatas', 'distances'],
@@ -384,7 +427,7 @@ def reindex_active_backend_from_sqlite(*, lane: str = '') -> dict[str, Any]:
         WHERE {' AND '.join(clauses)}
         ORDER BY updated_at DESC, importance DESC, created_at DESC
     '''
-    grouped: dict[str, list[dict[str, Any]]] = {'assistant': [], 'roleplay': []}
+    grouped: dict[str, list[dict[str, Any]]] = {'assistant': [], 'neo_project': [], 'roleplay': []}
     with sqlite_conn() as conn:
         for row in conn.execute(sql, tuple(params)):
             lane_key = str(row['lane'] or '').strip().lower()
@@ -406,6 +449,10 @@ def reindex_active_backend_from_sqlite(*, lane: str = '') -> dict[str, Any]:
         upsert_memory_chunks(ASSISTANT_COLLECTION, grouped['assistant'])
         per_lane['assistant'] = len(grouped['assistant'])
         indexed += len(grouped['assistant'])
+    if grouped['neo_project']:
+        upsert_memory_chunks(NEO_PROJECT_COLLECTION, grouped['neo_project'])
+        per_lane['neo_project'] = len(grouped['neo_project'])
+        indexed += len(grouped['neo_project'])
     if grouped['roleplay']:
         upsert_memory_chunks(ROLEPLAY_COLLECTION, grouped['roleplay'])
         per_lane['roleplay'] = len(grouped['roleplay'])

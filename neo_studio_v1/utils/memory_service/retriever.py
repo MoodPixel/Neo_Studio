@@ -6,8 +6,66 @@ from datetime import datetime, timezone
 from typing import Any
 
 from ..logging_utils import get_logger
-from .chroma_store import ASSISTANT_COLLECTION, ROLEPLAY_COLLECTION, query_memory
+from .chroma_store import ASSISTANT_COLLECTION, NEO_PROJECT_COLLECTION, ROLEPLAY_COLLECTION, query_memory
 from .sqlite_store import fetch_memory_chunk_status_map, sqlite_conn
+from .reranker import RERANK_PROFILES, rerank_candidates, resolve_retrieval_profile
+try:
+    from ..assistant_import_types import RETRIEVAL_LIMIT_BY_IMPORT_TYPE, RETRIEVAL_WEIGHT_BY_IMPORT_TYPE
+except Exception:  # keep retriever resilient during partial installs
+    RETRIEVAL_LIMIT_BY_IMPORT_TYPE = {}
+    RETRIEVAL_WEIGHT_BY_IMPORT_TYPE = {}
+try:
+    from ..assistant_chunk_types import (
+        ASSISTANT_CHUNK_TYPE_LIMITS,
+        ASSISTANT_CHUNK_TYPE_WEIGHTS,
+        normalize_metadata_chunk_type,
+    )
+except Exception:  # keep retriever resilient during partial installs
+    ASSISTANT_CHUNK_TYPE_LIMITS = {}
+    ASSISTANT_CHUNK_TYPE_WEIGHTS = {}
+    def normalize_metadata_chunk_type(metadata):
+        return dict(metadata or {})
+
+try:
+    from ..assistant_canon_priority import apply_priority_metadata, priority_bonus
+except Exception:  # keep retriever resilient during partial installs
+    def apply_priority_metadata(metadata):
+        return dict(metadata or {})
+    def priority_bonus(metadata):
+        return 0.0
+
+
+try:
+    from ..assistant_memory_sandbox import sandbox_filter_items, is_memory_allowed_for_scope, normalize_chunk_scope_metadata
+    from ..assistant_source_aware_retrieval import (
+        resolve_source_aware_retrieval_mode,
+        source_aware_filter_items,
+        build_source_disclosure_summary,
+    )
+except Exception:  # keep retriever resilient during partial installs
+    def sandbox_filter_items(items, scope):
+        return list(items or []), []
+    def is_memory_allowed_for_scope(metadata, scope):
+        class _D:
+            allowed = True
+            reason = 'sandbox_unavailable'
+            def to_dict(self):
+                return {'allowed': True, 'reason': self.reason}
+        return _D()
+    def normalize_chunk_scope_metadata(metadata):
+        return dict(metadata or {})
+    def resolve_source_aware_retrieval_mode(*, scope=None, query_text='', requested_mode=''):
+        return str(requested_mode or (scope or {}).get('retrieval_mode') or 'project_active' if (scope or {}).get('project_id') else 'global_safe')
+    def source_aware_filter_items(items, scope, retrieval_mode):
+        return sandbox_filter_items(items, scope)
+    def build_source_disclosure_summary(items):
+        return {'required': False, 'labels': [], 'project_ids': [], 'instruction': ''}
+
+try:
+    from ..assistant_retrieval_authority import authority_metadata
+except Exception:  # keep retriever resilient during partial installs
+    def authority_metadata(scope=None, query_text='', requested_mode=''):
+        return {'authority_mode': 'assistant_balanced'}
 
 logger = get_logger(__name__)
 
@@ -17,6 +75,40 @@ ASSISTANT_TYPE_WEIGHTS = {
     'workflow': 1.08,
     'project_fact': 1.0,
     'example_output': 0.9,
+    'summary': 0.72,
+    'action_log': 0.86,
+    'task_memory': 1.06,
+    'tool_result': 0.92,
+    'patch_result': 1.12,
+    'validation_result': 0.98,
+    'failed_attempt': 1.04,
+    'decision_record': 1.12,
+    # Global assistant import types. These are used when uploaded project knowledge
+    # has not been mapped to a narrower memory type yet.
+    'json_schema': 1.18,
+    'markdown_structured': 1.08,
+    'raw_creative_lore': 1.05,
+    'client_project_data': 1.14,
+    'email_or_message_data': 1.12,
+    'project_docs': 1.12,
+    'code_or_config': 1.04,
+    'conversation_notes': 1.03,
+    'raw_reference_text': 0.96,
+}
+ASSISTANT_TYPE_WEIGHTS.update(RETRIEVAL_WEIGHT_BY_IMPORT_TYPE)
+ASSISTANT_TYPE_WEIGHTS.update(ASSISTANT_CHUNK_TYPE_WEIGHTS)
+NEO_PROJECT_TYPE_WEIGHTS = {
+    'guardrail': 1.24,
+    'implementation_decision': 1.20,
+    'extension_contract': 1.16,
+    'workflow_rule': 1.14,
+    'fix_pattern': 1.12,
+    'bug_history': 1.10,
+    'repo_fact': 1.04,
+    'system_record': 1.02,
+    'validation_result': 1.0,
+    'failed_attempt': 0.96,
+    'todo': 0.90,
     'summary': 0.72,
 }
 ROLEPLAY_TYPE_WEIGHTS = {
@@ -29,12 +121,17 @@ ROLEPLAY_TYPE_WEIGHTS = {
     'summary': 0.72,
 }
 
-ASSISTANT_TYPE_LIMITS = {'preference': 2, 'style_shift': 1, 'workflow': 2, 'project_fact': 2, 'example_output': 1, 'summary': 1}
+ASSISTANT_TYPE_LIMITS = {'preference': 2, 'style_shift': 1, 'workflow': 2, 'project_fact': 2, 'example_output': 1, 'summary': 1, 'action_log': 2, 'task_memory': 2, 'tool_result': 2, 'patch_result': 2, 'validation_result': 2, 'failed_attempt': 2, 'decision_record': 2, 'json_schema': 5, 'markdown_structured': 5, 'raw_creative_lore': 5, 'client_project_data': 5, 'email_or_message_data': 4, 'project_docs': 5, 'code_or_config': 4, 'conversation_notes': 4, 'raw_reference_text': 3, 'text': 4, 'txt': 4, 'md': 4, 'markdown': 4}
+ASSISTANT_TYPE_LIMITS.update(RETRIEVAL_LIMIT_BY_IMPORT_TYPE)
+ASSISTANT_TYPE_LIMITS.update(ASSISTANT_CHUNK_TYPE_LIMITS)
+NEO_PROJECT_TYPE_LIMITS = {'guardrail': 3, 'implementation_decision': 3, 'extension_contract': 3, 'workflow_rule': 3, 'fix_pattern': 3, 'bug_history': 2, 'repo_fact': 4, 'system_record': 3, 'validation_result': 2, 'failed_attempt': 2, 'todo': 1, 'summary': 2}
 ROLEPLAY_TYPE_LIMITS = {'relationship_shift': 2, 'unresolved_thread': 2, 'event': 2, 'world_fact': 2, 'character_fact': 2, 'callback': 1, 'summary': 1}
 
-ASSISTANT_MAX_ITEMS = 5
+ASSISTANT_MAX_ITEMS = 8
+NEO_PROJECT_MAX_ITEMS = 8
 ROLEPLAY_MAX_ITEMS = 6
-ASSISTANT_MAX_CHARS = 2400
+ASSISTANT_MAX_CHARS = 3600
+NEO_PROJECT_MAX_CHARS = 4200
 ROLEPLAY_MAX_CHARS = 3000
 
 
@@ -88,6 +185,14 @@ def _overlap_score(query_text: str, candidate_text: str) -> float:
 
 def _lane_config(lane: str) -> dict[str, Any]:
     clean = str(lane or '').strip().lower()
+    if clean == 'neo_project':
+        return {
+            'collection': NEO_PROJECT_COLLECTION,
+            'weights': NEO_PROJECT_TYPE_WEIGHTS,
+            'type_limits': NEO_PROJECT_TYPE_LIMITS,
+            'max_items': NEO_PROJECT_MAX_ITEMS,
+            'max_chars': NEO_PROJECT_MAX_CHARS,
+        }
     if clean == 'roleplay':
         return {
             'collection': ROLEPLAY_COLLECTION,
@@ -123,6 +228,22 @@ def _scope_match_bonus(lane: str, metadata: dict[str, Any], scope: dict[str, Any
             bonus += 0.08
         if scope_type == 'profile':
             bonus += 0.05
+    elif lane == 'neo_project':
+        project_id = str(scope.get('project_id') or 'neo_studio').strip() or 'neo_studio'
+        component = str(scope.get('component') or scope.get('active_tab') or '').strip().lower()
+        file_path = str(scope.get('file_path') or '').strip().lower()
+        if project_id and str(metadata.get('project_id') or '') == project_id:
+            bonus += 0.22
+        if scope_type == 'project' and scope_id == project_id:
+            bonus += 0.10
+        meta_component = str(metadata.get('component') or '').strip().lower()
+        if component and meta_component and component == meta_component:
+            bonus += 0.18
+        meta_file = str(metadata.get('file_path') or '').strip().lower()
+        if file_path and meta_file and (file_path == meta_file or file_path in meta_file or meta_file in file_path):
+            bonus += 0.20
+        if scope_type in {'global', 'project'}:
+            bonus += 0.04
     else:
         story_id = str(scope.get('story_id') or '').strip()
         part_id = str(scope.get('part_id') or '').strip()
@@ -143,6 +264,9 @@ def _query_text_for_scope(lane: str, scope: dict[str, Any], query_text: str) -> 
     if lane == 'assistant':
         for key in ('thread_instruction', 'context_note', 'mode', 'project_title', 'project_brief'):
             bits.append(_clean(scope.get(key), 600))
+    elif lane == 'neo_project':
+        for key in ('project_title', 'project_brief', 'active_tab', 'component', 'file_path', 'workflow', 'implementation_goal'):
+            bits.append(_clean(scope.get(key), 700))
     else:
         for key in ('scenario', 'scene_notes', 'memory_notes', 'author_note', 'story_scope_notes', 'chapter_scope_notes', 'part_scope_notes', 'story_title', 'part_title', 'partner_name', 'user_name'):
             bits.append(_clean(scope.get(key), 600))
@@ -160,9 +284,17 @@ def _load_sqlite_chunk_candidates(lane: str, scope: dict[str, Any], query_text: 
     params: list[Any] = [lane]
     scope_or: list[str] = []
     if lane == 'assistant':
-        if project_id:
+        source_aware_mode = str(scope.get('_source_aware_retrieval_mode') or scope.get('retrieval_mode') or '').strip().lower()
+        if source_aware_mode in {'creative_reference', 'cross_project_search', 'admin_debug'}:
+            # Intentional broader candidate load. Source-aware filtering below still
+            # blocks private/client/quarantine data and marks project lore for disclosure.
+            scope_or.append("(scope_type IN ('profile','global','project') OR project_id!='' OR (project_id='' AND scope_type=''))")
+        elif project_id:
             scope_or.append('(project_id=?)')
             params.append(project_id)
+            scope_or.append("(scope_type IN ('profile','global') OR (project_id='' AND scope_type=''))")
+        else:
+            scope_or.append("(scope_type IN ('profile','global') OR (project_id='' AND scope_type=''))")
         if session_id:
             scope_or.append('(entity_id=?)')
             params.append(session_id)
@@ -170,6 +302,20 @@ def _load_sqlite_chunk_candidates(lane: str, scope: dict[str, Any], query_text: 
             params.extend(['session', session_id])
         scope_or.append('(scope_type=?)')
         params.append('profile')
+    elif lane == 'neo_project':
+        neo_project_id = str(scope.get('project_id') or 'neo_studio').strip() or 'neo_studio'
+        scope_or.append('(project_id=?)')
+        params.append(neo_project_id)
+        scope_or.append('(scope_type=?)')
+        params.append('global')
+        component = str(scope.get('component') or scope.get('active_tab') or '').strip()
+        if component:
+            scope_or.append('(metadata_json LIKE ?)')
+            params.append(f'%"component": "{component}"%')
+        file_path = str(scope.get('file_path') or '').strip()
+        if file_path:
+            scope_or.append('(metadata_json LIKE ? OR source_ref LIKE ?)')
+            params.extend([f'%{file_path}%', f'%{file_path}%'])
     else:
         campaign_id = str(scope.get('campaign_id') or story_id).strip()
         if campaign_id:
@@ -217,6 +363,7 @@ def _load_sqlite_chunk_candidates(lane: str, scope: dict[str, Any], query_text: 
             metadata.setdefault('importance', row['importance'])
             metadata.setdefault('created_at', row['created_at'])
             metadata.setdefault('updated_at', row['updated_at'])
+            metadata = normalize_chunk_scope_metadata(apply_priority_metadata(normalize_metadata_chunk_type(metadata)))
             candidates.append({
                 'id': row['chunk_id'],
                 'document': row['document'],
@@ -254,6 +401,7 @@ def _load_sqlite_chunk_candidates(lane: str, scope: dict[str, Any], query_text: 
                 'created_at': row['created_at'],
                 'updated_at': row['updated_at'],
             }
+            metadata = apply_priority_metadata(normalize_metadata_chunk_type(metadata))
             candidates.append({
                 'id': row['chunk_id'],
                 'document': content,
@@ -269,13 +417,16 @@ def _rank_candidates(lane: str, query_text: str, scope: dict[str, Any], candidat
     weights = _lane_config(lane)['weights']
     out: list[dict[str, Any]] = []
     for idx, item in enumerate(candidates):
-        metadata = item.get('metadata') if isinstance(item.get('metadata'), dict) else {}
+        metadata = normalize_chunk_scope_metadata(apply_priority_metadata(normalize_metadata_chunk_type(item.get('metadata') if isinstance(item.get('metadata'), dict) else {})))
         document = str(item.get('document') or '').strip()
         chunk_type = str(metadata.get('chunk_type') or 'summary').strip()
         importance = float(metadata.get('importance') or 0.0)
-        overlap = _overlap_score(query_text, document)
+        tag_text = ' '.join(str(x) for x in (metadata.get('retrieval_tags') or [])[:64]) if isinstance(metadata.get('retrieval_tags'), list) else str(metadata.get('retrieval_tags') or '')
+        overlap = _overlap_score(query_text, f'{document} {tag_text}')
+        import_type = str(metadata.get('import_type') or '').strip()
         type_weight = float(weights.get(chunk_type, 1.0))
-        base_score = (0.8 + importance) * type_weight
+        import_weight = float(RETRIEVAL_WEIGHT_BY_IMPORT_TYPE.get(import_type, 1.0))
+        base_score = (0.8 + importance) * type_weight * import_weight
         scope_bonus = _scope_match_bonus(lane, metadata, scope)
         overlap_bonus = overlap * 0.55
         recency_bonus = _recency_bonus(str(metadata.get('updated_at') or metadata.get('created_at') or ''))
@@ -289,14 +440,22 @@ def _rank_candidates(lane: str, query_text: str, scope: dict[str, Any], candidat
         else:
             source_bonus = max(0.01, 0.10 - (0.01 * idx))
         pin_bonus = 0.28 if bool(metadata.get('is_pinned')) else 0.0
-        score = base_score + scope_bonus + overlap_bonus + recency_bonus + source_bonus + distance_bonus + pin_bonus
+        metadata_quality_bonus = min(0.06, max(0.0, float(metadata.get('metadata_quality_score') or 0.0)) * 0.06)
+        evidence_rank_bonus = min(0.08, max(0.0, float(metadata.get('evidence_rank') or 0.0)) / 120.0 * 0.08)
+        truth_priority_bonus = priority_bonus(metadata)
+        if metadata.get('freshness_policy') == 'stable_canon_over_recency' and truth_priority_bonus >= 0.08:
+            recency_bonus = min(recency_bonus, 0.04)
+        score = base_score + scope_bonus + overlap_bonus + recency_bonus + source_bonus + distance_bonus + pin_bonus + metadata_quality_bonus + evidence_rank_bonus + truth_priority_bonus
         enriched = {
             **item,
+            'metadata': metadata,
             'score': score,
             'overlap': overlap,
             'diagnostics': {
                 'chunk_type': chunk_type,
                 'type_weight': type_weight,
+                'import_type': import_type,
+                'import_weight': import_weight,
                 'importance': importance,
                 'base_score': base_score,
                 'scope_bonus': scope_bonus,
@@ -305,6 +464,12 @@ def _rank_candidates(lane: str, query_text: str, scope: dict[str, Any], candidat
                 'source_bonus': source_bonus,
                 'distance_bonus': distance_bonus,
                 'pin_bonus': pin_bonus,
+                'metadata_quality_bonus': metadata_quality_bonus,
+                'evidence_rank_bonus': evidence_rank_bonus,
+                'truth_priority_bonus': truth_priority_bonus,
+                'truth_priority_rank': metadata.get('truth_priority_rank'),
+                'evidence_tier': metadata.get('evidence_tier'),
+                'conflict_policy': metadata.get('conflict_policy'),
                 'final_score': score,
             },
         }
@@ -324,8 +489,9 @@ def _budget_and_dedupe(lane: str, ranked: list[dict[str, Any]]) -> tuple[list[di
     dropped: list[dict[str, Any]] = []
     char_count = 0
     for item in ranked:
-        metadata = item.get('metadata') if isinstance(item.get('metadata'), dict) else {}
+        metadata = normalize_chunk_scope_metadata(apply_priority_metadata(normalize_metadata_chunk_type(item.get('metadata') if isinstance(item.get('metadata'), dict) else {})))
         chunk_type = str(metadata.get('chunk_type') or 'summary').strip()
+        import_type = str(metadata.get('import_type') or '').strip()
         doc = _clean(item.get('document'), 780)
         drop_reason = ''
         if not doc:
@@ -333,16 +499,16 @@ def _budget_and_dedupe(lane: str, ranked: list[dict[str, Any]]) -> tuple[list[di
         dedupe_key = f"{chunk_type}::{doc[:180].lower()}"
         if not drop_reason and dedupe_key in seen_keys:
             drop_reason = 'duplicate'
-        limit = int(type_limits.get(chunk_type, 1))
+        limit = int(type_limits.get(chunk_type, RETRIEVAL_LIMIT_BY_IMPORT_TYPE.get(import_type, 2)))
         if not drop_reason and used_types.get(chunk_type, 0) >= limit:
             drop_reason = 'type_limit'
         extra = len(doc) + 24
         if not drop_reason and selected and char_count + extra > max_chars:
             drop_reason = 'budget_limit'
         if drop_reason:
-            dropped.append({**item, 'document': doc, 'drop_reason': drop_reason})
+            dropped.append({**item, 'metadata': metadata, 'document': doc, 'drop_reason': drop_reason})
             continue
-        selected.append({**item, 'document': doc})
+        selected.append({**item, 'metadata': metadata, 'document': doc})
         seen_keys.add(dedupe_key)
         used_types[chunk_type] = used_types.get(chunk_type, 0) + 1
         char_count += extra
@@ -361,27 +527,42 @@ def _summary_from_items(lane: str, items: list[dict[str, Any]]) -> str:
         return ''
     lines: list[str] = []
     for item in items:
-        metadata = item.get('metadata') if isinstance(item.get('metadata'), dict) else {}
+        metadata = normalize_chunk_scope_metadata(apply_priority_metadata(normalize_metadata_chunk_type(item.get('metadata') if isinstance(item.get('metadata'), dict) else {})))
         chunk_type = str(metadata.get('chunk_type') or 'summary').replace('_', ' ').strip().title()
+        disclosure = str(metadata.get('source_disclosure_label') or '').strip() if bool(metadata.get('source_disclosure_required')) else ''
+        label = f'{disclosure} · {chunk_type}' if disclosure else chunk_type
         document = _clean(item.get('document'), 720)
         if not document:
             continue
-        lines.append(_format_item(chunk_type, document))
-    header = 'Retrieved adaptive memory:' if lane == 'assistant' else 'Retrieved continuity memory:'
+        lines.append(_format_item(label, document))
+    if lane == 'assistant':
+        header = 'Retrieved adaptive memory:'
+    elif lane == 'neo_project':
+        header = 'Retrieved Neo project memory:'
+    else:
+        header = 'Retrieved continuity memory:'
     return header + '\n' + '\n'.join(lines)
 
 
-def build_memory_pack(lane: str, scope: dict[str, Any] | None = None, query_text: str = '') -> dict[str, Any]:
+def build_memory_pack(lane: str, scope: dict[str, Any] | None = None, query_text: str = '', retrieval_mode: str = '') -> dict[str, Any]:
     clean_lane = str(lane or 'assistant').strip().lower()
-    scope = scope if isinstance(scope, dict) else {}
+    scope = dict(scope) if isinstance(scope, dict) else {}
+    source_aware_mode = resolve_source_aware_retrieval_mode(scope=scope, query_text=query_text, requested_mode=retrieval_mode) if clean_lane == 'assistant' else ''
+    if source_aware_mode:
+        scope['_source_aware_retrieval_mode'] = source_aware_mode
+    requested_profile = str(retrieval_mode or scope.get('rerank_profile') or scope.get('memory_rerank_profile') or '').strip().lower()
+    retrieval_profile = resolve_retrieval_profile(clean_lane, scope, requested_profile)
+    profile_config = RERANK_PROFILES.get(retrieval_profile, RERANK_PROFILES['smart'])
     enriched_query = _query_text_for_scope(clean_lane, scope, query_text)
 
-    sqlite_candidates = _load_sqlite_chunk_candidates(clean_lane, scope, enriched_query, limit=48)
+    sqlite_candidates = _load_sqlite_chunk_candidates(clean_lane, scope, enriched_query, limit=int(profile_config.get('sqlite_limit') or 48))
     chroma_candidates: list[dict[str, Any]] = []
-    try:
-        chroma_candidates = query_memory(_lane_config(clean_lane)['collection'], query_text=enriched_query, n_results=18)
-    except Exception:
-        logger.exception('Memory pack Chroma query failed for lane %s', clean_lane)
+    chroma_limit = int(profile_config.get('chroma_limit') or 0)
+    if chroma_limit > 0:
+        try:
+            chroma_candidates = query_memory(_lane_config(clean_lane)['collection'], query_text=enriched_query, n_results=chroma_limit)
+        except Exception:
+            logger.exception('Memory pack Chroma query failed for lane %s', clean_lane)
 
     combined: list[dict[str, Any]] = []
     by_id: set[str] = set()
@@ -392,14 +573,19 @@ def build_memory_pack(lane: str, scope: dict[str, Any] | None = None, query_text
         combined.append(item)
         by_id.add(chunk_id)
 
-    status_map = fetch_memory_chunk_status_map([str(item.get('id') or '').strip() for item in combined])
+    if clean_lane == 'assistant':
+        sandbox_allowed, sandbox_denied = source_aware_filter_items(combined, scope, source_aware_mode)
+    else:
+        sandbox_allowed, sandbox_denied = sandbox_filter_items(combined, scope)
+
+    status_map = fetch_memory_chunk_status_map([str(item.get('id') or '').strip() for item in sandbox_allowed])
     filtered: list[dict[str, Any]] = []
-    for item in combined:
+    for item in sandbox_allowed:
         chunk_id = str(item.get('id') or '').strip()
         status = status_map.get(chunk_id, {})
         if bool(status.get('is_deleted')) or bool(status.get('is_suppressed')):
             continue
-        metadata = item.get('metadata') if isinstance(item.get('metadata'), dict) else {}
+        metadata = normalize_chunk_scope_metadata(apply_priority_metadata(normalize_metadata_chunk_type(item.get('metadata') if isinstance(item.get('metadata'), dict) else {})))
         merged = dict(metadata)
         if status:
             merged['is_pinned'] = bool(status.get('is_pinned'))
@@ -407,22 +593,66 @@ def build_memory_pack(lane: str, scope: dict[str, Any] | None = None, query_text
             merged['is_suppressed'] = bool(status.get('is_suppressed'))
         filtered.append({**item, 'metadata': merged})
 
-    ranked = _rank_candidates(clean_lane, enriched_query, scope, filtered)
+    first_pass_ranked = _rank_candidates(clean_lane, enriched_query, scope, filtered)
+    rerank_limit = int(profile_config.get('rerank_limit') or len(first_pass_ranked) or 0)
+    ranked = rerank_candidates(
+        lane=clean_lane,
+        query_text=enriched_query,
+        scope=scope,
+        candidates=first_pass_ranked[:rerank_limit],
+        profile=retrieval_profile,
+    )
+    if len(first_pass_ranked) > rerank_limit:
+        ranked.extend(first_pass_ranked[rerank_limit:])
     selected, dropped = _budget_and_dedupe(clean_lane, ranked)
+    source_disclosure = build_source_disclosure_summary(selected) if clean_lane == 'assistant' else {'required': False, 'labels': [], 'project_ids': [], 'instruction': ''}
     summary = _summary_from_items(clean_lane, selected)
+    if source_disclosure.get('required') and summary:
+        labels = '; '.join(source_disclosure.get('labels') or [])
+        summary = 'Source note: using project/story memory as contextual reference, not global truth. ' + labels + '\n' + summary
+    authority_memory_pack = {'items': selected, 'summary': summary, 'query_text': enriched_query}
+    authority = authority_metadata(
+        scope=scope,
+        query_text=query_text,
+        requested_mode=str(scope.get('authority_mode') or ''),
+        memory_pack=authority_memory_pack,
+    ) if clean_lane == 'assistant' else {'authority_mode': retrieval_profile}
     return {
         'lane': clean_lane,
         'query_text': enriched_query,
+        'authority': authority,
         'items': selected,
         'summary': summary,
         'item_count': len(selected),
         'candidate_count': len(filtered),
+        'sandbox_denied_count': len(sandbox_denied),
+        'retrieval_mode': source_aware_mode if clean_lane == 'assistant' else retrieval_profile,
+        'source_disclosure': source_disclosure if clean_lane == 'assistant' else {'required': False, 'labels': [], 'project_ids': [], 'instruction': ''},
         'diagnostics': {
             'config': {
                 'max_items': int(_lane_config(clean_lane)['max_items']),
                 'max_chars': int(_lane_config(clean_lane)['max_chars']),
                 'type_limits': dict(_lane_config(clean_lane)['type_limits']),
+                'retrieval_profile': retrieval_profile,
+                'source_aware_retrieval_mode': source_aware_mode,
+                'authority': authority,
+                'profile_config': dict(profile_config),
+                'reranker_enabled': bool(profile_config.get('enabled')),
+                'sqlite_candidate_limit': int(profile_config.get('sqlite_limit') or 0),
+                'chroma_candidate_limit': int(profile_config.get('chroma_limit') or 0),
+                'rerank_candidate_limit': int(profile_config.get('rerank_limit') or 0),
             },
+            'sandbox_denied': [
+                {
+                    'id': str(item.get('id') or '').strip(),
+                    'source': str(item.get('source') or '').strip(),
+                    'drop_reason': str(item.get('drop_reason') or '').strip(),
+                    'metadata': item.get('metadata') if isinstance(item.get('metadata'), dict) else {},
+                    'sandbox_decision': item.get('sandbox_decision') if isinstance(item.get('sandbox_decision'), dict) else {},
+                    'source_aware_decision': item.get('source_aware_decision') if isinstance(item.get('source_aware_decision'), dict) else {},
+                }
+                for item in sandbox_denied[:24]
+            ],
             'selected': [
                 {
                     'id': str(item.get('id') or '').strip(),
