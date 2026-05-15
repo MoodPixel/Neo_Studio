@@ -13,6 +13,22 @@ from typing import Any
 from urllib.parse import quote, urlparse
 
 from ..contracts.extension_packs import normalize_extension_pack, normalize_workflow_pack
+from ..contracts.extension_manifest import (
+    RESERVED_BUILT_IN_EXTENSION_IDS,
+    VALID_EXTENSION_TYPES,
+    VALID_EXTERNAL_BATCH_POLICIES,
+    VALID_EXTERNAL_CONTEXT_POLICIES,
+    VALID_EXTERNAL_OUTPUT_POLICIES,
+    VALID_EXTERNAL_SOURCE_POLICIES,
+    VALID_EXTERNAL_TARGET_SECTIONS,
+    VALID_EXTERNAL_WORKFLOWS,
+    EXTERNAL_MANIFEST_REQUIRED_FIELDS,
+    EXTERNAL_EXTENSION_POLICY_VERSION,
+    is_reserved_extension_id,
+    normalize_extension_manifest,
+    split_external_extension_id,
+    validate_extension_manifest,
+)
 
 APP_DIR = Path(__file__).resolve().parents[1]
 ROOT_DIR = APP_DIR.parent
@@ -26,7 +42,8 @@ LOG_DIR = DATA_DIR / 'extension_logs'
 REGISTRY_PATH = DATA_DIR / 'extension_registry.json'
 MANIFEST_FILENAMES = ('neo_extension.json', 'manifest.json')
 
-REGISTRY_SCHEMA_VERSION = 2
+REGISTRY_SCHEMA_VERSION = 3
+VALID_EXTENSION_CLASSIFICATIONS = set(VALID_EXTENSION_TYPES)
 VALID_STATUSES = {'enabled', 'disabled', 'broken', 'missing_dependency', 'version_mismatch'}
 REQUIRED_MANIFEST_FIELDS = ('id', 'name', 'version', 'target_surface', 'mount_type')
 KNOWN_PERMISSION_NAMES = {
@@ -36,6 +53,7 @@ KNOWN_PERMISSION_NAMES = {
 }
 KNOWN_MOUNT_TYPES = {'panel', 'toolbar', 'sidebar', 'surface', 'backend', 'workflow_pack', 'node_pack'}
 KNOWN_SURFACES = {'image', 'audio', 'video', 'board', 'assistant', 'admin', 'global', 'new_surface'}
+RESERVED_EXTENSION_IDS = set(RESERVED_BUILT_IN_EXTENSION_IDS)
 
 
 def _now_iso() -> str:
@@ -76,6 +94,28 @@ def _string_list(values: Any) -> list[str]:
         seen.add(key)
         out.append(text)
     return out
+
+
+def _clean_key(value: Any) -> str:
+    return str(value or '').strip().lower().replace(' ', '_')
+
+
+def _extension_type_for(payload: dict[str, Any], extension_id: str = '') -> str:
+    raw_type = _clean_key(payload.get('extension_type') or payload.get('type'))
+    if raw_type in VALID_EXTENSION_CLASSIFICATIONS:
+        return raw_type
+    source = _clean_key(payload.get('source'))
+    if bool(payload.get('built_in', False)) or source in {'built_in', 'built_in_extension', 'builtin', 'system_builtin'}:
+        return 'built_in_module'
+    return 'external_extension'
+
+
+def _slug_from_extension_id(extension_id: str) -> str:
+    return split_external_extension_id(extension_id).get('slug') or ''
+
+
+def _surface_from_extension_id(extension_id: str) -> str:
+    return split_external_extension_id(extension_id).get('surface') or ''
 
 
 
@@ -244,6 +284,9 @@ def _registry_template() -> dict[str, Any]:
         'record_type': 'neo_extension_registry',
         'updated_at': _now_iso(),
         'extension_packs': [],
+        'built_in_modules': [],
+        'external_extensions': [],
+        'invalid_extensions': [],
         'workflow_packs': [],
         'sources': {
             'installed_dir': str(INSTALLED_DIR),
@@ -251,6 +294,7 @@ def _registry_template() -> dict[str, Any]:
             'legacy_extensions_dir': str(LEGACY_EXTENSIONS_DIR),
             'cache_dir': str(CACHE_DIR),
         },
+        'manifest_scan_signature': {},
     }
 
 
@@ -261,7 +305,11 @@ def _load_registry() -> dict[str, Any]:
     base = _registry_template()
     base.update(registry)
     base['extension_packs'] = registry.get('extension_packs') if isinstance(registry.get('extension_packs'), list) else []
+    base['built_in_modules'] = registry.get('built_in_modules') if isinstance(registry.get('built_in_modules'), list) else []
+    base['external_extensions'] = registry.get('external_extensions') if isinstance(registry.get('external_extensions'), list) else []
+    base['invalid_extensions'] = registry.get('invalid_extensions') if isinstance(registry.get('invalid_extensions'), list) else []
     base['workflow_packs'] = registry.get('workflow_packs') if isinstance(registry.get('workflow_packs'), list) else []
+    base['manifest_scan_signature'] = registry.get('manifest_scan_signature') if isinstance(registry.get('manifest_scan_signature'), dict) else {}
     return base
 
 
@@ -275,6 +323,7 @@ def _save_registry(registry: dict[str, Any]) -> dict[str, Any]:
         'legacy_extensions_dir': str(LEGACY_EXTENSIONS_DIR),
         'cache_dir': str(CACHE_DIR),
     }
+    registry['manifest_scan_signature'] = _manifest_scan_signature()
     _write_json(REGISTRY_PATH, registry)
     return registry
 
@@ -285,18 +334,22 @@ def _ensure_dirs() -> None:
 
 
 def validate_manifest_payload(payload: dict[str, Any]) -> dict[str, Any]:
-    warnings: list[str] = []
-    errors: list[str] = []
+    """Validate an extension manifest using the canonical manifest contract.
+
+    Legacy manifests are still accepted, but external_extension manifests must
+    now declare the Phase 1 Step 2 external-extension schema fields.
+    """
     if not isinstance(payload, dict):
         return {'ok': False, 'valid': False, 'errors': ['Manifest must be a JSON object.'], 'warnings': []}
-    for field in REQUIRED_MANIFEST_FIELDS:
-        if not str(payload.get(field) or payload.get('extension_id' if field == 'id' else field) or '').strip():
-            errors.append(f'Missing required field: {field}')
-    extension_id = str(payload.get('id') or payload.get('extension_id') or '').strip()
-    if extension_id and any(ch.isspace() for ch in extension_id):
-        errors.append('id must not contain spaces. Use lowercase snake_case or kebab-case.')
+
+    canonical = validate_extension_manifest(payload)
+    errors = list(canonical.get('errors') or [])
+    warnings = list(canonical.get('warnings') or [])
+    manifest = canonical.get('manifest') if isinstance(canonical.get('manifest'), dict) else normalize_extension_manifest(payload)
+
+    # Preserve legacy registry warnings for known-but-loose fields.
     mount_type = str(payload.get('mount_type') or '').strip().lower()
-    if mount_type and mount_type not in KNOWN_MOUNT_TYPES:
+    if mount_type and mount_type not in KNOWN_MOUNT_TYPES and mount_type not in {'panel', 'toolbar_action', 'sidebar_item', 'surface_tab', 'backend_only', 'comfy_pack', 'workflow_pack'}:
         warnings.append(f'Unknown mount_type: {mount_type}')
     target_surface = str(payload.get('target_surface') or payload.get('surface') or '').strip().lower()
     if target_surface and target_surface not in KNOWN_SURFACES:
@@ -304,7 +357,14 @@ def validate_manifest_payload(payload: dict[str, Any]) -> dict[str, Any]:
     for permission in _string_list(payload.get('permissions') or []):
         if permission not in KNOWN_PERMISSION_NAMES:
             warnings.append(f'Unknown permission: {permission}')
-    return {'ok': len(errors) == 0, 'valid': len(errors) == 0, 'errors': errors, 'warnings': warnings}
+
+    return {
+        'ok': len(errors) == 0,
+        'valid': len(errors) == 0,
+        'errors': errors,
+        'warnings': warnings,
+        'manifest': manifest,
+    }
 
 
 
@@ -389,6 +449,49 @@ def _iter_manifest_dirs() -> list[tuple[Path, str, bool]]:
     return found
 
 
+def _manifest_scan_signature() -> dict[str, Any]:
+    """Return a lightweight filesystem signature for extension manifests.
+
+    External extensions are often installed by copying folders directly into
+    neo_extensions/installed. The runtime validator must not rely on a stale
+    extension_registry.json in that case, otherwise the UI can show a mounted
+    extension while generation disables it as not_registered.
+    """
+    rows: list[dict[str, Any]] = []
+    for extension_dir, source, default_enabled in _iter_manifest_dirs():
+        manifest = _find_manifest(extension_dir)
+        if not manifest:
+            continue
+        try:
+            stat = manifest.stat()
+            manifest_path = str(manifest.resolve())
+            folder_path = str(extension_dir.resolve())
+            rows.append({
+                'path': manifest_path,
+                'dir': folder_path,
+                'source': source,
+                'default_enabled': bool(default_enabled),
+                'mtime_ns': int(getattr(stat, 'st_mtime_ns', int(stat.st_mtime * 1_000_000_000))),
+                'size': int(stat.st_size),
+            })
+        except Exception:
+            continue
+    rows.sort(key=lambda item: item.get('path') or '')
+    return {
+        'manifest_count': len(rows),
+        'manifests': rows,
+    }
+
+
+def _registry_needs_rescan(registry: dict[str, Any]) -> bool:
+    """Return true when the cached registry no longer matches manifest files."""
+    if not isinstance(registry, dict):
+        return True
+    current = _manifest_scan_signature()
+    cached = registry.get('manifest_scan_signature') if isinstance(registry.get('manifest_scan_signature'), dict) else {}
+    return cached != current
+
+
 def _manifest_to_extension_record(extension_dir: Path, source: str, default_enabled: bool) -> dict[str, Any]:
     manifest_path = _find_manifest(extension_dir)
     payload: dict[str, Any] = {}
@@ -396,7 +499,9 @@ def _manifest_to_extension_record(extension_dir: Path, source: str, default_enab
         loaded = _read_json(manifest_path, {})
         payload = loaded if isinstance(loaded, dict) else {}
     validation = validate_manifest_payload(payload)
-    extension_id = str(payload.get('id') or payload.get('extension_id') or extension_dir.name).strip()
+    manifest_contract = validation.get('manifest') if isinstance(validation.get('manifest'), dict) else normalize_extension_manifest(payload)
+    extension_id = str(manifest_contract.get('extension_id') or manifest_contract.get('id') or payload.get('id') or payload.get('extension_id') or extension_dir.name).strip()
+    extension_type = _extension_type_for(payload, extension_id)
     normalized = normalize_extension_pack(
         payload,
         extension_id=extension_id,
@@ -408,6 +513,11 @@ def _manifest_to_extension_record(extension_dir: Path, source: str, default_enab
         enabled=bool(payload.get('enabled', default_enabled)),
     )
     normalized['id'] = extension_id
+    normalized['type'] = extension_type
+    normalized['extension_type'] = extension_type
+    normalized['classification'] = extension_type
+    normalized['slug'] = str(payload.get('slug') or _slug_from_extension_id(extension_id) or '').strip().lower()
+    normalized['reserved'] = is_reserved_extension_id(extension_id)
     normalized['name'] = str(payload.get('name') or normalized.get('title') or extension_id).strip()
     normalized['extension_dir'] = str(extension_dir)
     normalized['status'] = _status_for_record(normalized, validation)
@@ -422,10 +532,23 @@ def _manifest_to_extension_record(extension_dir: Path, source: str, default_enab
     normalized['frontend_entry'] = _clean_relative_path(payload.get('frontend_entry') or payload.get('entry_js') or payload.get('ui_entry') or '')
     normalized['backend_routes'] = _clean_relative_path(payload.get('backend_routes') or '')
     normalized['mount_point'] = str(payload.get('mount_point') or payload.get('slot') or '').strip()
-    normalized['target_tab'] = str(payload.get('target_tab') or payload.get('workspace') or payload.get('target_subtab') or '').strip()
+    normalized['target_tab'] = str(manifest_contract.get('target_tab') or payload.get('target_tab') or payload.get('workspace') or payload.get('target_subtab') or '').strip()
+    normalized['target_sections'] = manifest_contract.get('target_sections') if isinstance(manifest_contract.get('target_sections'), list) else []
+    normalized['supported_workflows'] = manifest_contract.get('supported_workflows') if isinstance(manifest_contract.get('supported_workflows'), list) else []
+    normalized['supported_model_families'] = manifest_contract.get('supported_model_families') if isinstance(manifest_contract.get('supported_model_families'), list) else []
+    normalized['source_policy'] = manifest_contract.get('source_policy') if isinstance(manifest_contract.get('source_policy'), list) else []
+    normalized['output_policy'] = manifest_contract.get('output_policy') if isinstance(manifest_contract.get('output_policy'), list) else []
+    normalized['batch_policy'] = str(manifest_contract.get('batch_policy') or '').strip().lower()
+    normalized['context_policy'] = manifest_contract.get('context_policy') if isinstance(manifest_contract.get('context_policy'), list) else []
+    normalized['policy_version'] = str(manifest_contract.get('policy_version') or EXTERNAL_EXTENSION_POLICY_VERSION).strip()
+    normalized['policy_defaults_applied'] = manifest_contract.get('policy_defaults_applied') if isinstance(manifest_contract.get('policy_defaults_applied'), dict) else {}
+    normalized['policy_restricted'] = manifest_contract.get('policy_restricted') if isinstance(manifest_contract.get('policy_restricted'), dict) else {}
+    normalized['policy_warnings'] = manifest_contract.get('policy_warnings') if isinstance(manifest_contract.get('policy_warnings'), list) else []
+    normalized['ui_entry'] = str(manifest_contract.get('ui_entry') or normalized.get('ui_entry') or '').strip()
+    normalized['backend_entry'] = str(manifest_contract.get('backend_entry') or '').strip()
     normalized['panel_title'] = str(payload.get('panel_title') or payload.get('title') or payload.get('name') or extension_id).strip()
     normalized['frontend_hooks'] = payload.get('frontend_hooks') if isinstance(payload.get('frontend_hooks'), list) else []
-    normalized['built_in'] = bool(payload.get('built_in', False))
+    normalized['built_in'] = extension_type == 'built_in_module'
     if normalized['built_in']:
         normalized['source'] = 'built_in'
     normalized['raw_manifest'] = payload
@@ -472,6 +595,9 @@ def rebuild_extension_registry() -> dict[str, Any]:
         workflow_packs.extend(_collect_workflow_packs_from_manifest(record, extension_dir))
     registry = _registry_template()
     registry['extension_packs'] = extension_packs
+    registry['built_in_modules'] = [pack for pack in extension_packs if str(pack.get('extension_type') or pack.get('type') or '').strip().lower() == 'built_in_module']
+    registry['external_extensions'] = [pack for pack in extension_packs if str(pack.get('extension_type') or pack.get('type') or '').strip().lower() == 'external_extension' and str(pack.get('status') or '').strip().lower() != 'broken']
+    registry['invalid_extensions'] = [pack for pack in extension_packs if str(pack.get('status') or '').strip().lower() == 'broken']
     registry['workflow_packs'] = workflow_packs
     registry['counts'] = _build_counts(extension_packs, workflow_packs)
     return _save_registry(registry)
@@ -484,12 +610,17 @@ def ensure_extension_registry() -> dict[str, Any]:
     registry = _load_registry()
     if not isinstance(registry.get('extension_packs'), list):
         return rebuild_extension_registry()
+    if _registry_needs_rescan(registry):
+        return rebuild_extension_registry()
     return registry
 
 
 def _build_counts(extension_packs: list[dict[str, Any]], workflow_packs: list[dict[str, Any]]) -> dict[str, int]:
     counts = {
         'extensions_total': len(extension_packs),
+        'built_in_modules_total': 0,
+        'external_extensions_total': 0,
+        'invalid_extensions_total': 0,
         'extensions_enabled': 0,
         'extensions_disabled': 0,
         'extensions_broken': 0,
@@ -499,6 +630,13 @@ def _build_counts(extension_packs: list[dict[str, Any]], workflow_packs: list[di
     }
     for pack in extension_packs:
         status = str(pack.get('status') or '').lower()
+        extension_type = str(pack.get('extension_type') or pack.get('type') or '').lower()
+        if extension_type == 'built_in_module':
+            counts['built_in_modules_total'] += 1
+        elif extension_type == 'external_extension':
+            counts['external_extensions_total'] += 1
+        if status == 'broken':
+            counts['invalid_extensions_total'] += 1
         if status == 'enabled' and pack.get('enabled', True):
             counts['extensions_enabled'] += 1
         elif status == 'broken':
@@ -566,6 +704,137 @@ def list_workflow_packs(surface: str = '', family: str = '', enabled_only: bool 
             continue
         out.append(pack)
     return out
+
+
+def list_external_extensions(surface: str = '', enabled_only: bool = False, include_invalid: bool = False) -> list[dict[str, Any]]:
+    registry = ensure_extension_registry()
+    packs = registry.get('external_extensions', [])
+    if include_invalid:
+        packs = list(packs) + [pack for pack in registry.get('invalid_extensions', []) if str(pack.get('extension_type') or pack.get('type') or '').strip().lower() == 'external_extension']
+    surface_value = str(surface or '').strip().lower()
+    out: list[dict[str, Any]] = []
+    for pack in packs:
+        if not isinstance(pack, dict):
+            continue
+        if surface_value and str(pack.get('target_surface') or pack.get('surface') or '').strip().lower() != surface_value:
+            continue
+        if enabled_only and (not pack.get('enabled', True) or str(pack.get('status') or '').strip().lower() != 'enabled'):
+            continue
+        out.append(pack)
+    return out
+
+
+def _external_extension_disabled_reason(pack: dict[str, Any]) -> str | None:
+    """Return a user-facing reason for why an external extension is unavailable."""
+    status = str(pack.get('status') or '').strip().lower()
+    if status == 'enabled' and pack.get('enabled', True):
+        return None
+    warnings = _string_list(pack.get('manifest_warnings') or pack.get('warnings') or [])
+    if status == 'broken':
+        return warnings[0] if warnings else 'manifest_invalid'
+    if status == 'missing_dependency':
+        missing = _string_list(pack.get('missing_dependencies') or [])
+        return 'missing_dependency: ' + ', '.join(missing) if missing else 'missing_dependency'
+    if status == 'version_mismatch':
+        return 'version_mismatch'
+    if not pack.get('enabled', True) or status == 'disabled':
+        return 'disabled'
+    return status or 'unavailable'
+
+
+def _external_extension_public_record(pack: dict[str, Any]) -> dict[str, Any]:
+    """Normalize an external extension record for UI/API consumers.
+
+    This intentionally exposes only the external-extension contract surface, not
+    built-in module internals. Raw manifests remain available through the
+    manifest detail endpoint when needed.
+    """
+    extension_id = str(pack.get('extension_id') or pack.get('id') or '').strip()
+    surface = str(pack.get('target_surface') or pack.get('surface') or '').strip().lower()
+    status = str(pack.get('status') or 'disabled').strip().lower()
+    enabled = bool(pack.get('enabled', False)) and status == 'enabled'
+    return {
+        'extension_id': extension_id,
+        'id': extension_id,
+        'name': str(pack.get('name') or pack.get('title') or extension_id).strip(),
+        'type': 'external_extension',
+        'extension_type': 'external_extension',
+        'surface': surface,
+        'target_surface': surface,
+        'slug': str(pack.get('slug') or _slug_from_extension_id(extension_id) or '').strip().lower(),
+        'version': str(pack.get('version') or '').strip(),
+        'installed': True,
+        'enabled': enabled,
+        'status': status,
+        'target_sections': _string_list(pack.get('target_sections') or []),
+        'supported_workflows': _string_list(pack.get('supported_workflows') or []),
+        'supported_model_families': _string_list(pack.get('supported_model_families') or []),
+        'source_policy': _string_list(pack.get('source_policy') or []),
+        'output_policy': _string_list(pack.get('output_policy') or []),
+        'batch_policy': str(pack.get('batch_policy') or '').strip().lower(),
+        'context_policy': _string_list(pack.get('context_policy') or []),
+        'policy_version': str(pack.get('policy_version') or EXTERNAL_EXTENSION_POLICY_VERSION).strip(),
+        'policy_defaults_applied': pack.get('policy_defaults_applied') if isinstance(pack.get('policy_defaults_applied'), dict) else {},
+        'policy_restricted': pack.get('policy_restricted') if isinstance(pack.get('policy_restricted'), dict) else {},
+        'policy_warnings': _string_list(pack.get('policy_warnings') or []),
+        'ui_entry': str(pack.get('ui_entry') or pack.get('frontend_entry') or pack.get('entry_js') or '').strip(),
+        'backend_entry': str(pack.get('backend_entry') or pack.get('backend_routes') or '').strip(),
+        'manifest_valid': bool(pack.get('manifest_valid', status != 'broken')),
+        'warnings': _string_list(pack.get('manifest_warnings') or pack.get('warnings') or []) + _string_list(pack.get('policy_warnings') or []),
+        'disabled_reason': _external_extension_disabled_reason(pack),
+        'extension_dir': str(pack.get('extension_dir') or '').strip(),
+        'last_scanned_at': str(pack.get('last_scanned_at') or '').strip(),
+    }
+
+
+def build_external_extension_registry(surface: str = '', include_invalid: bool = True) -> dict[str, Any]:
+    """Return the external-extension-only registry for the Extensions workspace.
+
+    Scene Director and other built-in modules are deliberately excluded. The
+    output is bucketed so UI can show installed/enabled/disabled/invalid states
+    without inferring from raw extension_packs.
+    """
+    registry = ensure_extension_registry()
+    surface_value = str(surface or '').strip().lower()
+    all_records: list[dict[str, Any]] = []
+    invalid_records: list[dict[str, Any]] = []
+    warnings: list[str] = []
+    for pack in registry.get('extension_packs', []):
+        if not isinstance(pack, dict):
+            continue
+        if str(pack.get('extension_type') or pack.get('type') or '').strip().lower() != 'external_extension':
+            continue
+        public = _external_extension_public_record(pack)
+        if surface_value and public.get('surface') != surface_value:
+            continue
+        if public.get('warnings'):
+            warnings.extend([f"{public.get('extension_id')}: {warning}" for warning in public.get('warnings', [])])
+        if public.get('status') == 'broken' or not public.get('manifest_valid', True):
+            invalid_records.append(public)
+        else:
+            all_records.append(public)
+    enabled_records = [item for item in all_records if item.get('enabled') and item.get('status') == 'enabled']
+    disabled_records = [item for item in all_records if item not in enabled_records]
+    installed_records = list(all_records) + (invalid_records if include_invalid else [])
+    return {
+        'ok': True,
+        'schema_version': REGISTRY_SCHEMA_VERSION,
+        'record_type': 'neo_external_extension_registry',
+        'surface': surface_value,
+        'installed': installed_records,
+        'enabled': enabled_records,
+        'disabled': disabled_records,
+        'invalid': invalid_records if include_invalid else [],
+        'warnings': warnings,
+        'counts': {
+            'installed': len(installed_records),
+            'enabled': len(enabled_records),
+            'disabled': len(disabled_records),
+            'invalid': len(invalid_records) if include_invalid else 0,
+        },
+        'built_in_modules_excluded': True,
+        'updated_at': str(registry.get('updated_at') or _now_iso()),
+    }
 
 
 def _find_pack(extension_id: str) -> tuple[dict[str, Any] | None, int, dict[str, Any]]:
@@ -992,14 +1261,21 @@ def get_extension_manifest_standard() -> dict[str, Any]:
         'legacy_manifest_filename': 'manifest.json',
         'required_fields': list(REQUIRED_MANIFEST_FIELDS),
         'recommended_fields': [
-            'author', 'description', 'target_tab', 'mount_point', 'panel_title', 'entry_js', 'entry_css', 'backend_routes',
+            'extension_type', 'slug', 'author', 'description', 'target_tab', 'mount_point', 'panel_title', 'entry_js', 'entry_css', 'backend_routes',
             'permissions', 'dependencies', 'min_neo_version', 'workflow_packs', 'workflows', 'workflow_folder', 'backend_routes',
         ],
+        'known_extension_types': sorted(VALID_EXTENSION_CLASSIFICATIONS),
+        'reserved_extension_ids': sorted(RESERVED_EXTENSION_IDS),
+        'extension_id_pattern': '<surface>.<extension_slug>',
         'known_mount_types': sorted(KNOWN_MOUNT_TYPES),
         'known_surfaces': sorted(KNOWN_SURFACES),
         'known_permissions': sorted(KNOWN_PERMISSION_NAMES),
         'example': {
-            'id': 'neo_example_panel',
+            'id': 'image.example_panel',
+            'extension_id': 'image.example_panel',
+            'type': 'external_extension',
+            'extension_type': 'external_extension',
+            'slug': 'example_panel',
             'name': 'Neo Example Panel',
             'version': '1.0.0',
             'author': 'Neo Studio',
@@ -1011,7 +1287,7 @@ def get_extension_manifest_standard() -> dict[str, Any]:
             'entry_css': 'static/example_panel.css',
             'backend_routes': 'server/routes.py',
             'permissions': ['frontend_injection', 'backend_routes'],
-            'runtime_prefix': '/api/extensions/runtime/neo_example_panel',
+            'runtime_prefix': '/api/extensions/runtime/image.example_panel',
             'workflows': {
                 'folder': 'workflows',
                 'backend_role': 'image',
