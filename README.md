@@ -303,7 +303,47 @@ You can choose any folder path. Do **not** use hardcoded paths from another mach
 ## 🧩 Backend Notes & Troubleshooting
 ---
 
+---
+### ⚠️ Optional Requirements Update (Important After May 16 Patch)
+---
+
+If you originally created your Neo Studio virtual environment using:
+
+```bash
+setup_neo_studio_venv.bat
+````
+
+before the **May 16, 2026** updates/patches, you should manually install the new optional dependency package list.
+
+Some newer systems such as:
+
+* Assistant project context retrieval
+* Embedding model support
+* Reranker integration
+* Advanced memory workflows
+* Extended backend integrations
+
+may require packages from:
+
+```text
+neo_studio_requirements_optional.txt
+```
+
+#### ✅ Recommended Fix
+
+Activate your Neo Studio virtual environment first, then run:
+
+```bash
+pip install -r neo_studio_requirements_optional.txt
+```
+
+#### ⚠️ Important
+
+Older Neo Studio virtual environments created before the May 16 patch may still run normally for basic workflows, but newer Assistant memory/retrieval systems and advanced backend integrations may fail or appear partially functional until the optional requirements are installed.
+
+---
 ### ⚠️ InsightFace / IPAdapter FaceID Setup Note (Python 3.13)
+---
 
 If you are using the newer ComfyUI portable builds with **Python 3.13**, normal:
 
