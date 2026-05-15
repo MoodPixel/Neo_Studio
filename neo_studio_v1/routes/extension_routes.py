@@ -17,6 +17,7 @@ from ..utils.extension_registry import (
     validate_manifest_payload,
     rebuild_extension_registry,
     build_frontend_hook_registry,
+    build_external_extension_registry,
 
     install_extension_from_zip,
     install_extension_from_git,
@@ -40,19 +41,33 @@ router = APIRouter()
 
 
 @router.get('/api/extensions/registry')
-async def api_extension_registry(surface: str = '', target_surface: str = '', family: str = '', workspace: str = ''):
+async def api_extension_registry(surface: str = '', target_surface: str = '', family: str = '', workspace: str = '', refresh: bool = False):
     try:
-        ensure_extension_registry()
+        if refresh:
+            rebuild_extension_registry()
+        else:
+            ensure_extension_registry()
         return JSONResponse({
             'ok': True,
             'counts': registry_counts(),
             'extension_packs': list_extension_packs(surface=surface, target_surface=target_surface, family=family, workspace=workspace),
             'workflow_packs': list_workflow_packs(surface=surface, family=family),
+            'external_extension_registry': build_external_extension_registry(surface=target_surface or surface),
         })
     except Exception as exc:
         return json_exception(exc, default_message='Could not load extension registry.', default_status=500)
 
 
+
+
+@router.get('/api/extensions/external-registry')
+async def api_external_extension_registry(surface: str = '', include_invalid: bool = True, refresh: bool = False):
+    try:
+        if refresh:
+            rebuild_extension_registry()
+        return JSONResponse(build_external_extension_registry(surface=surface, include_invalid=include_invalid))
+    except Exception as exc:
+        return json_exception(exc, default_message='Could not load external extension registry.', default_status=500)
 
 
 @router.post('/api/extensions/registry/rescan')
@@ -64,6 +79,7 @@ async def api_extension_registry_rescan():
             'counts': registry_counts(),
             'extension_packs': registry.get('extension_packs', []),
             'workflow_packs': registry.get('workflow_packs', []),
+            'external_extension_registry': build_external_extension_registry(),
         })
     except Exception as exc:
         return json_exception(exc, default_message='Could not rescan extension registry.', default_status=500)
@@ -124,8 +140,10 @@ async def api_extension_runtime(target_surface: str = 'image', family: str = '',
 
 
 @router.get('/api/extensions/frontend-hooks')
-async def api_extension_frontend_hooks(target_surface: str = '', mount_type: str = '', enabled_only: bool = True):
+async def api_extension_frontend_hooks(target_surface: str = '', mount_type: str = '', enabled_only: bool = True, refresh: bool = False):
     try:
+        if refresh:
+            rebuild_extension_registry()
         return JSONResponse(build_frontend_hook_registry(target_surface=target_surface, mount_type=mount_type, enabled_only=enabled_only))
     except Exception as exc:
         return json_exception(exc, default_message='Could not load frontend extension hooks.', default_status=500)

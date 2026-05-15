@@ -28,6 +28,8 @@ from ..contracts.output_records import build_generation_output_sidecar
 from ..contracts.generation_families import normalize_generation_mode, normalize_inpaint_backend, validate_generation_support
 from ..contracts.inpaint_payloads import get_shared_inpaint_payload, merge_shared_inpaint_payload
 from ..contracts.image_payloads import flatten_image_payload_envelope, build_image_payload_envelope
+from ..contracts.external_extension_payloads import build_external_extension_output_metadata_shell, stamp_external_extension_payload_contract
+from ..extensions.runtime.external_workflow_executor import apply_external_workflow_injection
 from ..contracts.retired_image_sections import sanitize_image_payload_for_retired_sections
 from ..contracts.image_output_selection import require_preview_source_lock
 from ..utils.generation_jobs import (
@@ -58,6 +60,7 @@ from ..utils.generation_styles import (
     upsert_generation_style,
 )
 from ..utils.generation_workspace_presets import load_workspace_presets, save_workspace_presets
+from ..utils.extension_registry import build_external_extension_registry
 from ..utils.library_common import safe_name
 from ..utils.library_settings_store import get_library_root
 from ..utils.detailer_models import download_sam_model, list_generation_detailer_models, prepare_detailer_assets_for_payload
@@ -1302,6 +1305,8 @@ def _build_generation_sidecar(job: dict, payload: dict, source: dict, candidate_
         'textual_inversions': list(payload.get('textual_inversions') or []) if isinstance(payload.get('textual_inversions'), list) else [],
         'ipadapter_units': ipadapter_units,
     }
+    external_extension_metadata = build_external_extension_output_metadata_shell(payload)
+    extra_generation_params['external_extensions'] = external_extension_metadata
     extra_generation_params = {k: v for k, v in extra_generation_params.items() if v not in ('', None, [], {})}
 
     raw_lines = []
@@ -1341,6 +1346,8 @@ def _build_generation_sidecar(job: dict, payload: dict, source: dict, candidate_
             'node_selection': str(payload.get('_neo_scene_director_node_selection') or '').strip(),
             'appearance_lock': payload.get('_neo_scene_director_appearance_lock_state_metadata') if isinstance(payload.get('_neo_scene_director_appearance_lock_state_metadata'), dict) else {},
         },
+        'external_extensions': external_extension_metadata,
+        '_neo_external_extensions': external_extension_metadata,
         'raw_parameters': '\n'.join([line for line in raw_lines if line]),
         'save': {
             'output_root': str(mode_root.parent),
@@ -5069,6 +5076,7 @@ async def api_generation_image_upscale(request: Request, background_tasks: Backg
         return json_error(f'Invalid image-upscale payload: {exc}', 400)
 
     payload, image_command_envelope = flatten_image_payload_envelope(payload)
+    payload = stamp_external_extension_payload_contract(payload, external_registry=build_external_extension_registry(surface='image'))
     payload = _sanitize_generation_payload_removed_features(payload)
     if image_command_envelope:
         payload['_neo_command_envelope'] = image_command_envelope.get('_neo_command_envelope') or payload.get('_neo_command_envelope')
@@ -5299,6 +5307,7 @@ async def api_generation_queue(request: Request, background_tasks: BackgroundTas
         return json_error(f'Invalid generation payload: {exc}', 400)
 
     payload, image_command_envelope = flatten_image_payload_envelope(payload)
+    payload = stamp_external_extension_payload_contract(payload, external_registry=build_external_extension_registry(surface='image'))
     payload = _sanitize_generation_payload_removed_features(payload)
     if image_command_envelope:
         payload['_neo_command_envelope'] = image_command_envelope.get('_neo_command_envelope') or payload.get('_neo_command_envelope')
@@ -5452,8 +5461,15 @@ async def api_generation_queue(request: Request, background_tasks: BackgroundTas
                 raise ValueError(f'IPAdapter custom nodes are not ready on this backend: {exc}') from exc
 
         workflow, normalized_payload, compile_notes = build_image_workflow(payload, command=detect_image_workflow_command(payload))
-        workflow, advanced_lane_notes = await _apply_res4lyf_advanced_sampler_lane(adapter, payload, workflow)
-        compile_notes = [*pre_compile_notes, *compile_notes, *advanced_lane_notes]
+        workflow, external_payload, external_workflow_notes = apply_external_workflow_injection(
+            workflow,
+            normalized_payload if isinstance(normalized_payload, dict) else payload,
+            registry=build_external_extension_registry(surface='image'),
+        )
+        if isinstance(external_payload, dict):
+            normalized_payload = external_payload
+        workflow, advanced_lane_notes = await _apply_res4lyf_advanced_sampler_lane(adapter, normalized_payload, workflow)
+        compile_notes = [*pre_compile_notes, *compile_notes, *external_workflow_notes, *advanced_lane_notes]
         _finalize_scene_director_appearance_lock_state_metadata(normalized_payload)
         _safe_write_generation_debug_json(GENERATION_LAST_PAYLOAD_PATH, normalized_payload)
         _safe_write_generation_debug_json(GENERATION_LAST_WORKFLOW_PATH, workflow)
