@@ -540,6 +540,14 @@ def _manifest_to_extension_record(extension_dir: Path, source: str, default_enab
     normalized['output_policy'] = manifest_contract.get('output_policy') if isinstance(manifest_contract.get('output_policy'), list) else []
     normalized['batch_policy'] = str(manifest_contract.get('batch_policy') or '').strip().lower()
     normalized['context_policy'] = manifest_contract.get('context_policy') if isinstance(manifest_contract.get('context_policy'), list) else []
+    normalized['metadata_adapter_version'] = str(manifest_contract.get('metadata_adapter_version') or '').strip()
+    normalized['ui'] = manifest_contract.get('ui') if isinstance(manifest_contract.get('ui'), dict) else {}
+    normalized['workflow'] = manifest_contract.get('workflow') if isinstance(manifest_contract.get('workflow'), dict) else {}
+    normalized['output'] = manifest_contract.get('output') if isinstance(manifest_contract.get('output'), dict) else {}
+    normalized['output_visibility'] = manifest_contract.get('output_visibility') if isinstance(manifest_contract.get('output_visibility'), dict) else {}
+    normalized['workflow_mode'] = str(manifest_contract.get('workflow_mode') or '').strip().lower()
+    normalized['output_policy_default'] = str(manifest_contract.get('output_policy_default') or '').strip().lower()
+    normalized['primary_output_type'] = str(manifest_contract.get('primary_output_type') or '').strip().lower()
     normalized['policy_version'] = str(manifest_contract.get('policy_version') or EXTERNAL_EXTENSION_POLICY_VERSION).strip()
     normalized['policy_defaults_applied'] = manifest_contract.get('policy_defaults_applied') if isinstance(manifest_contract.get('policy_defaults_applied'), dict) else {}
     normalized['policy_restricted'] = manifest_contract.get('policy_restricted') if isinstance(manifest_contract.get('policy_restricted'), dict) else {}
@@ -773,6 +781,14 @@ def _external_extension_public_record(pack: dict[str, Any]) -> dict[str, Any]:
         'output_policy': _string_list(pack.get('output_policy') or []),
         'batch_policy': str(pack.get('batch_policy') or '').strip().lower(),
         'context_policy': _string_list(pack.get('context_policy') or []),
+        'metadata_adapter_version': str(pack.get('metadata_adapter_version') or '').strip(),
+        'ui': pack.get('ui') if isinstance(pack.get('ui'), dict) else {},
+        'workflow': pack.get('workflow') if isinstance(pack.get('workflow'), dict) else {},
+        'output': pack.get('output') if isinstance(pack.get('output'), dict) else {},
+        'output_visibility': pack.get('output_visibility') if isinstance(pack.get('output_visibility'), dict) else {},
+        'workflow_mode': str(pack.get('workflow_mode') or '').strip().lower(),
+        'output_policy_default': str(pack.get('output_policy_default') or '').strip().lower(),
+        'primary_output_type': str(pack.get('primary_output_type') or '').strip().lower(),
         'policy_version': str(pack.get('policy_version') or EXTERNAL_EXTENSION_POLICY_VERSION).strip(),
         'policy_defaults_applied': pack.get('policy_defaults_applied') if isinstance(pack.get('policy_defaults_applied'), dict) else {},
         'policy_restricted': pack.get('policy_restricted') if isinstance(pack.get('policy_restricted'), dict) else {},

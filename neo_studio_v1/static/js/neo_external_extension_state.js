@@ -23,7 +23,7 @@
     effective: {},
     warnings: {},
     disabledReasons: {},
-    validationReport: { ok: true, active: [], blocked: [], disabled: {}, warnings: [], auto_fixes: {}, validator_version: 'external-extension-workflow-validator-v1' },
+    validationReport: { ok: true, active: [], blocked: [], disabled: {}, warnings: [], auto_fixes: {}, validator_version: 'external-extension-workflow-validator-v2' },
     registry: {
       installed: [],
       enabled: [],
@@ -89,6 +89,14 @@
       capability_requirements: asObject(src.capability_requirements),
       required_comfy_nodes: asArray(src.required_comfy_nodes),
       required_workflow_templates: asArray(src.required_workflow_templates),
+      metadata_adapter_version: text(src.metadata_adapter_version || ''),
+      ui: asObject(src.ui),
+      workflow: asObject(src.workflow),
+      output: asObject(src.output),
+      output_visibility: asObject(src.output_visibility),
+      workflow_mode: text(src.workflow_mode || src.workflow?.mode || ''),
+      output_policy_default: text(src.output_policy_default || src.output?.default_policy || src.output?.policy || ''),
+      primary_output_type: text(src.primary_output_type || src.output?.primary_output_type || src.output?.primary_type || ''),
       policy_version: text(src.policy_version || 'external-extension-policy-v1'),
       policy_defaults_applied: asObject(src.policy_defaults_applied),
       policy_restricted: asObject(src.policy_restricted),
@@ -151,6 +159,76 @@
     };
   }
 
+
+
+  function firstText(...values) {
+    for (const value of values) {
+      if (Array.isArray(value)) {
+        for (const item of value) {
+          const hit = text(item).toLowerCase().replace(/\s+/g, '_');
+          if (hit) return hit;
+        }
+      } else {
+        const hit = text(value).toLowerCase().replace(/\s+/g, '_');
+        if (hit) return hit;
+      }
+    }
+    return '';
+  }
+
+  function metadataBlocks(record) {
+    return {
+      workflow: asObject(record.workflow),
+      output: asObject(record.output),
+      visibility: asObject(record.output_visibility),
+    };
+  }
+
+  function workflowModeFor(record, raw = {}) {
+    const blocks = metadataBlocks(record);
+    return firstText(raw.workflow_mode, blocks.workflow.mode, record.workflow_mode, blocks.workflow.patch_strategies, 'metadata_only');
+  }
+
+  function outputPolicyFor(record, raw = {}) {
+    const blocks = metadataBlocks(record);
+    return firstText(raw.output_policy, blocks.output.policy, blocks.output.default_policy, record.output_policy_default, record.output_policy, DEFAULT_EXTERNAL_POLICIES.output_policy[0]);
+  }
+
+  function outputTargetFor(record, raw = {}) {
+    const blocks = metadataBlocks(record);
+    return firstText(raw.target, blocks.workflow.target, record.target, record.supported_workflows, record.target_sections);
+  }
+
+  function outputAffectingFor(record, raw = {}) {
+    const blocks = metadataBlocks(record);
+    const mode = workflowModeFor(record, raw);
+    const policy = outputPolicyFor(record, raw);
+    return !!(
+      blocks.output.output_affecting ||
+      blocks.output.primary_type ||
+      blocks.output.primary_output_type ||
+      asArray(blocks.output.outputs).length ||
+      ['replace_workflow', 'sidecar_run', 'postprocess_output', 'preprocess_source', 'mixed_workflow'].includes(mode) ||
+      ['new_run', 'append', 'replace'].includes(policy) ||
+      blocks.workflow.patch_count
+    );
+  }
+
+  function visibilityErrorsFor(record, raw = {}) {
+    if (!outputAffectingFor(record, raw)) return [];
+    const blocks = metadataBlocks(record);
+    const errors = [];
+    const mode = workflowModeFor(record, raw);
+    if (blocks.visibility.hidden_behavior_allowed) errors.push('hidden_output_behavior_not_allowed');
+    if (blocks.visibility.target_visible === false) errors.push('output_target_must_be_visible');
+    if (blocks.visibility.output_policy_visible === false) errors.push('output_policy_must_be_visible');
+    if (['replace_workflow', 'sidecar_run', 'postprocess_output', 'preprocess_source', 'mixed_workflow'].includes(mode) && blocks.visibility.workflow_mode_visible === false) errors.push('workflow_mode_must_be_visible');
+    if (!outputTargetFor(record, raw)) errors.push('output_affecting_extension_missing_target');
+    if (!outputPolicyFor(record, raw)) errors.push('output_affecting_extension_missing_output_policy');
+    if (mode === 'replace_workflow' && !blocks.workflow.requires_visible_confirmation && !raw.replace_workflow_confirmed) errors.push('replace_workflow_requires_visible_confirmation');
+    return errors;
+  }
+
   function extensionSupportsList(record, field, value) {
     const allowed = asArray(record[field]).map(item => text(item).toLowerCase()).filter(Boolean);
     const current = text(value).toLowerCase();
@@ -198,10 +276,25 @@
       effectiveEnabled = false;
       disabledReason = 'Required source is not available.';
     }
-    const selectedOutputPolicy = text(state.raw[record.extension_id]?.output_policy || record.output_policy?.[0] || DEFAULT_EXTERNAL_POLICIES.output_policy[0]).toLowerCase();
-    if (RESTRICTED_OUTPUT_POLICIES.has(selectedOutputPolicy) && !state.raw[record.extension_id]?.replace_confirmed) {
+    const rawState = asObject(state.raw[record.extension_id]);
+    const selectedOutputPolicy = outputPolicyFor(record, rawState);
+    const workflowMode = workflowModeFor(record, rawState);
+    const outputTarget = outputTargetFor(record, rawState);
+    const outputAffecting = outputAffectingFor(record, rawState);
+    const visibilityErrors = visibilityErrorsFor(record, rawState);
+    if (RESTRICTED_OUTPUT_POLICIES.has(selectedOutputPolicy) && !rawState.replace_confirmed) {
       effectiveEnabled = false;
       disabledReason = 'Replacement output policy requires visible user confirmation.';
+    }
+    if (effectiveEnabled && visibilityErrors.length) {
+      effectiveEnabled = false;
+      disabledReason = visibilityErrors[0];
+    }
+    const capability = asObject(state.capabilities[record.extension_id]);
+    const missingComfyNodes = asArray(capability.missing || capability.missing_nodes || capability.missing_comfy_nodes);
+    if (effectiveEnabled && missingComfyNodes.length) {
+      effectiveEnabled = false;
+      disabledReason = `missing_comfy_nodes:${missingComfyNodes.join(',')}`;
     }
     const contextPolicy = asArray(record.context_policy).map(item => text(item).toLowerCase()).filter(Boolean);
     if (contextPolicy.some(item => RESTRICTED_CONTEXT_POLICIES.has(item)) && !state.raw[record.extension_id]?.identity_context_confirmed) {
@@ -222,17 +315,27 @@
       effective_enabled: !!effectiveEnabled,
       source: state.raw[record.extension_id]?.source || record.source_policy?.[0] || 'none',
       target_sections: asArray(record.target_sections),
-      output_policy: state.raw[record.extension_id]?.output_policy || record.output_policy?.[0] || 'preview',
+      output_policy: selectedOutputPolicy || 'preview',
+      workflow_mode: workflowMode,
+      output_target: outputTarget,
+      output_affecting: outputAffecting,
       batch_policy: record.batch_policy || DEFAULT_EXTERNAL_POLICIES.batch_policy,
       context_policy: asArray(record.context_policy),
       policy_version: record.policy_version || 'external-extension-policy-v1',
-      raw_state: clone(state.raw[record.extension_id] || {}),
+      raw_state: clone(rawState || {}),
       effective_state: {
         extension_id: record.extension_id,
         status: record.status,
         workflow: context.workflow || context.workflow_type || '',
         family: context.family || '',
         batch_size: Number(context.batch_size || 1) || 1,
+        workflow_mode: workflowMode,
+        output_policy: selectedOutputPolicy || 'preview',
+        output_target: outputTarget,
+        output_affecting: outputAffecting,
+        visibility_errors: visibilityErrors,
+        missing_comfy_nodes: missingComfyNodes,
+        status_chip: missingComfyNodes.length ? 'Needs node' : (disabledReason && String(disabledReason).includes('conflict') ? 'Conflict' : (effectiveEnabled ? 'Ready' : 'Blocked')),
       },
       warnings: warnings.filter(Boolean),
       disabled_reason: disabledReason || null,
@@ -349,7 +452,7 @@
       disabled,
       warnings,
       auto_fixes: autoFixes,
-      validator_version: 'external-extension-workflow-validator-v1',
+      validator_version: 'external-extension-workflow-validator-v2',
       policy: 'block_or_auto_disable_with_visible_reason',
     };
   }
@@ -446,6 +549,25 @@
         state.warnings[record.extension_id] = asArray(effective.warnings);
         if (effective.disabled_reason) state.disabledReasons[record.extension_id] = effective.disabled_reason;
       });
+      const replaceIds = Object.keys(state.effective).filter(id => state.effective[id]?.enabled && state.effective[id]?.effective_state?.workflow_mode === 'replace_workflow');
+      if (replaceIds.length > 1) {
+        const reason = `workflow_replacement_conflict:${replaceIds.join(',')}`;
+        replaceIds.forEach(id => {
+          const item = state.effective[id];
+          item.effective_enabled = false;
+          item.disabled_reason = reason;
+          item.warnings = asArray(item.warnings).concat(['Only one external extension may replace the base workflow per run.']);
+          item.effective_state = {
+            ...asObject(item.effective_state),
+            effective_enabled: false,
+            workflow_conflict: true,
+            conflicting_extensions: replaceIds.slice(),
+            status_chip: 'Conflict',
+          };
+          state.warnings[id] = asArray(item.warnings);
+          state.disabledReasons[id] = reason;
+        });
+      }
       asArray(state.registry.invalid).forEach(record => {
         if (record.extension_id) state.disabledReasons[record.extension_id] = record.disabled_reason || 'Manifest is invalid.';
       });

@@ -11,6 +11,7 @@ from urllib.parse import urlencode
 from pathlib import Path
 from PIL import Image, ImageOps
 from uuid import uuid4
+from typing import Any
 
 import cv2
 import httpx
@@ -23,13 +24,13 @@ from ..utils.backend_manager import get_profile, get_manager_state
 from ..utils.comfy_adapter import ComfyBackendAdapter
 from ..utils.image_workflow_core import build_image_workflow, detect_image_workflow_command
 from ..extensions.image.scene_director.adapter import scene_director_to_regional_payload
+from ..extensions.runtime.external_workflow_executor import apply_external_workflow_injection
 from ..contracts.job_records import infer_generation_family
 from ..contracts.output_records import build_generation_output_sidecar
 from ..contracts.generation_families import normalize_generation_mode, normalize_inpaint_backend, validate_generation_support
 from ..contracts.inpaint_payloads import get_shared_inpaint_payload, merge_shared_inpaint_payload
 from ..contracts.image_payloads import flatten_image_payload_envelope, build_image_payload_envelope
 from ..contracts.external_extension_payloads import build_external_extension_output_metadata_shell, stamp_external_extension_payload_contract
-from ..extensions.runtime.external_workflow_executor import apply_external_workflow_injection
 from ..contracts.retired_image_sections import sanitize_image_payload_for_retired_sections
 from ..contracts.image_output_selection import require_preview_source_lock
 from ..utils.generation_jobs import (
@@ -60,7 +61,7 @@ from ..utils.generation_styles import (
     upsert_generation_style,
 )
 from ..utils.generation_workspace_presets import load_workspace_presets, save_workspace_presets
-from ..utils.extension_registry import build_external_extension_registry
+from ..utils.extension_registry import build_external_extension_registry, rebuild_extension_registry
 from ..utils.library_common import safe_name
 from ..utils.library_settings_store import get_library_root
 from ..utils.detailer_models import download_sam_model, list_generation_detailer_models, prepare_detailer_assets_for_payload
@@ -1995,6 +1996,78 @@ def _queue_prompt_state(queue_payload, prompt_id: str) -> str | None:
             return 'queued'
     return None
 
+
+
+
+def _iter_requested_external_extension_ids_from_payload(payload: dict[str, Any] | None) -> set[str]:
+    """Return extension ids requested by the generation payload.
+
+    The frontend state store can be ahead of the backend registry cache after a
+    user copies an extension folder into neo_extensions/installed. Generation
+    must verify those requested ids against a freshly hydrated backend registry
+    before stamping validation, otherwise valid extensions are falsely marked
+    not_registered and never reach the external workflow executor.
+    """
+    payload = payload if isinstance(payload, dict) else {}
+    candidates: list[Any] = []
+    raw = payload.get('external_extensions')
+    if isinstance(raw, dict):
+        candidates.append(raw)
+    image_state = payload.get('image_state') if isinstance(payload.get('image_state'), dict) else {}
+    modules = image_state.get('modules') if isinstance(image_state.get('modules'), dict) else {}
+    module_exts = modules.get('external_extensions')
+    if isinstance(module_exts, dict):
+        candidates.append(module_exts)
+    ids: set[str] = set()
+    for block in candidates:
+        for key, value in block.items():
+            extension_id = str(key or '').strip()
+            if not extension_id and isinstance(value, dict):
+                extension_id = str(value.get('extension_id') or value.get('id') or '').strip()
+            if extension_id:
+                ids.add(extension_id)
+    return ids
+
+
+def _external_registry_ids(registry: dict[str, Any] | None) -> set[str]:
+    registry = registry if isinstance(registry, dict) else {}
+    ids: set[str] = set()
+    for bucket in ('enabled', 'installed', 'disabled', 'invalid'):
+        for item in registry.get(bucket) or []:
+            if not isinstance(item, dict):
+                continue
+            extension_id = str(item.get('extension_id') or item.get('id') or '').strip()
+            if extension_id:
+                ids.add(extension_id)
+            slug = str(item.get('slug') or '').strip()
+            surface = str(item.get('surface') or item.get('target_surface') or '').strip()
+            if surface and slug:
+                ids.add(f'{surface}.{slug}')
+    return ids
+
+
+def _build_external_registry_for_generation_payload(payload: dict[str, Any] | None, *, surface: str = 'image') -> dict[str, Any]:
+    """Build an external registry snapshot that is safe for generation stamping.
+
+    Normal registry routes may show frontend hooks while the generation-time
+    payload validator still sees a stale cache. This helper forces one rebuild
+    when the payload asks for an extension id that is missing from the current
+    backend snapshot. It is global behavior for all external extensions.
+    """
+    registry = build_external_extension_registry(surface=surface)
+    requested = _iter_requested_external_extension_ids_from_payload(payload)
+    if not requested:
+        return registry
+    if requested.issubset(_external_registry_ids(registry)):
+        return registry
+    try:
+        rebuild_extension_registry()
+        registry = build_external_extension_registry(surface=surface)
+    except Exception:
+        # Preserve guardrail behavior: if rebuild fails, validation will keep the
+        # requested extension disabled with a visible reason instead of running it.
+        return registry
+    return registry
 
 def _image_profile_or_error():
     manager_state = get_manager_state()
@@ -5076,7 +5149,7 @@ async def api_generation_image_upscale(request: Request, background_tasks: Backg
         return json_error(f'Invalid image-upscale payload: {exc}', 400)
 
     payload, image_command_envelope = flatten_image_payload_envelope(payload)
-    payload = stamp_external_extension_payload_contract(payload, external_registry=build_external_extension_registry(surface='image'))
+    payload = stamp_external_extension_payload_contract(payload, external_registry=_build_external_registry_for_generation_payload(payload, surface='image'))
     payload = _sanitize_generation_payload_removed_features(payload)
     if image_command_envelope:
         payload['_neo_command_envelope'] = image_command_envelope.get('_neo_command_envelope') or payload.get('_neo_command_envelope')
@@ -5307,7 +5380,7 @@ async def api_generation_queue(request: Request, background_tasks: BackgroundTas
         return json_error(f'Invalid generation payload: {exc}', 400)
 
     payload, image_command_envelope = flatten_image_payload_envelope(payload)
-    payload = stamp_external_extension_payload_contract(payload, external_registry=build_external_extension_registry(surface='image'))
+    payload = stamp_external_extension_payload_contract(payload, external_registry=_build_external_registry_for_generation_payload(payload, surface='image'))
     payload = _sanitize_generation_payload_removed_features(payload)
     if image_command_envelope:
         payload['_neo_command_envelope'] = image_command_envelope.get('_neo_command_envelope') or payload.get('_neo_command_envelope')
@@ -5461,15 +5534,9 @@ async def api_generation_queue(request: Request, background_tasks: BackgroundTas
                 raise ValueError(f'IPAdapter custom nodes are not ready on this backend: {exc}') from exc
 
         workflow, normalized_payload, compile_notes = build_image_workflow(payload, command=detect_image_workflow_command(payload))
-        workflow, external_payload, external_workflow_notes = apply_external_workflow_injection(
-            workflow,
-            normalized_payload if isinstance(normalized_payload, dict) else payload,
-            registry=build_external_extension_registry(surface='image'),
-        )
-        if isinstance(external_payload, dict):
-            normalized_payload = external_payload
-        workflow, advanced_lane_notes = await _apply_res4lyf_advanced_sampler_lane(adapter, normalized_payload, workflow)
-        compile_notes = [*pre_compile_notes, *compile_notes, *external_workflow_notes, *advanced_lane_notes]
+        workflow, advanced_lane_notes = await _apply_res4lyf_advanced_sampler_lane(adapter, payload, workflow)
+        workflow, normalized_payload, external_workflow_notes = apply_external_workflow_injection(workflow, normalized_payload)
+        compile_notes = [*pre_compile_notes, *compile_notes, *advanced_lane_notes, *external_workflow_notes]
         _finalize_scene_director_appearance_lock_state_metadata(normalized_payload)
         _safe_write_generation_debug_json(GENERATION_LAST_PAYLOAD_PATH, normalized_payload)
         _safe_write_generation_debug_json(GENERATION_LAST_WORKFLOW_PATH, workflow)
@@ -5520,7 +5587,7 @@ async def api_generation_queue(request: Request, background_tasks: BackgroundTas
         try:
             queued = await adapter.queue_prompt(workflow)
         except Exception as queue_exc:
-            if not _payload_uses_res4lyf(payload):
+            if not _payload_uses_res4lyf(payload) or (isinstance(normalized_payload, dict) and normalized_payload.get('_neo_external_workflow_replaced')):
                 raise
             logger.warning('RES4LYF workflow queue failed; attempting Core KSampler fallback: %s', queue_exc)
             _append_generation_log('RES4LYF workflow failed; falling back to Core KSampler.', exc=queue_exc, context={

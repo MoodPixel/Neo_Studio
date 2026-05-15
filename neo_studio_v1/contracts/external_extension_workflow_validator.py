@@ -6,7 +6,10 @@ from typing import Any
 from .extension_manifest import VALID_EXTERNAL_TARGET_SECTIONS
 from .external_extension_policies import DEFAULT_BATCH_POLICY, DEFAULT_OUTPUT_POLICY, DEFAULT_SOURCE_POLICY
 
-EXTERNAL_EXTENSION_WORKFLOW_VALIDATOR_VERSION = 'external-extension-workflow-validator-v1'
+EXTERNAL_EXTENSION_WORKFLOW_VALIDATOR_VERSION = 'external-extension-workflow-validator-v2'
+OUTPUT_AFFECTING_WORKFLOW_MODES = {'replace_workflow', 'sidecar_run', 'postprocess_output', 'preprocess_source', 'mixed_workflow'}
+OUTPUT_MUTATING_POLICIES = {'new_run', 'append', 'replace'}
+VISIBLE_CONFIRMATION_WORKFLOW_MODES = {'replace_workflow'}
 
 
 def _copy(value: Any) -> Any:
@@ -120,6 +123,143 @@ def _source_available(source: str, context: dict[str, Any]) -> bool:
         return bool(context.get('selected_output_available'))
     return True
 
+
+
+def _first_key(*values: Any) -> str:
+    for value in values:
+        if isinstance(value, (list, tuple, set)):
+            for item in value:
+                hit = _key(item)
+                if hit:
+                    return hit
+        else:
+            hit = _key(value)
+            if hit:
+                return hit
+    return ''
+
+
+def _metadata_blocks(entry: dict[str, Any], registry: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    workflow = _dict(entry.get('workflow')) or _dict(registry.get('workflow'))
+    output = _dict(entry.get('output')) or _dict(registry.get('output'))
+    visibility = _dict(entry.get('output_visibility')) or _dict(registry.get('output_visibility'))
+    return workflow, output, visibility
+
+
+def _required_comfy_nodes(registry: dict[str, Any]) -> list[str]:
+    nodes: list[str] = []
+    comfy = _dict(registry.get('comfy'))
+    deps = _dict(registry.get('dependencies'))
+    raw = _dict(registry.get('raw_manifest'))
+    for value in (
+        registry.get('required_comfy_nodes'),
+        registry.get('requires_nodes'),
+        registry.get('required_nodes'),
+        comfy.get('requires_nodes'),
+        deps.get('comfy_nodes'),
+        deps.get('nodes'),
+        raw.get('required_comfy_nodes'),
+        raw.get('requires_nodes'),
+        _dict(raw.get('comfy')).get('requires_nodes'),
+    ):
+        nodes.extend(_list(value))
+    out: list[str] = []
+    seen: set[str] = set()
+    for node in nodes:
+        key = _lookup_key(node)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        out.append(node)
+    return out
+
+
+def _missing_comfy_nodes(registry: dict[str, Any], context: dict[str, Any]) -> list[str]:
+    required = _required_comfy_nodes(registry)
+    if not required:
+        return []
+    available_raw = context.get('available_comfy_nodes') or context.get('comfy_nodes_available') or context.get('available_nodes')
+    if available_raw is None:
+        # No capability snapshot means the runtime cannot prove a missing node.
+        # Keep this as visible validation metadata without hard-blocking here.
+        return []
+    available = {_lookup_key(item) for item in _list(available_raw)}
+    return [node for node in required if _lookup_key(node) not in available]
+
+
+def _entry_workflow_mode(entry: dict[str, Any], registry: dict[str, Any]) -> str:
+    workflow, _output, _visibility = _metadata_blocks(entry, registry)
+    patch = _dict(entry.get('workflow_patch'))
+    strategies = [_key(item) for item in _list(workflow.get('patch_strategies')) if _key(item)]
+    return _first_key(
+        entry.get('workflow_mode'),
+        workflow.get('mode'),
+        patch.get('strategy'),
+        strategies,
+        registry.get('workflow_mode'),
+        'metadata_only',
+    )
+
+
+def _entry_output_policy(entry: dict[str, Any], registry: dict[str, Any]) -> str:
+    _workflow, output, _visibility = _metadata_blocks(entry, registry)
+    return _first_key(
+        entry.get('output_policy'),
+        output.get('policy'),
+        output.get('default_policy'),
+        registry.get('output_policy_default'),
+        registry.get('output_policy'),
+        DEFAULT_OUTPUT_POLICY,
+    )
+
+
+def _entry_target(entry: dict[str, Any], registry: dict[str, Any]) -> str:
+    workflow, _output, _visibility = _metadata_blocks(entry, registry)
+    return _first_key(
+        entry.get('target'),
+        workflow.get('target'),
+        registry.get('target'),
+        registry.get('supported_workflows'),
+        entry.get('target_sections'),
+        registry.get('target_sections'),
+    )
+
+
+def _entry_output_affecting(entry: dict[str, Any], registry: dict[str, Any]) -> bool:
+    workflow, output, _visibility = _metadata_blocks(entry, registry)
+    mode = _entry_workflow_mode(entry, registry)
+    policy = _entry_output_policy(entry, registry)
+    return bool(
+        output.get('output_affecting')
+        or output.get('primary_type')
+        or output.get('primary_output_type')
+        or output.get('outputs')
+        or mode in OUTPUT_AFFECTING_WORKFLOW_MODES
+        or policy in OUTPUT_MUTATING_POLICIES
+        or workflow.get('patch_count')
+    )
+
+
+def _visibility_errors(entry: dict[str, Any], registry: dict[str, Any]) -> list[str]:
+    if not _entry_output_affecting(entry, registry):
+        return []
+    workflow, output, visibility = _metadata_blocks(entry, registry)
+    errors: list[str] = []
+    if visibility.get('hidden_behavior_allowed'):
+        errors.append('hidden_output_behavior_not_allowed')
+    if visibility.get('target_visible') is False:
+        errors.append('output_target_must_be_visible')
+    if visibility.get('output_policy_visible') is False:
+        errors.append('output_policy_must_be_visible')
+    if _entry_workflow_mode(entry, registry) in OUTPUT_AFFECTING_WORKFLOW_MODES and visibility.get('workflow_mode_visible') is False:
+        errors.append('workflow_mode_must_be_visible')
+    if not _entry_target(entry, registry):
+        errors.append('output_affecting_extension_missing_target')
+    if not _entry_output_policy(entry, registry):
+        errors.append('output_affecting_extension_missing_output_policy')
+    if _entry_workflow_mode(entry, registry) in VISIBLE_CONFIRMATION_WORKFLOW_MODES and not workflow.get('requires_visible_confirmation') and not _dict(entry.get('raw_state')).get('replace_workflow_confirmed'):
+        errors.append('replace_workflow_requires_visible_confirmation')
+    return errors
 
 def _registry_aliases_for_record(item: dict[str, Any]) -> list[str]:
     aliases: list[str] = []
@@ -249,11 +389,24 @@ def validate_external_extension_entry_for_workflow(
         effective_enabled = False
         disabled_reason = f'required_source_unavailable:{source}'
 
-    output_policy = _key(entry.get('output_policy') or DEFAULT_OUTPUT_POLICY)
+    workflow_mode = _entry_workflow_mode(entry, registry)
+    output_policy = _entry_output_policy(entry, registry)
+    output_target = _entry_target(entry, registry)
+    output_affecting = _entry_output_affecting(entry, registry)
     raw_state = _dict(entry.get('raw_state'))
     if effective_enabled and output_policy == 'replace' and not raw_state.get('replace_confirmed'):
         effective_enabled = False
         disabled_reason = 'replace_requires_visible_confirmation'
+
+    visibility_errors = _visibility_errors(entry, registry)
+    if effective_enabled and visibility_errors:
+        effective_enabled = False
+        disabled_reason = disabled_reason or visibility_errors[0]
+
+    missing_nodes = _missing_comfy_nodes(registry, context)
+    if effective_enabled and missing_nodes:
+        effective_enabled = False
+        disabled_reason = 'missing_comfy_nodes:' + ','.join(missing_nodes)
 
     context_policy = [_key(item) for item in _list(entry.get('context_policy') or registry.get('context_policy') or [])]
     if effective_enabled and 'identity' in context_policy and not raw_state.get('identity_context_confirmed'):
@@ -281,6 +434,13 @@ def validate_external_extension_entry_for_workflow(
         'family': context.get('family') or context.get('model_family') or '',
         'batch_size': batch_size,
         'source_available': _source_available(source, context),
+        'workflow_mode': workflow_mode,
+        'output_policy': output_policy,
+        'output_target': output_target,
+        'output_affecting': output_affecting,
+        'visibility_errors': visibility_errors,
+        'missing_comfy_nodes': missing_nodes,
+        'status_chip': 'Needs node' if missing_nodes else ('Conflict' if disabled_reason and 'conflict' in str(disabled_reason) else ('Blocked' if disabled_reason and not effective_enabled else 'Ready')),
         'auto_fixes': auto_fixes,
     })
 
@@ -295,6 +455,12 @@ def validate_external_extension_entry_for_workflow(
             'disabled_reason': disabled_reason,
             'warnings': _list(warnings),
             'auto_fixes': auto_fixes,
+            'visibility_errors': visibility_errors,
+            'missing_comfy_nodes': missing_nodes,
+            'workflow_mode': workflow_mode,
+            'output_policy': output_policy,
+            'output_target': output_target,
+            'output_affecting': output_affecting,
             'context': _copy(context),
             'validator_version': EXTERNAL_EXTENSION_WORKFLOW_VALIDATOR_VERSION,
         },
@@ -319,6 +485,39 @@ def validate_external_extension_payload_block(
             registry_record=_registry_record_for(extension_id, external_registry),
             context=context,
         )
+
+    replace_ids = [
+        extension_id
+        for extension_id, entry in out.items()
+        if entry.get('enabled') and _dict(entry.get('effective_state')).get('workflow_mode') == 'replace_workflow'
+    ]
+    if len(replace_ids) > 1:
+        reason = 'workflow_replacement_conflict:' + ','.join(replace_ids)
+        for extension_id in replace_ids:
+            entry = out[extension_id]
+            entry['effective_enabled'] = False
+            entry['disabled_reason'] = reason
+            warnings = _list(entry.get('warnings'))
+            warnings.append('Only one external extension may replace the base workflow per run.')
+            entry['warnings'] = warnings
+            effective_state = _dict(entry.get('effective_state'))
+            effective_state.update({
+                'effective_enabled': False,
+                'workflow_conflict': True,
+                'conflicting_extensions': replace_ids,
+                'status_chip': 'Conflict',
+            })
+            entry['effective_state'] = effective_state
+            validation = _dict(entry.get('workflow_validation'))
+            validation.update({
+                'ok': False,
+                'blocked': True,
+                'disabled_reason': reason,
+                'warnings': warnings,
+                'workflow_conflict': True,
+                'conflicting_extensions': replace_ids,
+            })
+            entry['workflow_validation'] = validation
     return out
 
 

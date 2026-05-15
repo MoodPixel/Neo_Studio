@@ -38,3 +38,136 @@
   color: inherit;
   cursor: pointer;
 }
+
+/* Phase J — standard shell forced around every external extension mount path. */
+.neo-extension-standard-shell {
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.74), rgba(2, 6, 23, 0.50));
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.20);
+  margin: 12px 0;
+  overflow: hidden;
+}
+
+.neo-extension-standard-shell__header {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto;
+  gap: 10px 12px;
+  align-items: start;
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+}
+
+.neo-extension-standard-shell__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  padding: 0;
+  cursor: pointer;
+}
+
+.neo-extension-standard-shell__chevron {
+  width: 9px;
+  height: 9px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform 140ms ease;
+  opacity: 0.78;
+  flex: 0 0 auto;
+}
+
+.neo-extension-standard-shell.is-collapsed .neo-extension-standard-shell__chevron {
+  transform: rotate(-45deg);
+}
+
+.neo-extension-standard-shell__title-group {
+  display: grid;
+  gap: 2px;
+}
+
+.neo-extension-standard-shell__title {
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.neo-extension-standard-shell__subtitle {
+  color: rgba(226, 232, 240, 0.62);
+  font-size: 12px;
+}
+
+.neo-extension-standard-shell__chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.neo-extension-standard-shell__chip {
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: rgba(15, 23, 42, 0.78);
+  color: rgba(226, 232, 240, 0.86);
+  font-size: 11px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.neo-extension-standard-shell__notices {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 6px;
+}
+
+.neo-extension-standard-shell__notice {
+  border-radius: 10px;
+  padding: 7px 9px;
+  font-size: 12px;
+}
+
+.neo-extension-standard-shell__notice.is-error {
+  border: 1px solid rgba(248, 113, 113, 0.32);
+  background: rgba(127, 29, 29, 0.22);
+}
+
+.neo-extension-standard-shell__notice.is-warning {
+  border: 1px solid rgba(251, 191, 36, 0.32);
+  background: rgba(120, 53, 15, 0.20);
+}
+
+.neo-extension-standard-shell__notice.is-info {
+  border: 1px solid rgba(56, 189, 248, 0.28);
+  background: rgba(12, 74, 110, 0.18);
+}
+
+.neo-extension-standard-shell__body {
+  padding: 12px 14px 14px;
+}
+
+.neo-extension-standard-shell__body > .neo-extension-panel,
+.neo-extension-standard-shell__body > .neo-extension-schema-card,
+.neo-extension-standard-shell__body > .layerdiffuse-panel {
+  margin: 0 !important;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+}
+
+.neo-extension-panel-runtime-root > .neo-extension-standard-shell:first-child,
+.neo-extension-slot > .neo-extension-standard-shell:first-child {
+  margin-top: 0;
+}
+
+@media (max-width: 760px) {
+  .neo-extension-standard-shell__header {
+    grid-template-columns: 1fr;
+  }
+  .neo-extension-standard-shell__chips {
+    justify-content: flex-start;
+  }
+}
