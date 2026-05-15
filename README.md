@@ -19,7 +19,7 @@ Instead of juggling separate tools manually, Neo Studio helps connect and organi
 - [⚙️ Installation](#️-installation)
 - [🔌 Backend Setup](#-backend-setup)
 - [🧩 ComfyUI Custom Nodes](#-comfyui-custom-nodes)
-- [🧠 Memory / Embedding / Reranker Setup](#-roleplay-memory--embedding--reranker-setup)
+- [🧠 Memory / Embedding / Reranker Setup](#-memory--embedding--reranker-setup)
 - [🧩 Backend Notes & Troubleshooting](#-backend-notes--troubleshooting)
 - [🎥 Setup Guide (Video)](#-setup-guide-video)
 - [📚 Documentation](#-documentation)
