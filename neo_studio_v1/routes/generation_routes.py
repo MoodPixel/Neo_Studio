@@ -25,12 +25,13 @@ from ..utils.comfy_adapter import ComfyBackendAdapter
 from ..utils.image_workflow_core import build_image_workflow, detect_image_workflow_command
 from ..extensions.image.scene_director.adapter import scene_director_to_regional_payload
 from ..extensions.runtime.external_workflow_executor import apply_external_workflow_injection
-from ..contracts.job_records import infer_generation_family
+from ..contracts.job_records import build_model_family_state, infer_generation_family
 from ..contracts.output_records import build_generation_output_sidecar
 from ..contracts.generation_families import normalize_generation_mode, normalize_inpaint_backend, validate_generation_support
 from ..contracts.inpaint_payloads import get_shared_inpaint_payload, merge_shared_inpaint_payload
 from ..contracts.image_payloads import flatten_image_payload_envelope, build_image_payload_envelope
 from ..contracts.external_extension_payloads import build_external_extension_output_metadata_shell, stamp_external_extension_payload_contract
+from ..contracts.external_extension_workflow_validator import build_external_extension_validation_context, enforce_external_extension_workflow_validation
 from ..contracts.retired_image_sections import sanitize_image_payload_for_retired_sections
 from ..contracts.image_output_selection import require_preview_source_lock
 from ..utils.generation_jobs import (
@@ -266,10 +267,70 @@ def _sanitize_generation_draft_removed_features(draft: dict | None) -> dict:
         cleaned['version'] = max(int(cleaned.get('version') or 0), 7)
     except Exception:
         cleaned['version'] = 7
+    if isinstance(cleaned.get('workflow_state'), dict) or isinstance(cleaned.get('_neo_workflow_state'), dict) or cleaned.get('workflow_type'):
+        cleaned['workflow_state'] = _normalize_generation_workflow_state_metadata(cleaned, reason='draft_sanitize')
+        cleaned['_neo_workflow_state'] = cleaned['workflow_state'].get('workflow_state') or cleaned['workflow_state']
     cleaned['_neo_draft_sanitized'] = True
-    cleaned['_neo_draft_sanitizer_version'] = 'phase10.3'
+    cleaned['_neo_draft_sanitizer_version'] = 'phase_i_save_restore_metadata_v1'
     return cleaned
 
+
+
+def _normalize_generation_workflow_state_metadata(payload: dict | None, *, reason: str = 'backend_metadata') -> dict:
+    """Phase I: keep raw/effective workflow state visible in drafts and sidecars."""
+    if not isinstance(payload, dict):
+        payload = {}
+    raw_block = payload.get('workflow_state') if isinstance(payload.get('workflow_state'), dict) else {}
+    mirror_block = payload.get('_neo_workflow_state') if isinstance(payload.get('_neo_workflow_state'), dict) else {}
+    block = raw_block or mirror_block
+    if isinstance(block.get('workflow_state'), dict):
+        block = block.get('workflow_state')
+    raw_state = block.get('raw_state') if isinstance(block.get('raw_state'), dict) else {}
+    effective_state = block.get('effective_state') if isinstance(block.get('effective_state'), dict) else {}
+    raw_mode = str(block.get('raw_mode') or raw_state.get('mode') or raw_state.get('workflow_type') or '').strip()
+    effective_mode = str(block.get('effective_mode') or effective_state.get('mode') or effective_state.get('workflow_type') or '').strip()
+    mode = str(payload.get('mode') or payload.get('workflow_type') or raw_mode or effective_mode or 'txt2img').strip().lower() or 'txt2img'
+    raw_mode = (raw_mode or mode).lower()
+    effective_mode = (effective_mode or mode).lower()
+    source_kind = str(block.get('source_kind') or payload.get('_neo_source_kind') or payload.get('source_kind') or '').strip() or 'none'
+    source_id = str(block.get('source_id') or payload.get('_neo_source_id') or payload.get('source_image_name') or '').strip()
+    output_policy = str(block.get('output_policy_effective') or block.get('output_policy') or payload.get('_neo_output_policy') or payload.get('output_policy') or 'new_current_run').strip() or 'new_current_run'
+    validation_status = str(block.get('validation_status') or payload.get('_neo_workflow_validation_status') or 'unknown').strip() or 'unknown'
+    batch_policy = block.get('batch_policy') if isinstance(block.get('batch_policy'), dict) else payload.get('_neo_batch_policy') if isinstance(payload.get('_neo_batch_policy'), dict) else {}
+    metadata = {
+        'schema_version': 1,
+        'owner': 'NeoImageState',
+        'source': reason,
+        'raw_state': {
+            'mode': raw_mode,
+            'workflow_type': raw_mode,
+            'source_kind': source_kind,
+            'source_id': source_id,
+            'output_policy': str(block.get('output_policy_requested') or output_policy).strip() or output_policy,
+            'batch_size': payload.get('_neo_requested_batch_size') or payload.get('batch_size') or '',
+        },
+        'effective_state': {
+            'mode': effective_mode,
+            'workflow_type': effective_mode,
+            'source_kind': source_kind,
+            'source_id': source_id,
+            'source_name': str(block.get('source_name') or payload.get('source_image_name') or '').strip(),
+            'output_policy': output_policy,
+            'validation_status': validation_status,
+            'batch_policy': batch_policy,
+            'source_required': bool(block.get('source_required')),
+            'mask_required': bool(block.get('mask_required')),
+            'outpaint_expansion': block.get('outpaint_expansion') if isinstance(block.get('outpaint_expansion'), dict) else {},
+        },
+        'transition': {
+            'switch_reason': str(block.get('switch_reason') or payload.get('_neo_workflow_switch_reason') or reason).strip() or reason,
+            'restore_requires_canonical_helper': True,
+            'restored_by': 'setGenerationWorkflowMode',
+        },
+        'workflow_state': block if isinstance(block, dict) else {},
+        'version': 'phase_i_save_restore_metadata_v1',
+    }
+    return metadata
 
 def _extract_required_combo_values(schema_entry) -> list[str]:
     values = []
@@ -971,7 +1032,8 @@ async def _validate_generation_runtime_compatibility(adapter: ComfyBackendAdapte
     mode = normalize_generation_mode(payload.get('mode') or payload.get('workflow_type') or 'txt2img')
     inpaint_backend = normalize_inpaint_backend(payload.get('inpaint_backend') or 'standard')
 
-    if family == 'sdxl_sd':
+    if family in {'sdxl_sd', 'flux'}:
+        family_label = 'Flux' if family == 'flux' else 'SDXL'
         inpaint_payload = get_shared_inpaint_payload(payload)
         source_images = (inpaint_payload.get('source_images') or {}) if isinstance(inpaint_payload, dict) else {}
         mask_row = (inpaint_payload.get('mask') or {}) if isinstance(inpaint_payload, dict) else {}
@@ -980,30 +1042,30 @@ async def _validate_generation_runtime_compatibility(adapter: ComfyBackendAdapte
         mask_image_name = str(mask_row.get('mask_image_name') or payload.get('mask_image_name') or '').strip()
         if mode == 'inpaint':
             if not base_image_name:
-                raise ValueError('SDXL inpaint needs a source image first. Upload the base image before queueing.')
+                raise ValueError(f'{family_label} inpaint needs a source image first. Upload the base image before queueing.')
             if not mask_image_name:
-                raise ValueError('SDXL inpaint needs a mask image. Paint the mask area first, then queue again.')
+                raise ValueError(f'{family_label} inpaint needs a mask image. Paint the mask area first, then queue again.')
             context = str(payload.get('inpaint_context') or 'full_image').strip().lower() or 'full_image'
             target = str(payload.get('inpaint_target') or 'masked').strip().lower() or 'masked'
             grow_mask_by = mask_row.get('grow_mask_by') if isinstance(mask_row, dict) else None
             if grow_mask_by in (None, ''):
                 grow_mask_by = payload.get('grow_mask_by') or 6
             if inpaint_backend == 'lanpaint':
-                notes.append(f'SDXL validation: LanPaint inpaint is using the {context.replace("_", " ")} context on the {target.replace("_", " ")} region.')
+                notes.append(f'{family_label} validation: LanPaint inpaint is using the {context.replace("_", " ")} context on the {target.replace("_", " ")} region.')
             else:
-                notes.append(f'SDXL validation: standard inpaint is using the {context.replace("_", " ")} context on the {target.replace("_", " ")} region.')
-            notes.append(f'SDXL validation: grow_mask_by {int(grow_mask_by)} will be used when masked-focus encoding is selected.')
+                notes.append(f'{family_label} validation: standard inpaint is using the {context.replace("_", " ")} context on the {target.replace("_", " ")} region.')
+            notes.append(f'{family_label} validation: grow_mask_by {int(grow_mask_by)} will be used when masked-focus encoding is selected.')
         elif mode == 'outpaint':
             if not base_image_name:
-                raise ValueError('SDXL outpaint needs a source image first. Upload the base image before queueing.')
+                raise ValueError(f'{family_label} outpaint needs a source image first. Upload the base image before queueing.')
             left = int(outpaint_row.get('left') if outpaint_row.get('left') is not None else payload.get('outpaint_left') or 0)
             top = int(outpaint_row.get('top') if outpaint_row.get('top') is not None else payload.get('outpaint_top') or 0)
             right = int(outpaint_row.get('right') if outpaint_row.get('right') is not None else payload.get('outpaint_right') or 0)
             bottom = int(outpaint_row.get('bottom') if outpaint_row.get('bottom') is not None else payload.get('outpaint_bottom') or 0)
             if left + top + right + bottom <= 0:
-                raise ValueError('SDXL outpaint needs padding on at least one side before queueing.')
-            notes.append(f'SDXL validation: standard outpaint padding is left {left}, top {top}, right {right}, bottom {bottom}.')
-        if not (mode == 'inpaint' and inpaint_backend == 'lanpaint'):
+                raise ValueError(f'{family_label} outpaint needs padding on at least one side before queueing.')
+            notes.append(f'{family_label} validation: standard outpaint padding is left {left}, top {top}, right {right}, bottom {bottom}.')
+        if family == 'flux' or not (mode == 'inpaint' and inpaint_backend == 'lanpaint'):
             return notes
 
     if family != 'qwen_image_edit' and not (family == 'sdxl_sd' and mode == 'inpaint' and inpaint_backend == 'lanpaint'):
@@ -1306,7 +1368,11 @@ def _build_generation_sidecar(job: dict, payload: dict, source: dict, candidate_
         'textual_inversions': list(payload.get('textual_inversions') or []) if isinstance(payload.get('textual_inversions'), list) else [],
         'ipadapter_units': ipadapter_units,
     }
+    workflow_state_metadata = _normalize_generation_workflow_state_metadata(payload, reason='generation_sidecar')
+    model_family_state = build_model_family_state(payload)
     external_extension_metadata = build_external_extension_output_metadata_shell(payload)
+    extra_generation_params['workflow_state'] = workflow_state_metadata
+    extra_generation_params['model_family_state'] = model_family_state
     extra_generation_params['external_extensions'] = external_extension_metadata
     extra_generation_params = {k: v for k, v in extra_generation_params.items() if v not in ('', None, [], {})}
 
@@ -1347,6 +1413,10 @@ def _build_generation_sidecar(job: dict, payload: dict, source: dict, candidate_
             'node_selection': str(payload.get('_neo_scene_director_node_selection') or '').strip(),
             'appearance_lock': payload.get('_neo_scene_director_appearance_lock_state_metadata') if isinstance(payload.get('_neo_scene_director_appearance_lock_state_metadata'), dict) else {},
         },
+        'workflow_state': workflow_state_metadata,
+        '_neo_workflow_state': workflow_state_metadata.get('workflow_state') or workflow_state_metadata,
+        'model_family_state': model_family_state,
+        '_neo_model_family_state': model_family_state,
         'external_extensions': external_extension_metadata,
         '_neo_external_extensions': external_extension_metadata,
         'raw_parameters': '\n'.join([line for line in raw_lines if line]),
@@ -1512,6 +1582,27 @@ async def _persist_generation_outputs(job: dict, source_outputs: list[dict], ada
         candidate_path.write_bytes(data)
         sidecar, sidecar_path = _build_generation_sidecar(job, payload, source, candidate_path, mode_root, mode_name, category, slug, next_index)
         atomic_write_json(sidecar_path, sidecar)
+        sidecar_main = sidecar.get('main') if isinstance(sidecar.get('main'), dict) else {}
+        sidecar_generation = sidecar.get('generation') if isinstance(sidecar.get('generation'), dict) else {}
+        sidecar_extra = sidecar.get('extra_generation_params') if isinstance(sidecar.get('extra_generation_params'), dict) else {}
+        sidecar_payload = sidecar.get('payload') if isinstance(sidecar.get('payload'), dict) else {}
+        sidecar_reuse_metadata = {
+            'schema_version': 1,
+            'prompt': sidecar_main.get('positive_box') or sidecar_payload.get('positive') or sidecar_payload.get('positive_prompt') or sidecar_payload.get('prompt') or '',
+            'negative_prompt': sidecar_main.get('negative_box') or sidecar_payload.get('negative') or sidecar_payload.get('negative_prompt') or '',
+            'workflow_state': sidecar.get('workflow_state') or sidecar_extra.get('workflow_state') or {},
+            'model_family_state': sidecar.get('model_family_state') or sidecar_extra.get('model_family_state') or build_model_family_state(payload),
+            'generation': sidecar_generation,
+            'source': {
+                'source_output': sidecar.get('source_output') or {},
+                'source_image_fields': sidecar_payload.get('source_image_fields') or {},
+            },
+            'controlnet': sidecar.get('controlnet') if isinstance(sidecar.get('controlnet'), (dict, list)) else {},
+            'ipadapter': sidecar.get('ipadapter') if isinstance(sidecar.get('ipadapter'), (dict, list)) else {},
+            'scene_director': sidecar.get('scene_director') if isinstance(sidecar.get('scene_director'), dict) else {},
+            'external_extensions': sidecar.get('external_extensions') if isinstance(sidecar.get('external_extensions'), dict) else {},
+            'compile_notes': sidecar.get('compile_notes') or [],
+        }
         merged_outputs.append({
             **source,
             'schema_version': 1,
@@ -1520,7 +1611,14 @@ async def _persist_generation_outputs(job: dict, source_outputs: list[dict], ada
             'output_id': str(sidecar.get('output_id') or ''),
             'media_type': 'image',
             'status': 'saved',
-            'family': infer_generation_family(payload),
+            'family': str((sidecar.get('model_family_state') or {}).get('effective_family') or infer_generation_family(payload)),
+            'model_family_state': sidecar.get('model_family_state') or build_model_family_state(payload),
+            'workflow_state': sidecar.get('workflow_state') or sidecar_extra.get('workflow_state') or {},
+            'reuse_metadata': sidecar_reuse_metadata,
+            'prompt': sidecar_reuse_metadata.get('prompt') or '',
+            'negative_prompt': sidecar_reuse_metadata.get('negative_prompt') or '',
+            'generation': sidecar_generation,
+            'compile_notes': sidecar.get('compile_notes') or [],
             'lineage': sidecar.get('lineage') or {},
             'saved_filename': candidate_name,
             'saved_path': str(candidate_path),
@@ -5149,7 +5247,8 @@ async def api_generation_image_upscale(request: Request, background_tasks: Backg
         return json_error(f'Invalid image-upscale payload: {exc}', 400)
 
     payload, image_command_envelope = flatten_image_payload_envelope(payload)
-    payload = stamp_external_extension_payload_contract(payload, external_registry=_build_external_registry_for_generation_payload(payload, surface='image'))
+    external_registry_snapshot = _build_external_registry_for_generation_payload(payload, surface='image')
+    payload = stamp_external_extension_payload_contract(payload, external_registry=external_registry_snapshot)
     payload = _sanitize_generation_payload_removed_features(payload)
     if image_command_envelope:
         payload['_neo_command_envelope'] = image_command_envelope.get('_neo_command_envelope') or payload.get('_neo_command_envelope')
@@ -5324,7 +5423,7 @@ async def _validate_gguf_workflow_guardrails(adapter, payload: dict, request_mod
 
     source_fields = payload.get('source_image_fields') if isinstance(payload.get('source_image_fields'), list) else []
     has_uploaded_qwen_source = bool(str(payload.get('source_image__2_name') or payload.get('source_image__3_name') or '').strip())
-    qwen_uses_image_context = is_qwen and (request_mode in {'img2img', 'inpaint'} or bool(source_fields) or has_uploaded_qwen_source)
+    qwen_uses_image_context = is_qwen and (request_mode in {'img2img', 'inpaint', 'outpaint'} or bool(source_fields) or has_uploaded_qwen_source)
     mmproj = str(payload.get('gguf_mmproj') or payload.get('_neo_effective_gguf_mmproj') or '').strip()
     if qwen_uses_image_context and not mmproj:
         blockers.append('Qwen image/reference workflows need a matching mmproj sidecar. Put it in ComfyUI models/mmproj or text_encoders, then refresh the catalog.')
@@ -5380,7 +5479,8 @@ async def api_generation_queue(request: Request, background_tasks: BackgroundTas
         return json_error(f'Invalid generation payload: {exc}', 400)
 
     payload, image_command_envelope = flatten_image_payload_envelope(payload)
-    payload = stamp_external_extension_payload_contract(payload, external_registry=_build_external_registry_for_generation_payload(payload, surface='image'))
+    external_registry_snapshot = _build_external_registry_for_generation_payload(payload, surface='image')
+    payload = stamp_external_extension_payload_contract(payload, external_registry=external_registry_snapshot)
     payload = _sanitize_generation_payload_removed_features(payload)
     if image_command_envelope:
         payload['_neo_command_envelope'] = image_command_envelope.get('_neo_command_envelope') or payload.get('_neo_command_envelope')
@@ -5465,6 +5565,19 @@ async def api_generation_queue(request: Request, background_tasks: BackgroundTas
             pre_compile_notes = list(resize_notes)
         else:
             pre_compile_notes = [*resize_notes, *pre_compile_notes]
+        extension_validation_context = build_external_extension_validation_context(payload, files={
+            'source_image': saved_source or payload.get('source_image_name'),
+            'mask_image': saved_mask or payload.get('mask_image_name'),
+            'control_image': saved_control or payload.get('control_image_name'),
+            'ipadapter_image': saved_ipadapter or payload.get('ipadapter_image_name'),
+        })
+        payload = stamp_external_extension_payload_contract(
+            payload,
+            external_registry=external_registry_snapshot,
+            validation_context=extension_validation_context,
+        )
+        pre_compile_notes.extend(enforce_external_extension_workflow_validation(payload))
+
         pre_compile_notes.extend(await _prepare_controlnet_units(adapter, payload, dynamic_uploads))
         pre_compile_notes.extend(await _prepare_ipadapter_units(adapter, payload, dynamic_uploads))
         pre_compile_notes.extend(await _prepare_scene_director_ipadapter_units(adapter, payload, dynamic_uploads))

@@ -316,6 +316,173 @@ def _to_multiline(v: Any) -> str:
 
 
 
+def _clean_output_reuse_value(value: Any) -> Any:
+    if isinstance(value, str):
+        return value.strip()
+    return value
+
+
+def _first_present(*values: Any) -> Any:
+    for value in values:
+        if value not in ('', None, [], {}):
+            return value
+    return ''
+
+
+def _collect_compact_dict(row: Dict[str, Any]) -> Dict[str, Any]:
+    if not isinstance(row, dict):
+        return {}
+    return {k: _clean_output_reuse_value(v) for k, v in row.items() if v not in ('', None, [], {})}
+
+
+def _normalize_output_reuse_workflow_state(data: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str, Any]:
+    raw = data.get('workflow_state') if isinstance(data.get('workflow_state'), dict) else {}
+    mirror = data.get('_neo_workflow_state') if isinstance(data.get('_neo_workflow_state'), dict) else {}
+    payload_state = payload.get('workflow_state') if isinstance(payload.get('workflow_state'), dict) else {}
+    source = raw or payload_state or mirror
+    effective = source.get('effective_state') if isinstance(source.get('effective_state'), dict) else {}
+    raw_state = source.get('raw_state') if isinstance(source.get('raw_state'), dict) else {}
+    transition = source.get('transition') if isinstance(source.get('transition'), dict) else {}
+    batch_policy = source.get('batch_policy') if isinstance(source.get('batch_policy'), dict) else payload_state.get('batch_policy') if isinstance(payload_state.get('batch_policy'), dict) else {}
+    workflow_flat = source.get('workflow_state') if isinstance(source.get('workflow_state'), dict) else {}
+    mode = _first_present(
+        effective.get('mode'),
+        effective.get('effective_mode'),
+        workflow_flat.get('effective_mode'),
+        payload_state.get('effective_mode'),
+        payload.get('mode'),
+        payload.get('workflow'),
+        data.get('mode'),
+    )
+    source_kind = _first_present(
+        effective.get('source_kind'), workflow_flat.get('source_kind'), payload_state.get('source_kind'),
+        payload.get('_neo_source_kind'), payload.get('source_kind'),
+    )
+    source_id = _first_present(
+        effective.get('source_id'), workflow_flat.get('source_id'), payload_state.get('source_id'),
+        payload.get('_neo_source_id'), payload.get('source_id'),
+    )
+    output_policy = _first_present(
+        effective.get('output_policy'), workflow_flat.get('output_policy_effective'), workflow_flat.get('output_policy'),
+        payload_state.get('output_policy_effective'), payload_state.get('output_policy'),
+        payload.get('_neo_output_policy_effective'), payload.get('output_policy'),
+    )
+    return _collect_compact_dict({
+        'raw_mode': _first_present(raw_state.get('mode'), workflow_flat.get('raw_mode'), payload_state.get('raw_mode'), mode),
+        'effective_mode': mode,
+        'switch_reason': _first_present(transition.get('reason'), workflow_flat.get('switch_reason'), payload_state.get('switch_reason')),
+        'source_kind': source_kind,
+        'source_id': source_id,
+        'output_policy': output_policy,
+        'validation_status': _first_present(effective.get('validation_status'), workflow_flat.get('validation_status'), payload_state.get('validation_status')),
+        'batch_requested': _first_present(batch_policy.get('requested'), payload.get('_neo_requested_batch_size')),
+        'batch_effective': _first_present(batch_policy.get('effective'), payload.get('_neo_effective_batch_size')),
+        'batch_reason': _first_present(batch_policy.get('reason'), payload.get('_neo_batch_guard_reason')),
+    })
+
+
+def _normalize_output_reuse_model_family_state(data: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str, Any]:
+    state = data.get('model_family_state') if isinstance(data.get('model_family_state'), dict) else {}
+    if not state:
+        state = data.get('_neo_model_family_state') if isinstance(data.get('_neo_model_family_state'), dict) else {}
+    extra = data.get('extra_generation_params') if isinstance(data.get('extra_generation_params'), dict) else {}
+    if not state and isinstance(extra.get('model_family_state'), dict):
+        state = extra.get('model_family_state')
+    raw_family = _first_present(state.get('raw_family'), payload.get('family'), payload.get('model_family'), data.get('family'))
+    effective_family = _first_present(state.get('effective_family'), data.get('family'), payload.get('family'), payload.get('model_family'), 'sdxl_sd')
+    model_source = _first_present(state.get('model_source'), payload.get('model_source'), payload.get('_neo_model_source'))
+    return _collect_compact_dict({
+        'raw_family': raw_family,
+        'effective_family': effective_family,
+        'model_source': model_source,
+        'family_inference_source': state.get('family_inference_source'),
+        'gguf_clip_type': _first_present(state.get('gguf_clip_type'), payload.get('gguf_clip_type'), payload.get('_neo_effective_gguf_clip_type')),
+        'gguf_clip_mode': _first_present(state.get('gguf_clip_mode'), payload.get('gguf_clip_mode'), payload.get('_neo_effective_gguf_clip_mode')),
+        'gguf_unet': _first_present(state.get('gguf_unet'), payload.get('gguf_unet'), payload.get('_neo_effective_gguf_unet')),
+        'gguf_clip_primary': _first_present(state.get('gguf_clip_primary'), payload.get('gguf_clip_primary'), payload.get('_neo_effective_gguf_clip_primary')),
+        'gguf_clip_secondary': _first_present(state.get('gguf_clip_secondary'), payload.get('gguf_clip_secondary'), payload.get('_neo_effective_gguf_clip_secondary')),
+        'mmproj_required': _first_present(state.get('mmproj_required'), payload.get('_neo_effective_mmproj_required'), payload.get('mmproj_required')),
+        'mmproj_source': _first_present(state.get('mmproj_source'), payload.get('_neo_effective_mmproj_source'), payload.get('mmproj_source')),
+        'gguf_mmproj': _first_present(state.get('gguf_mmproj'), payload.get('gguf_mmproj'), payload.get('_neo_effective_mmproj')),
+        'qwen_outpaint_base_size': _first_present(state.get('qwen_outpaint_base_size'), payload.get('_neo_qwen_outpaint_base_size')),
+        'qwen_outpaint_padding': _first_present(state.get('qwen_outpaint_padding'), payload.get('_neo_qwen_outpaint_padding')),
+        'qwen_outpaint_effective_size': _first_present(state.get('qwen_outpaint_effective_size'), payload.get('_neo_qwen_outpaint_effective_size')),
+    })
+
+
+def _normalize_output_reuse_generation_details(data: Dict[str, Any], payload: Dict[str, Any], generation: Dict[str, Any]) -> Dict[str, Any]:
+    width = _first_present(payload.get('width'), generation.get('Width'))
+    height = _first_present(payload.get('height'), generation.get('Height'))
+    size = _first_present(generation.get('Size'), f'{width}x{height}' if width and height else '')
+    qwen_effective_size = payload.get('_neo_qwen_outpaint_effective_size') if isinstance(payload.get('_neo_qwen_outpaint_effective_size'), dict) else {}
+    return _collect_compact_dict({
+        'checkpoint': _first_present(generation.get('Checkpoint'), generation.get('Model'), payload.get('checkpoint')),
+        'seed': _first_present(generation.get('Seed'), payload.get('seed')),
+        'steps': _first_present(generation.get('Steps'), payload.get('steps')),
+        'cfg': _first_present(generation.get('CFG scale'), generation.get('CFG'), payload.get('cfg')),
+        'sampler': _first_present(generation.get('Sampler'), payload.get('sampler')),
+        'scheduler': _first_present(generation.get('Scheduler'), generation.get('Schedule type'), payload.get('scheduler')),
+        'size': size,
+        'width': width,
+        'height': height,
+        'effective_size': f"{qwen_effective_size.get('width')}x{qwen_effective_size.get('height')}" if qwen_effective_size.get('width') and qwen_effective_size.get('height') else '',
+        'effective_width': qwen_effective_size.get('width'),
+        'effective_height': qwen_effective_size.get('height'),
+        'denoise': _first_present(generation.get('Denoising strength'), payload.get('denoise')),
+        'vae': _first_present(generation.get('VAE'), payload.get('vae')),
+        'clip_skip': _first_present(generation.get('Clip skip'), payload.get('clip_skip')),
+        'guidance': _first_present(generation.get('Guidance'), payload.get('guidance'), payload.get('flux_guidance')),
+    })
+
+
+def _normalize_output_reuse_source_state(data: Dict[str, Any], payload: Dict[str, Any], workflow_state: Dict[str, Any]) -> Dict[str, Any]:
+    source_output = data.get('source_output') if isinstance(data.get('source_output'), dict) else {}
+    comfy = data.get('comfy') if isinstance(data.get('comfy'), dict) else {}
+    source_images = payload.get('source_image_fields') if isinstance(payload.get('source_image_fields'), list) else []
+    return _collect_compact_dict({
+        'source_kind': _first_present(workflow_state.get('source_kind'), payload.get('source_kind'), payload.get('_neo_source_kind')),
+        'source_id': _first_present(workflow_state.get('source_id'), payload.get('source_id'), payload.get('_neo_source_id')),
+        'source_image_count': len(source_images) if source_images else '',
+        'source_output_id': _first_present(source_output.get('output_id'), (comfy.get('source_output') or {}).get('output_id') if isinstance(comfy.get('source_output'), dict) else ''),
+        'source_filename': _first_present(source_output.get('filename'), source_output.get('saved_filename')),
+    })
+
+
+def _normalize_output_reuse_metadata(data: Dict[str, Any], *, main: Dict[str, Any], generation: Dict[str, Any], controlnet: Any, extra: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str, Any]:
+    workflow_state = _normalize_output_reuse_workflow_state(data, payload)
+    model_family_state = _normalize_output_reuse_model_family_state(data, payload)
+    generation_details = _normalize_output_reuse_generation_details(data, payload, generation if isinstance(generation, dict) else {})
+    source_state = _normalize_output_reuse_source_state(data, payload, workflow_state)
+    compile_notes = data.get('compile_notes') if isinstance(data.get('compile_notes'), list) else []
+    scene_director = data.get('scene_director') if isinstance(data.get('scene_director'), dict) else {}
+    external_extensions = data.get('external_extensions') if isinstance(data.get('external_extensions'), dict) else {}
+    ipadapter = data.get('ipadapter') if isinstance(data.get('ipadapter'), (dict, list)) else payload.get('ipadapter_units') if isinstance(payload.get('ipadapter_units'), list) else {}
+    family = str(model_family_state.get('effective_family') or data.get('family') or '').strip()
+    family_label = {
+        'sdxl_sd': 'SDXL / SD',
+        'flux': 'Flux GGUF',
+        'qwen_image_edit': 'Qwen Image Edit GGUF',
+    }.get(family, family or 'Unknown')
+    return {
+        'schema_version': 1,
+        'record_type': 'output_reuse_metadata',
+        'prompt': _to_multiline(main.get('positive_box') or main.get('positive') or data.get('prompt') or payload.get('prompt') or payload.get('positive') or ''),
+        'negative_prompt': _to_multiline(main.get('negative_box') or main.get('negative') or data.get('negative_prompt') or payload.get('negative') or payload.get('negative_prompt') or ''),
+        'family': family,
+        'family_label': family_label,
+        'workflow_state': workflow_state,
+        'model_family_state': model_family_state,
+        'generation': generation_details,
+        'source_state': source_state,
+        'controlnet': controlnet if isinstance(controlnet, (dict, list)) else {},
+        'ipadapter': ipadapter,
+        'scene_director': scene_director,
+        'external_extensions': external_extensions,
+        'compile_notes': compile_notes,
+        'raw_sidecar_keys': sorted(str(k) for k in data.keys()),
+    }
+
+
 def _parse_parameters_block(parameters: str) -> Dict[str, Any]:
     text = (parameters or '').strip()
     out: Dict[str, Any] = {
@@ -396,6 +563,148 @@ def _parse_parameters_block(parameters: str) -> Dict[str, Any]:
     out['extra'] = extra
     return out
 
+
+
+def _stringify_clean(value: Any) -> str:
+    if value is None:
+        return ''
+    if isinstance(value, bool):
+        return 'true' if value else 'false'
+    return str(value).strip()
+
+
+def _first_present(*values: Any) -> Any:
+    for value in values:
+        if value not in ('', None, [], {}):
+            return value
+    return ''
+
+
+def _nested_dict(row: Dict[str, Any], *keys: str) -> Dict[str, Any]:
+    cur: Any = row
+    for key in keys:
+        if not isinstance(cur, dict):
+            return {}
+        cur = cur.get(key)
+    return cur if isinstance(cur, dict) else {}
+
+
+def _compact_dict(row: Dict[str, Any]) -> Dict[str, Any]:
+    return {k: v for k, v in (row or {}).items() if v not in ('', None, [], {})}
+
+
+def _normalize_workflow_state_for_reuse(data: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str, Any]:
+    state = data.get('workflow_state') if isinstance(data.get('workflow_state'), dict) else {}
+    if not state:
+        state = data.get('_neo_workflow_state') if isinstance(data.get('_neo_workflow_state'), dict) else {}
+    if not state:
+        state = payload.get('workflow_state') if isinstance(payload.get('workflow_state'), dict) else {}
+    flat = state.get('workflow_state') if isinstance(state.get('workflow_state'), dict) else {}
+    raw = state.get('raw_state') if isinstance(state.get('raw_state'), dict) else {}
+    effective = state.get('effective_state') if isinstance(state.get('effective_state'), dict) else {}
+    transition = state.get('transition') if isinstance(state.get('transition'), dict) else {}
+    batch_policy = state.get('batch_policy') if isinstance(state.get('batch_policy'), dict) else {}
+    if not batch_policy:
+        batch_policy = flat.get('batch_policy') if isinstance(flat.get('batch_policy'), dict) else {}
+
+    effective_mode = _stringify_clean(_first_present(
+        effective.get('mode'), effective.get('effective_mode'), flat.get('effective_mode'),
+        state.get('effective_mode'), payload.get('_neo_effective_mode'), payload.get('mode')
+    ))
+    raw_mode = _stringify_clean(_first_present(
+        raw.get('mode'), raw.get('raw_mode'), flat.get('raw_mode'), state.get('raw_mode'), payload.get('mode')
+    ))
+    source_kind = _stringify_clean(_first_present(
+        effective.get('source_kind'), flat.get('source_kind'), state.get('source_kind'), payload.get('_neo_source_kind')
+    ))
+    source_id = _stringify_clean(_first_present(
+        effective.get('source_id'), flat.get('source_id'), state.get('source_id'), payload.get('_neo_source_id')
+    ))
+    output_policy = _stringify_clean(_first_present(
+        effective.get('output_policy_effective'), effective.get('output_policy'), flat.get('output_policy_effective'),
+        flat.get('output_policy'), state.get('output_policy_effective'), state.get('output_policy'), payload.get('_neo_output_policy_effective')
+    ))
+    validation_status = _stringify_clean(_first_present(
+        effective.get('validation_status'), flat.get('validation_status'), state.get('validation_status'), payload.get('_neo_workflow_validation_status')
+    ))
+
+    normalized = {
+        'raw_mode': raw_mode,
+        'effective_mode': effective_mode or raw_mode,
+        'switch_reason': _stringify_clean(_first_present(
+            transition.get('reason'), flat.get('switch_reason'), state.get('switch_reason'), payload.get('_neo_workflow_switch_reason')
+        )),
+        'source_kind': source_kind,
+        'source_id': source_id,
+        'output_policy': output_policy,
+        'validation_status': validation_status,
+        'batch_policy': batch_policy,
+        'raw_state': raw,
+        'effective_state': effective,
+        'transition': transition,
+    }
+    return _compact_dict(normalized)
+
+
+def _normalize_model_family_for_reuse(data: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str, Any]:
+    state = data.get('model_family_state') if isinstance(data.get('model_family_state'), dict) else {}
+    if not state:
+        state = data.get('_neo_model_family_state') if isinstance(data.get('_neo_model_family_state'), dict) else {}
+    if not state:
+        state = _nested_dict(data, 'toolchain', 'model_family_state')
+    if not state:
+        state = _nested_dict(data, 'extra_generation_params', 'model_family_state')
+    family = _stringify_clean(_first_present(state.get('effective_family'), data.get('family'), payload.get('family')))
+    model_source = _stringify_clean(_first_present(state.get('model_source'), payload.get('model_source')))
+    normalized = {
+        'raw_family': _stringify_clean(_first_present(state.get('raw_family'), payload.get('family'))),
+        'effective_family': family,
+        'model_source': model_source,
+        'family_inference_source': _stringify_clean(state.get('family_inference_source')),
+        'checkpoint': _stringify_clean(_first_present(payload.get('checkpoint'), _nested_dict(data, 'toolchain').get('checkpoint'))),
+        'vae': _stringify_clean(_first_present(payload.get('vae'), _nested_dict(data, 'toolchain').get('vae'))),
+        'gguf_unet': _stringify_clean(_first_present(state.get('gguf_unet'), payload.get('gguf_unet'), payload.get('_neo_effective_gguf_unet'))),
+        'gguf_clip_type': _stringify_clean(_first_present(state.get('gguf_clip_type'), payload.get('gguf_clip_type'))),
+        'gguf_clip_mode': _stringify_clean(_first_present(state.get('gguf_clip_mode'), payload.get('gguf_clip_mode'))),
+        'gguf_clip_primary': _stringify_clean(_first_present(state.get('gguf_clip_primary'), payload.get('gguf_clip_primary'), payload.get('_neo_effective_gguf_clip_primary'))),
+        'gguf_clip_secondary': _stringify_clean(_first_present(state.get('gguf_clip_secondary'), payload.get('gguf_clip_secondary'), payload.get('_neo_effective_gguf_clip_secondary'))),
+        'gguf_mmproj': _stringify_clean(_first_present(state.get('gguf_mmproj'), payload.get('gguf_mmproj'))),
+        'mmproj_required': _first_present(state.get('mmproj_required'), payload.get('_neo_effective_mmproj_required')),
+        'mmproj_source': _stringify_clean(_first_present(state.get('mmproj_source'), payload.get('_neo_effective_mmproj_source'))),
+    }
+    return _compact_dict(normalized)
+
+
+def _build_reuse_metadata_summary(data: Dict[str, Any], payload: Dict[str, Any], generation: Dict[str, Any], controlnet: Any, extra: Dict[str, Any], workflow_state: Dict[str, Any], model_family_state: Dict[str, Any]) -> Dict[str, Any]:
+    source_output = data.get('source_output') if isinstance(data.get('source_output'), dict) else {}
+    source_image_fields = payload.get('source_image_fields') if isinstance(payload.get('source_image_fields'), dict) else {}
+    ipadapter = data.get('ipadapter') if isinstance(data.get('ipadapter'), (dict, list)) else payload.get('ipadapter_units')
+    scene_director = data.get('scene_director') if isinstance(data.get('scene_director'), dict) else payload.get('scene_director')
+    extensions = data.get('external_extensions') if isinstance(data.get('external_extensions'), dict) else data.get('_neo_external_extensions')
+    compile_notes = data.get('compile_notes') if isinstance(data.get('compile_notes'), (list, dict, str)) else []
+    workflow_graph = data.get('workflow_graph') if isinstance(data.get('workflow_graph'), dict) else {}
+
+    summary = {
+        'schema_version': 1,
+        'prompt': _to_multiline(_first_present(_nested_dict(data, 'main').get('positive_box'), _nested_dict(data, 'main').get('positive'), payload.get('positive'), payload.get('positive_prompt'), payload.get('prompt'), data.get('prompt'))),
+        'negative_prompt': _to_multiline(_first_present(_nested_dict(data, 'main').get('negative_box'), _nested_dict(data, 'main').get('negative'), payload.get('negative'), payload.get('negative_prompt'), data.get('negative_prompt'))),
+        'workflow_state': workflow_state,
+        'model_family_state': model_family_state,
+        'generation': generation,
+        'source': _compact_dict({
+            'source_output_id': _stringify_clean(_nested_dict(data, 'lineage').get('source_output_id')),
+            'source_output': source_output,
+            'source_image_fields': source_image_fields,
+        }),
+        'controlnet': controlnet,
+        'ipadapter': ipadapter if ipadapter not in (None, [], {}) else {},
+        'scene_director': scene_director if scene_director not in (None, [], {}) else {},
+        'external_extensions': extensions if extensions not in (None, [], {}) else {},
+        'compile_notes': compile_notes,
+        'workflow_graph': workflow_graph,
+        'payload_keys': sorted([str(k) for k in payload.keys()]) if payload else [],
+    }
+    return _compact_dict(summary)
 
 def _normalize_sidecar(data: Dict[str, Any]) -> Dict[str, Any]:
     main = data.get('main') if isinstance(data.get('main'), dict) else {}
@@ -481,14 +790,35 @@ def _normalize_sidecar(data: Dict[str, Any]) -> Dict[str, Any]:
             lines.append(', '.join(settings_parts))
         raw_parameters = '\n'.join(lines)
 
+    model_family_state = _normalize_model_family_for_reuse(data, payload)
+    workflow_state = _normalize_workflow_state_for_reuse(data, payload)
+    reuse_metadata = _build_reuse_metadata_summary(
+        data, payload, generation, controlnet, extra, workflow_state, model_family_state
+    )
+    prompt = _to_multiline(_first_present(
+        main.get('positive_box'), main.get('positive'), payload.get('positive'),
+        payload.get('positive_prompt'), payload.get('prompt'), data.get('prompt')
+    ))
+    negative_prompt = _to_multiline(_first_present(
+        main.get('negative_box'), main.get('negative'), payload.get('negative'),
+        payload.get('negative_prompt'), data.get('negative_prompt')
+    ))
+
     return {
-        'main_positive': _to_multiline(main.get('positive_box') or main.get('positive') or data.get('prompt') or ''),
-        'main_negative': _to_multiline(main.get('negative_box') or main.get('negative') or data.get('negative_prompt') or ''),
+        'main_positive': prompt,
+        'main_negative': negative_prompt,
         'adetailer_positive': '\n'.join(ad_pos),
         'adetailer_negative': '\n'.join(ad_neg),
         'generation': generation,
         'controlnet': controlnet,
         'extra': extra,
+        'workflow_state': workflow_state,
+        'model_family_state': model_family_state,
+        'reuse_metadata': reuse_metadata,
+        'source_metadata': reuse_metadata.get('source') if isinstance(reuse_metadata.get('source'), dict) else {},
+        'extension_metadata': reuse_metadata.get('external_extensions') if isinstance(reuse_metadata.get('external_extensions'), dict) else {},
+        'compile_notes': reuse_metadata.get('compile_notes') or [],
+        'workflow_graph': reuse_metadata.get('workflow_graph') if isinstance(reuse_metadata.get('workflow_graph'), dict) else {},
         'raw_parameters': raw_parameters,
     }
 
@@ -505,6 +835,13 @@ def load_output_record(mode: str, name: str) -> Dict[str, Any]:
         'controlnet_json': '{}',
         'extra_json': '{}',
         'raw_parameters': '',
+        'workflow_state_json': '{}',
+        'model_family_json': '{}',
+        'reuse_metadata_json': '{}',
+        'source_metadata_json': '{}',
+        'extension_metadata_json': '{}',
+        'compile_notes_json': '[]',
+        'workflow_graph_json': '{}',
         'sidecar_found': False,
         'sidecar_path': '',
     }
@@ -544,6 +881,13 @@ def load_output_record(mode: str, name: str) -> Dict[str, Any]:
             'controlnet_json': json.dumps(meta['controlnet'] or parsed_png['controlnet'], indent=2, ensure_ascii=False),
             'extra_json': json.dumps(meta['extra'] or parsed_png['extra'], indent=2, ensure_ascii=False),
             'raw_parameters': parameters or meta.get('raw_parameters', ''),
+            'workflow_state_json': json.dumps(meta.get('workflow_state') or {}, indent=2, ensure_ascii=False),
+            'model_family_json': json.dumps(meta.get('model_family_state') or {}, indent=2, ensure_ascii=False),
+            'reuse_metadata_json': json.dumps(meta.get('reuse_metadata') or {}, indent=2, ensure_ascii=False),
+            'source_metadata_json': json.dumps(meta.get('source_metadata') or {}, indent=2, ensure_ascii=False),
+            'extension_metadata_json': json.dumps(meta.get('extension_metadata') or {}, indent=2, ensure_ascii=False),
+            'compile_notes_json': json.dumps(meta.get('compile_notes') or [], indent=2, ensure_ascii=False),
+            'workflow_graph_json': json.dumps(meta.get('workflow_graph') or {}, indent=2, ensure_ascii=False),
             'sidecar_found': True,
             'sidecar_path': str(actual_sidecar_path),
         }
@@ -558,6 +902,13 @@ def load_output_record(mode: str, name: str) -> Dict[str, Any]:
         'controlnet_json': json.dumps(parsed_png['controlnet'], indent=2, ensure_ascii=False),
         'extra_json': json.dumps(parsed_png['extra'], indent=2, ensure_ascii=False),
         'raw_parameters': parsed_png['raw_parameters'],
+        'workflow_state_json': '{}',
+        'model_family_json': '{}',
+        'reuse_metadata_json': '{}',
+        'source_metadata_json': '{}',
+        'extension_metadata_json': '{}',
+        'compile_notes_json': '[]',
+        'workflow_graph_json': '{}',
         'sidecar_found': False,
         'sidecar_path': '',
     }

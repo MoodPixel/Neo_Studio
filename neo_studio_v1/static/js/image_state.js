@@ -95,12 +95,66 @@
     };
   }
 
+  const WORKFLOW_MODES = Object.freeze(['txt2img', 'img2img', 'inpaint', 'outpaint']);
+  const BATCH_FORCE_ONE_WORKFLOWS = Object.freeze(['img2img', 'inpaint', 'outpaint']);
+  const OUTPUT_POLICY_ALIASES = Object.freeze({
+    new_run: 'new_current_run',
+    new_current_run: 'new_current_run',
+    append: 'append_derived',
+    append_derived: 'append_derived',
+    replace: 'replace_selected',
+    replace_selected: 'replace_selected',
+    preview: 'preview_only',
+    preview_only: 'preview_only',
+  });
+
+  function normalizeOutputPolicy(value, mode = 'txt2img') {
+    const raw = String(value || 'new_current_run').trim().toLowerCase() || 'new_current_run';
+    let effective = OUTPUT_POLICY_ALIASES[raw] || 'new_current_run';
+    const warnings = [];
+    if (!OUTPUT_POLICY_ALIASES[raw]) {
+      warnings.push({ code: 'output_policy_reset', message: 'Unknown output policy; using New run.', target: 'output_policy', severity: 'warning' });
+    }
+    if (BATCH_FORCE_ONE_WORKFLOWS.includes(mode) && effective === 'replace_selected') {
+      warnings.push({ code: 'output_policy_replace_requires_confirmation', message: `${mode} queues as New run until explicit replace confirmation exists.`, target: 'output_policy', severity: 'warning' });
+      effective = 'new_current_run';
+    }
+    return { requested: raw, effective, warnings };
+  }
+
+  function readBatchSizeFromDom() {
+    if (typeof document === 'undefined') return 1;
+    const raw = document.getElementById('generation-batch-size')?.value || '1';
+    const n = parseInt(raw, 10);
+    return Number.isFinite(n) && n > 0 ? n : 1;
+  }
+
+  function buildBatchPolicy(mode, requested) {
+    const safeRequested = Math.max(1, parseInt(requested, 10) || 1);
+    const forceOne = BATCH_FORCE_ONE_WORKFLOWS.includes(mode);
+    return {
+      requested: safeRequested,
+      effective: forceOne ? 1 : safeRequested,
+      policy: forceOne ? 'force_1' : 'allow',
+      reason: forceOne ? 'source_image_workflow' : '',
+      visible: true,
+    };
+  }
+
+  function normalizeWorkflowMode(value, fallback = 'txt2img') {
+    const raw = String(value || '').trim().toLowerCase();
+    if (WORKFLOW_MODES.includes(raw)) return raw;
+    const fb = String(fallback || '').trim().toLowerCase();
+    return WORKFLOW_MODES.includes(fb) ? fb : 'txt2img';
+  }
+
   function normalize(raw) {
     const merged = mergeDeep(DEFAULT_STATE, raw || {});
     const size = normalizeSize(merged.build?.width, merged.build?.height, DEFAULT_STATE.build);
     merged.version = VERSION;
-    merged.mode = String(merged.mode || merged.workflow_type || 'txt2img');
-    merged.workflow_type = String(merged.workflow_type || merged.mode || 'txt2img');
+    const normalizedMode = normalizeWorkflowMode(merged.mode || merged.workflow_type, DEFAULT_STATE.mode);
+    merged.mode = normalizedMode;
+    merged.workflow_type = normalizedMode;
     merged.build = mergeDeep(merged.build || {}, size);
     merged.modules = mergeDeep(merged.modules || {}, {
       dynamic_thresholding: normalizeDynamicThresholding(merged.modules?.dynamic_thresholding),
@@ -137,6 +191,18 @@
 
   function getState() { return clone(currentState); }
 
+  function dispatchWorkflowModeChanged(previous, state, detail) {
+    const eventDetail = {
+      previous_state: clone(previous),
+      previous_mode: previous?.mode || previous?.workflow_type || 'txt2img',
+      mode: state?.mode || state?.workflow_type || 'txt2img',
+      workflow_type: state?.workflow_type || state?.mode || 'txt2img',
+      state: clone(state),
+      ...(isPlainObject(detail) ? detail : {}),
+    };
+    try { window.dispatchEvent(new CustomEvent('neo:image:workflow-mode-changed', { detail: eventDetail })); } catch (_) {}
+  }
+
   function setState(patch, source = 'unknown') {
     const previous = currentState;
     const next = normalize(mergeDeep(currentState, patch || {}));
@@ -148,6 +214,28 @@
     currentState = next;
     emit({ previous: clone(previous), source });
     return getState();
+  }
+
+  function setWorkflowMode(mode, options = {}) {
+    const previous = getState();
+    const nextMode = normalizeWorkflowMode(mode, previous.mode || previous.workflow_type || DEFAULT_STATE.mode);
+    const source = String(options?.source || options?.reason || 'workflow-mode').trim() || 'workflow-mode';
+    const next = setState({
+      mode: nextMode,
+      workflow_type: nextMode,
+      meta: {
+        workflow_switch_reason: String(options?.reason || source || '').trim(),
+        workflow_switch_source: source,
+      },
+    }, source);
+    if ((previous.mode || previous.workflow_type) !== nextMode || options?.force_event) {
+      dispatchWorkflowModeChanged(previous, next, {
+        source,
+        reason: String(options?.reason || source || '').trim(),
+        requested_mode: String(mode || '').trim(),
+      });
+    }
+    return next;
   }
 
   function updateBuild(patch, source = 'build') {
@@ -175,8 +263,9 @@
     const patch = {};
     const mode = payload.mode || payload.workflow_type || payload.refine_mode;
     if (mode) {
-      patch.mode = String(payload.mode || mode);
-      patch.workflow_type = String(payload.workflow_type || mode);
+      const normalizedMode = normalizeWorkflowMode(mode, currentState.mode || currentState.workflow_type || DEFAULT_STATE.mode);
+      patch.mode = normalizedMode;
+      patch.workflow_type = normalizedMode;
     }
     const size = parsePayloadSize(payload);
     if (size) patch.build = { ...size, size_source: source };
@@ -232,6 +321,27 @@
     }, source);
   }
 
+  function lockPreviewOutput(output, source = 'preview-action-source') {
+    const ref = normalizeOutputReference(output, 'preview_output');
+    if (!ref) return getState();
+    return updateSource({
+      selected_output_id: ref.output_id || currentState.source.selected_output_id || null,
+      selected_job_id: ref.job_id || currentState.source.selected_job_id || null,
+      selected_output_snapshot: ref,
+      preview_action_target: ref,
+      active_source_image: ref.filename || ref.source_image_name || currentState.source.active_source_image || null,
+      explicit_source_type: 'preview_output',
+      locked_source: ref,
+      source_route_state: {
+        source_kind: 'preview_output',
+        source_id: ref.output_id || ref.filename || '',
+        source_name: ref.filename || ref.source_image_name || '',
+        routed_at: new Date().toISOString(),
+        route_source: source,
+      },
+    }, source);
+  }
+
   function lockUploadedSource(sourceImageName, source = 'source-upload') {
     const name = typeof sourceImageName === 'string' ? sourceImageName.trim() : '';
     if (!name) return getState();
@@ -263,6 +373,215 @@
     if (explicit) return { locked: true, source_type: explicit.source_type || 'selected_output', target: explicit };
     if (activeSource) return { locked: true, source_type: 'uploaded_source', source_image_name: activeSource, target: { source_type: 'uploaded_source', filename: activeSource, source_image_name: activeSource } };
     return { locked: false, source_type: 'none', target: null, reason: 'missing_explicit_source' };
+  }
+
+  function readOutpaintExpansionFromDom() {
+    if (typeof document === 'undefined') return { left: 0, top: 0, right: 0, bottom: 0 };
+    const read = (ids) => {
+      for (const id of ids) {
+        const el = document.getElementById(id);
+        if (!el) continue;
+        const n = parseInt(String(el.value ?? el.getAttribute?.('value') ?? '0').replace(/[^0-9-]/g, ''), 10);
+        if (Number.isFinite(n)) return Math.max(0, n);
+      }
+      return 0;
+    };
+    return {
+      left: read(['generation-outpaint-left', 'outpaint-left', 'outpaint_left']),
+      top: read(['generation-outpaint-top', 'outpaint-top', 'outpaint_top']),
+      right: read(['generation-outpaint-right', 'outpaint-right', 'outpaint_right']),
+      bottom: read(['generation-outpaint-bottom', 'outpaint-bottom', 'outpaint_bottom']),
+    };
+  }
+
+  function validateWorkflowState(options = {}) {
+    const state = getState();
+    const mode = normalizeWorkflowMode(options.mode || state.mode || state.workflow_type || 'txt2img');
+    const source = state.source || {};
+    const resolvedSource = resolvePreviewSource({
+      target: options.target || options.output || source.locked_source || source.preview_action_target || source.selected_output_snapshot,
+      source_image_name: options.source_image_name || options.sourceName || source.active_source_image,
+      source_type: options.sourceKind || options.source_type || source.explicit_source_type,
+    });
+    const outpaint = options.outpaintExpansion || options.outpaint_expansion || readOutpaintExpansionFromDom();
+    const left = Number(outpaint.left || 0);
+    const top = Number(outpaint.top || 0);
+    const right = Number(outpaint.right || 0);
+    const bottom = Number(outpaint.bottom || 0);
+    const hasSource = mode === 'txt2img' || !!resolvedSource.locked;
+    const maskName = String(options.mask_image_name || source.mask_image_name || '').trim();
+    const hasMask = mode !== 'inpaint' || !!maskName || !!options.maskPresent;
+    const hasExpansion = mode !== 'outpaint' || ((left + top + right + bottom) > 0);
+    const errors = [];
+    const warnings = [];
+    const batchPolicy = buildBatchPolicy(mode, options.batch_size || options.batchSize || readBatchSizeFromDom());
+    const outputPolicy = normalizeOutputPolicy(options.output_policy || options.outputPolicy || 'new_current_run', mode);
+    warnings.push(...outputPolicy.warnings);
+    if (batchPolicy.policy === 'force_1' && batchPolicy.requested > 1) {
+      warnings.push({ code: 'batch_force_one_required', message: `${mode} is a source-image workflow; batch size will run as 1.`, target: 'batch_size', severity: 'warning' });
+    }
+    if (!hasSource) errors.push({ code: 'missing_source_image', message: `${mode} requires a source image before queueing.`, target: 'source_image', severity: 'block' });
+    if (!hasMask) errors.push({ code: 'missing_mask_image', message: 'inpaint requires a mask image before queueing.', target: 'mask_image', severity: 'block' });
+    if (!hasExpansion) errors.push({ code: 'missing_outpaint_expansion', message: 'outpaint requires padding on at least one side before queueing.', target: 'outpaint_expansion', severity: 'block' });
+    const validation = {
+      valid: errors.length === 0,
+      reason: errors[0]?.message || '',
+      errors,
+      warnings,
+      auto_fixes: [],
+      workflow: mode,
+      mode,
+      source_required: mode !== 'txt2img',
+      mask_required: mode === 'inpaint',
+      source_kind: resolvedSource.source_type || 'none',
+      source_id: resolvedSource.target?.output_id || resolvedSource.target?.filename || resolvedSource.source_image_name || '',
+      outpaint_expansion: { left: Math.max(0, left || 0), top: Math.max(0, top || 0), right: Math.max(0, right || 0), bottom: Math.max(0, bottom || 0) },
+      validation_status: errors.length ? 'blocked' : 'valid',
+      batch_policy: batchPolicy,
+      output_policy: outputPolicy.effective,
+      output_policy_requested: outputPolicy.requested,
+    };
+    try { window.dispatchEvent(new CustomEvent('neo:image:workflow-validation-changed', { detail: validation })); } catch (_) {}
+    return validation;
+  }
+
+
+
+  function buildWorkflowPayloadState(options = {}) {
+    const state = getState();
+    const mode = normalizeWorkflowMode(options.mode || state.mode || state.workflow_type || 'txt2img');
+    const validation = validateWorkflowState({
+      mode,
+      target: options.target,
+      output: options.output,
+      source_image_name: options.source_image_name,
+      sourceName: options.sourceName,
+      sourceKind: options.sourceKind,
+      source_type: options.source_type,
+      mask_image_name: options.mask_image_name,
+      maskPresent: options.maskPresent,
+      outpaintExpansion: options.outpaintExpansion || options.outpaint_expansion,
+      batch_size: options.batch_size || options.batchSize,
+      output_policy: options.output_policy || options.outputPolicy,
+    });
+    const source = state.source || {};
+    const sourceRoute = isPlainObject(source.source_route_state) ? source.source_route_state : {};
+    const outputPolicy = normalizeOutputPolicy(options.output_policy || source.output_policy || state.meta?.output_policy || validation.output_policy || 'new_current_run', mode);
+    const requestedOutputPolicy = outputPolicy.effective;
+    const batchPolicy = validation.batch_policy || buildBatchPolicy(mode, options.batch_size || options.batchSize || readBatchSizeFromDom());
+    const switchReason = String(options.switch_reason || options.reason || state.meta?.workflow_switch_reason || state.meta?.workflow_switch_source || 'payload_collect').trim() || 'payload_collect';
+    const rawMode = normalizeWorkflowMode(options.raw_mode || state.meta?.raw_workflow_mode || state.workflow_type || state.mode || mode, mode);
+    const sourceKind = String(validation.source_kind || sourceRoute.source_kind || source.explicit_source_type || 'none').trim() || 'none';
+    const sourceId = String(validation.source_id || sourceRoute.source_id || source.selected_output_id || source.active_source_image || '').trim();
+    return {
+      raw_mode: rawMode,
+      effective_mode: mode,
+      switch_reason: switchReason,
+      source_kind: sourceKind,
+      source_id: sourceId,
+      source_name: String(sourceRoute.source_name || source.active_source_image || validation.source_id || '').trim(),
+      output_policy: requestedOutputPolicy,
+      output_policy_requested: outputPolicy.requested,
+      output_policy_effective: outputPolicy.effective,
+      validation_status: validation.validation_status || (validation.valid ? 'valid' : 'blocked'),
+      source_required: !!validation.source_required,
+      mask_required: !!validation.mask_required,
+      outpaint_expansion: validation.outpaint_expansion || { left: 0, top: 0, right: 0, bottom: 0 },
+      batch_policy: batchPolicy,
+      visible: true,
+      owner: 'NeoImageState',
+      version: 'phase_i_save_restore_metadata_v1',
+    };
+  }
+
+  function buildPersistedWorkflowState(options = {}) {
+    const workflowState = buildWorkflowPayloadState({
+      reason: options.reason || options.switch_reason || 'draft_save',
+      output_policy: options.output_policy || options.outputPolicy,
+      batch_size: options.batch_size || options.batchSize,
+      outpaintExpansion: options.outpaintExpansion || options.outpaint_expansion,
+      mask_image_name: options.mask_image_name,
+      source_image_name: options.source_image_name,
+      sourceKind: options.sourceKind || options.source_kind,
+    });
+    const state = getState();
+    return {
+      schema_version: 1,
+      owner: 'NeoImageState',
+      saved_at: new Date().toISOString(),
+      raw_state: {
+        mode: workflowState.raw_mode,
+        workflow_type: workflowState.raw_mode,
+        source_kind: workflowState.source_kind,
+        source_id: workflowState.source_id,
+        source_name: workflowState.source_name,
+        output_policy: workflowState.output_policy_requested || workflowState.output_policy,
+        batch_size: workflowState.batch_policy?.requested || options.batch_size || readBatchSizeFromDom(),
+      },
+      effective_state: {
+        mode: workflowState.effective_mode,
+        workflow_type: workflowState.effective_mode,
+        source_kind: workflowState.source_kind,
+        source_id: workflowState.source_id,
+        source_name: workflowState.source_name,
+        output_policy: workflowState.output_policy_effective || workflowState.output_policy,
+        validation_status: workflowState.validation_status,
+        batch_policy: workflowState.batch_policy,
+        source_required: workflowState.source_required,
+        mask_required: workflowState.mask_required,
+        outpaint_expansion: workflowState.outpaint_expansion,
+      },
+      transition: {
+        switch_reason: workflowState.switch_reason || 'draft_save',
+        restored_by: 'setGenerationWorkflowMode',
+        restore_requires_canonical_helper: true,
+      },
+      source_snapshot: clone(state.source || {}),
+      workflow_state: workflowState,
+      version: 'phase_i_save_restore_metadata_v1',
+    };
+  }
+
+  function restoreWorkflowState(persisted, options = {}) {
+    if (!isPlainObject(persisted)) return getState();
+    const raw = isPlainObject(persisted.raw_state) ? persisted.raw_state : persisted;
+    const effective = isPlainObject(persisted.effective_state) ? persisted.effective_state : persisted;
+    const sourceSnapshot = isPlainObject(persisted.source_snapshot) ? persisted.source_snapshot : {};
+    const mode = normalizeWorkflowMode(options.mode || effective.mode || effective.workflow_type || raw.mode || raw.workflow_type || persisted.effective_mode || persisted.raw_mode || currentState.mode, currentState.mode);
+    const outputPolicy = normalizeOutputPolicy(effective.output_policy || raw.output_policy || persisted.output_policy || 'new_current_run', mode);
+    const sourcePatch = mergeDeep(sourceSnapshot, {
+      explicit_source_type: effective.source_kind || raw.source_kind || sourceSnapshot.explicit_source_type || null,
+      active_source_image: effective.source_name || raw.source_name || sourceSnapshot.active_source_image || null,
+      selected_output_id: effective.source_id || raw.source_id || sourceSnapshot.selected_output_id || null,
+      source_route_state: {
+        source_kind: effective.source_kind || raw.source_kind || sourceSnapshot.source_route_state?.source_kind || 'none',
+        source_id: effective.source_id || raw.source_id || sourceSnapshot.source_route_state?.source_id || '',
+        source_name: effective.source_name || raw.source_name || sourceSnapshot.source_route_state?.source_name || '',
+        restored_at: new Date().toISOString(),
+        route_source: options.reason || 'draft_restore',
+      },
+      output_policy: outputPolicy.effective,
+    });
+    const previous = getState();
+    const next = setState({
+      mode,
+      workflow_type: mode,
+      source: sourcePatch,
+      meta: {
+        raw_workflow_mode: raw.mode || raw.workflow_type || mode,
+        workflow_switch_reason: options.reason || persisted.transition?.switch_reason || 'draft_restore',
+        workflow_switch_source: 'draft_restore',
+        output_policy: outputPolicy.effective,
+        restored_workflow_state_version: persisted.version || '',
+      },
+    }, options.source || 'draft_restore');
+    dispatchWorkflowModeChanged(previous, next, {
+      source: options.source || 'draft_restore',
+      reason: options.reason || 'draft_restore',
+      requested_mode: mode,
+      restored: true,
+    });
+    return next;
   }
 
   function subscribe(listener) {
@@ -397,14 +716,21 @@
     version: VERSION,
     getState,
     setState,
+    setWorkflowMode,
+    normalizeWorkflowMode,
     updateBuild,
     updatePrompt,
     updateSource,
     updateModule,
     lockSelectedOutput,
+    lockPreviewOutput,
     lockUploadedSource,
     clearOutputSelection,
     resolvePreviewSource,
+    validateWorkflowState,
+    buildWorkflowPayloadState,
+    buildPersistedWorkflowState,
+    restoreWorkflowState,
     ingestGenerationPayload,
     getBuildSize,
     readLiveBuildSizeFromDom,
@@ -413,6 +739,7 @@
     normalize,
   };
 
+  window.validateGenerationWorkflowState = validateWorkflowState;
   installBuildSizeBridge();
   emit({ source: 'init' });
 })();

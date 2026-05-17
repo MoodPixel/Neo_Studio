@@ -7,7 +7,7 @@ from typing import Any, Dict
 
 from .external_extension_payloads import build_external_extension_output_metadata_shell
 from .external_extension_run_metadata import build_external_extension_run_metadata
-from .job_records import infer_generation_family
+from .job_records import build_model_family_state, infer_generation_family
 
 OUTPUT_RECORD_SCHEMA_VERSION = 2
 GENERATION_OUTPUT_SIDECAR_SCHEMA_VERSION = 3
@@ -108,7 +108,10 @@ def build_generation_output_sidecar(*, base_sidecar: Dict[str, Any], job: Dict[s
     row['output_id'] = output_id
     row['job_id'] = str(job.get('job_id') or job.get('id') or '').strip()
     row['surface'] = 'generate'
-    row['family'] = infer_generation_family(payload)
+    model_family_state = build_model_family_state(payload)
+    row['family'] = str(model_family_state.get('effective_family') or infer_generation_family(payload))
+    row['model_family_state'] = model_family_state
+    row['_neo_model_family_state'] = model_family_state
     row['media_type'] = 'image'
     row['status'] = 'saved'
     row['lineage'] = {
@@ -124,6 +127,7 @@ def build_generation_output_sidecar(*, base_sidecar: Dict[str, Any], job: Dict[s
         'sampler': str(payload.get('sampler') or ''),
         'scheduler': str(payload.get('scheduler') or ''),
         'vae': str(payload.get('vae') or ''),
+        'model_family_state': model_family_state,
     }
     row['save'].update({
         'relative_name': relative_name,
@@ -142,6 +146,7 @@ def build_generation_output_sidecar(*, base_sidecar: Dict[str, Any], job: Dict[s
     row['_neo_external_extension_run_metadata'] = external_extension_run_metadata
     row.setdefault('extra_generation_params', {})
     if isinstance(row['extra_generation_params'], dict):
+        row['extra_generation_params']['model_family_state'] = model_family_state
         row['extra_generation_params']['external_extensions'] = external_extension_metadata
         row['extra_generation_params']['external_extension_run_metadata'] = external_extension_run_metadata
     row.setdefault('source_output', source_output)

@@ -144,6 +144,7 @@ __all__ = [
     'build_generation_job_record',
     'merge_job_updates',
     'infer_generation_family',
+    'build_model_family_state',
     'OUTPUT_RECORD_SCHEMA_VERSION',
     'GENERATION_OUTPUT_SIDECAR_SCHEMA_VERSION',
     'normalize_output_metadata_record',
@@ -158,6 +159,7 @@ from .job_records import (
     build_generation_job_record,
     merge_job_updates,
     infer_generation_family,
+    build_model_family_state,
 )
 from .output_records import (
     OUTPUT_RECORD_SCHEMA_VERSION,
@@ -188,3 +190,4 @@ __all__ += [
     'build_new_board_record',
     'build_board_summary',
 ]
+# Model family capability matrix imported directly by Image compatibility layers.

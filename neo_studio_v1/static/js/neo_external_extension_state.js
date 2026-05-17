@@ -3,9 +3,11 @@
 
   const REGISTRY_URL = '/api/extensions/external-registry';
   const CAPABILITIES_URL = '/api/extensions/capabilities';
+  const COMPATIBILITY_URL = '/api/extensions/compatibility';
   const EVENT_CHANGED = 'neo:external-extensions:state-changed';
   const EVENT_REGISTRY = 'neo:external-extensions:registry-refreshed';
   const EVENT_VALIDATE = 'neo:external-extensions:validated';
+  const EVENT_COMPATIBILITY = 'neo:external-extensions:compatibility-refreshed';
   const RESERVED_BUILT_IN_IDS = new Set(['scene_director', 'image.scene_director', 'neo.scene_director']);
   const DEFAULT_EXTERNAL_POLICIES = Object.freeze({
     source_policy: ['none'],
@@ -32,10 +34,14 @@
       warnings: [],
     },
     capabilities: {},
+    compatibility: { ok: true, results: {}, visible: [], enabled: [], blocked: [], warnings: [], errors: [] },
+    lastCompatibilityRefreshAt: null,
+    compatibilityWarnings: [],
     capabilityWarnings: [],
     capabilitySearchPaths: {},
     lastCapabilityRefreshAt: null,
     lastContext: {},
+    lastCompatibilityQuery: '',
     lastRefreshAt: null,
     initialized: false,
   };
@@ -79,6 +85,10 @@
       installed: src.installed !== false,
       status,
       target_sections: asArray(src.target_sections),
+      extension_targets: asArray(src.extension_targets || src.targets),
+      targets: asArray(src.targets || src.extension_targets),
+      image_systems: asArray(src.image_systems || src.systems),
+      systems: asArray(src.systems || src.image_systems),
       supported_workflows: asArray(src.supported_workflows),
       supported_model_families: asArray(src.supported_model_families),
       source_policy: asArray(src.source_policy).length ? asArray(src.source_policy) : DEFAULT_EXTERNAL_POLICIES.source_policy.slice(),
@@ -135,26 +145,48 @@
     };
   }
 
+  function getNeoImageStateSnapshot() {
+    const api = window.NeoImageState;
+    if (!api || typeof api.getState !== 'function') return {};
+    try { return asObject(api.getState()); } catch (_) { return {}; }
+  }
+
   function buildContext(partial = {}) {
     const root = document.getElementById('tab-generate') || document;
     const activeWorkspace = document.querySelector('[data-generation-workspace].active')?.getAttribute('data-generation-workspace') || '';
-    const workflow = text(document.getElementById('generation-workflow-type')?.value || partial.workflow || partial.workflow_type || 'txt2img') || 'txt2img';
-    const family = text(window.NeoGenerationFamilyRouter?.getActiveFamily?.() || document.getElementById('generation-family')?.value || partial.family || 'sdxl_sd') || 'sdxl_sd';
-    const batchSize = Number(document.getElementById('generation-batch-size')?.value || partial.batch_size || partial.batchSize || 1) || 1;
-    const hasSourceImage = !!document.getElementById('generation-source-image')?.files?.[0] || !!partial.has_source_image;
-    const positive = text(document.getElementById('generation-positive')?.value || partial.positive || '');
+    const imageState = getNeoImageStateSnapshot();
+    const imageSource = asObject(imageState.source);
+    const workflow = text(partial.workflow || partial.workflow_type || imageState.workflow_type || imageState.mode || document.getElementById('generation-workflow-type')?.value || 'txt2img') || 'txt2img';
+    const family = text(window.NeoGenerationFamilyRouter?.getActiveFamily?.() || partial.family || imageState.build?.family || document.getElementById('generation-family')?.value || 'sdxl_sd') || 'sdxl_sd';
+    const backend = text(partial.backend || partial.inpaint_backend || partial.outpaint_backend || document.getElementById('generation-outpaint-backend')?.value || document.getElementById('generation-inpaint-backend')?.value || 'standard') || 'standard';
+    const section = text(partial.section || partial.target_section || '');
+    const batchSize = Number(partial.batch_size || partial.batchSize || document.getElementById('generation-batch-size')?.value || 1) || 1;
+    const lockedSource = asObject(imageSource.locked_source || imageSource.preview_action_target || imageSource.selected_output_snapshot);
+    const hasSourceImage = !!document.getElementById('generation-source-image')?.files?.[0] || !!partial.has_source_image || !!imageSource.active_source_image || !!lockedSource.filename || !!lockedSource.output_id;
+    const positive = text(partial.positive || imageState.prompt?.positive || document.getElementById('generation-positive')?.value || '');
     return {
       surface: 'image',
       workspace: activeWorkspace || partial.workspace || 'create',
       workflow,
       workflow_type: workflow,
       family,
+      backend,
+      section,
       batch_size: batchSize,
       has_source_image: hasSourceImage,
       has_prompt: !!positive,
       source_image_available: hasSourceImage,
+      source_kind: text(imageSource.explicit_source_type || imageSource.source_route_state?.source_kind || lockedSource.source_type || 'none') || 'none',
+      source_id: text(imageSource.source_route_state?.source_id || lockedSource.output_id || lockedSource.filename || imageSource.active_source_image || ''),
       prompt_available: !!positive,
       root_available: !!root,
+      workflow_state_owner: 'NeoImageState',
+      image_workflow_state: {
+        mode: workflow,
+        workflow_type: workflow,
+        source_kind: text(imageSource.explicit_source_type || imageSource.source_route_state?.source_kind || lockedSource.source_type || 'none') || 'none',
+        source_id: text(imageSource.source_route_state?.source_id || lockedSource.output_id || lockedSource.filename || imageSource.active_source_image || ''),
+      },
       ...asObject(partial),
     };
   }
@@ -243,6 +275,18 @@
     return true;
   }
 
+
+  function compatibilityFor(extensionId) {
+    const id = normalizeId(extensionId);
+    const report = asObject(state.compatibility);
+    return asObject(asObject(report.results)[id]);
+  }
+
+  function compatibilityMessages(result, kind) {
+    const bucket = kind === 'warnings' ? asArray(result.warnings) : asArray(result.errors);
+    return bucket.map(item => typeof item === 'string' ? item : text(item.message || item.code)).filter(Boolean);
+  }
+
   function validateRecord(record, context = {}) {
     const warnings = asArray(record.warnings).concat(asArray(record.policy_warnings));
     let disabledReason = text(record.disabled_reason || '');
@@ -296,6 +340,15 @@
       effectiveEnabled = false;
       disabledReason = `missing_comfy_nodes:${missingComfyNodes.join(',')}`;
     }
+    const compatibility = compatibilityFor(record.extension_id);
+    if (Object.keys(compatibility).length) {
+      compatibilityMessages(compatibility, 'warnings').forEach(message => { if (!warnings.includes(message)) warnings.push(message); });
+      if (effectiveEnabled && compatibility.blocked) {
+        effectiveEnabled = false;
+        disabledReason = compatibility.disabled_message || compatibility.disabled_reason || 'Extension is disabled by compatibility resolver.';
+      }
+    }
+
     const contextPolicy = asArray(record.context_policy).map(item => text(item).toLowerCase()).filter(Boolean);
     if (contextPolicy.some(item => RESTRICTED_CONTEXT_POLICIES.has(item)) && !state.raw[record.extension_id]?.identity_context_confirmed) {
       effectiveEnabled = false;
@@ -320,6 +373,7 @@
       output_target: outputTarget,
       output_affecting: outputAffecting,
       batch_policy: record.batch_policy || DEFAULT_EXTERNAL_POLICIES.batch_policy,
+      compatibility,
       context_policy: asArray(record.context_policy),
       policy_version: record.policy_version || 'external-extension-policy-v1',
       raw_state: clone(rawState || {}),
@@ -335,6 +389,7 @@
         output_affecting: outputAffecting,
         visibility_errors: visibilityErrors,
         missing_comfy_nodes: missingComfyNodes,
+        compatibility,
         status_chip: missingComfyNodes.length ? 'Needs node' : (disabledReason && String(disabledReason).includes('conflict') ? 'Conflict' : (effectiveEnabled ? 'Ready' : 'Blocked')),
       },
       warnings: warnings.filter(Boolean),
@@ -385,16 +440,21 @@
       const warnings = asArray(effective.warnings);
       const capability = asObject(state.capabilities[record.extension_id]);
       const missingCapability = asArray(capability.missing);
+      const compatibility = asObject(effective.compatibility || compatibilityFor(record.extension_id));
+      const compatStatus = text(compatibility.status || '');
+      const compatReason = text(compatibility.disabled_message || compatibility.disabled_reason || '');
       const disabledReason = effective.disabled_reason || state.disabledReasons[record.extension_id] || '';
       return `<div class="mini-note" data-neo-external-extension-card="${record.extension_id}" style="margin-top:10px;">
         <div class="row-between" style="gap:10px; align-items:flex-start; flex-wrap:wrap;">
           <div><strong>${escapeHtml(record.name)}</strong><div class="muted small">${escapeHtml(record.extension_id)} · ${escapeHtml(record.surface)}</div></div>
           <span class="badge">${effective.effective_enabled ? 'Active' : record.status || 'Disabled'}</span>
           <span class="badge">${capability.available ? 'Ready' : (missingCapability.length ? 'Missing requirements' : 'Capability unchecked')}</span>
+          ${compatStatus ? `<span class="badge">Compat: ${escapeHtml(compatStatus)}</span>` : ''}
         </div>
-        <div class="muted small" style="margin-top:6px;">Targets: ${escapeHtml(asArray(record.target_sections).join(', ') || 'Not declared')}</div>
+        <div class="muted small" style="margin-top:6px;">Targets: ${escapeHtml(asArray(record.extension_targets).concat(asArray(record.target_sections)).filter(Boolean).join(', ') || 'Not declared')}</div>
         <div class="muted small" style="margin-top:4px;">Policies: source=${escapeHtml(asArray(record.source_policy).join('/') || 'none')} · output=${escapeHtml(asArray(record.output_policy).join('/') || 'preview')} · batch=${escapeHtml(record.batch_policy || 'force_1')} · context=${escapeHtml(asArray(record.context_policy).join('/') || 'prompt/model')}</div>
         ${missingCapability.length ? `<div class="status warn" style="margin-top:6px;">Missing: ${escapeHtml(missingCapability.slice(0, 3).join(', '))}</div>` : ''}
+        ${compatReason ? `<div class="status warn" style="margin-top:6px;">Compatibility: ${escapeHtml(compatReason)}</div>` : ''}
         ${disabledReason ? `<div class="status warn" style="margin-top:6px;">Disabled: ${escapeHtml(disabledReason)}</div>` : ''}
         ${warnings.length ? `<div class="status warn" style="margin-top:6px;">Warning: ${escapeHtml(warnings[0])}</div>` : ''}
       </div>`;
@@ -409,7 +469,7 @@
     stateRoot.innerHTML = `
       <div class="mini-note" style="margin-top:0;">
         <strong>Central external extension state</strong>
-        <div class="muted small" style="margin-top:4px;">Installed: ${installed.length} · Effective active: ${enabledCount} · Disabled reasons: ${disabledCount} · Warnings: ${warningCount}</div>
+        <div class="muted small" style="margin-top:4px;">Installed: ${installed.length} · Effective active: ${enabledCount} · Disabled reasons: ${disabledCount} · Warnings: ${warningCount} · Compatibility blocks: ${asArray(asObject(state.compatibility).blocked).length}</div>
       </div>
       ${cards || '<div class="mini-note" style="margin-top:10px;">No external extensions registered yet. State shell is ready and will stay empty until valid external manifests are installed.</div>'}
       ${invalidHtml}`;
@@ -452,9 +512,27 @@
       disabled,
       warnings,
       auto_fixes: autoFixes,
+      compatibility: clone(state.compatibility || {}),
+      compatibility_resolver_version: text(asObject(state.compatibility).version || ''),
       validator_version: 'external-extension-workflow-validator-v2',
       policy: 'block_or_auto_disable_with_visible_reason',
     };
+  }
+
+
+  function compatibilityQuery(context) {
+    const src = buildContext(context || {});
+    return [src.surface || 'image', src.family || 'sdxl_sd', src.workflow || src.workflow_type || 'txt2img', src.backend || 'standard', src.section || ''].join('|');
+  }
+
+  function scheduleCompatibilityRefresh(context = {}) {
+    const query = compatibilityQuery(context);
+    if (state.lastCompatibilityQuery === query) return;
+    state.lastCompatibilityQuery = query;
+    window.clearTimeout(scheduleCompatibilityRefresh._timer);
+    scheduleCompatibilityRefresh._timer = window.setTimeout(() => {
+      api.refreshCompatibility(context, { silent: true });
+    }, 120);
   }
 
   const api = {
@@ -476,6 +554,9 @@
         validationReport: state.validationReport,
         registry: state.registry,
         capabilities: state.capabilities,
+        compatibility: state.compatibility,
+        compatibilityWarnings: state.compatibilityWarnings,
+        lastCompatibilityRefreshAt: state.lastCompatibilityRefreshAt,
         capabilityWarnings: state.capabilityWarnings,
         capabilitySearchPaths: state.capabilitySearchPaths,
         lastCapabilityRefreshAt: state.lastCapabilityRefreshAt,
@@ -489,6 +570,34 @@
     },
     getCapabilitySnapshot() {
       return clone({ capabilities: state.capabilities, warnings: state.capabilityWarnings, search_paths: state.capabilitySearchPaths, lastRefreshAt: state.lastCapabilityRefreshAt });
+    },
+
+    async refreshCompatibility(context = {}, options = {}) {
+      const nextContext = buildContext(context);
+      const params = new URLSearchParams({
+        surface: nextContext.surface || 'image',
+        family: nextContext.family || 'sdxl_sd',
+        workflow: nextContext.workflow || nextContext.workflow_type || 'txt2img',
+        backend: nextContext.backend || 'standard',
+        section: nextContext.section || '',
+        _: String(Date.now()),
+      });
+      try {
+        const res = await fetch(`${COMPATIBILITY_URL}?${params.toString()}`, { cache: 'no-store' });
+        if (!res.ok) throw new Error(`Extension compatibility returned HTTP ${res.status}`);
+        const data = await res.json();
+        state.compatibility = asObject(data);
+        state.compatibilityWarnings = asArray(data.warnings);
+        state.lastCompatibilityRefreshAt = new Date().toISOString();
+        window.dispatchEvent(new CustomEvent(EVENT_COMPATIBILITY, { detail: { compatibility: clone(state.compatibility), context: clone(nextContext) } }));
+        if (!asObject(options).silent) emitChanged('compatibility_refreshed');
+        api.revalidate(nextContext, { skipCompatibilityRefresh: true });
+        return clone(state.compatibility);
+      } catch (err) {
+        state.compatibilityWarnings = [`Could not load extension compatibility: ${err?.message || err}`];
+        if (!asObject(options).silent) emitChanged('compatibility_refresh_failed');
+        return clone(state.compatibility);
+      }
     },
     async refreshCapabilities() {
       try {
@@ -514,6 +623,7 @@
         const data = await res.json();
         const registry = applyRegistry(data);
         api.refreshCapabilities();
+        api.refreshCompatibility(state.lastContext || {}, { silent: true });
         return registry;
       } catch (err) {
         state.registry.warnings = [`Could not load external extension registry: ${err?.message || err}`];
@@ -537,7 +647,7 @@
       emitChanged('enabled_state_updated');
       return true;
     },
-    revalidate(context = {}) {
+    revalidate(context = {}, options = {}) {
       const nextContext = buildContext(context);
       state.lastContext = nextContext;
       state.effective = {};
@@ -572,6 +682,7 @@
         if (record.extension_id) state.disabledReasons[record.extension_id] = record.disabled_reason || 'Manifest is invalid.';
       });
       state.validationReport = buildValidationReport();
+      if (!asObject(options).skipCompatibilityRefresh) scheduleCompatibilityRefresh(nextContext);
       if (window.NeoExtensionStateStore && typeof window.NeoExtensionStateStore.applyBulkValidation === 'function') {
         window.NeoExtensionStateStore.applyBulkValidation({ extensions: state.effective });
       }
@@ -640,6 +751,8 @@
       'generation-positive',
       'generation-model-source',
       'generation-source-image',
+      'generation-inpaint-backend',
+      'generation-outpaint-backend',
     ].forEach(id => {
       const el = document.getElementById(id);
       if (!el) return;
@@ -648,6 +761,9 @@
       el.addEventListener('change', () => scheduleValidation(`${id}_changed`));
     });
     window.addEventListener('neo:generation-family-changed', () => scheduleValidation('generation_family_changed'));
+    window.addEventListener('neo:image:workflow-mode-changed', event => scheduleValidation(event?.detail?.mode || 'image_workflow_mode_changed'));
+    window.addEventListener('neo:image:workflow-validation-changed', () => scheduleValidation('image_workflow_validation_changed'));
+    window.addEventListener('neo-image-state-changed', event => scheduleValidation(event?.detail?.source || 'image_state_changed'));
     window.addEventListener('neo:generation-workspace-changed', event => scheduleValidation(event?.detail?.workspace || 'workspace_changed'));
     window.addEventListener('neo:extension-mounted', () => scheduleValidation('extension_mounted'));
   }

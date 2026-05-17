@@ -35,6 +35,8 @@ from ..utils.extension_registry import (
     _find_pack,
 )
 from ..utils.extension_backend_hooks import build_backend_hook_registry, get_backend_hook_status
+from ..contracts.image_extension_compatibility_resolver import build_image_extension_compatibility_report
+from ..contracts.image_extension_mount_rules import build_image_extension_mount_report
 from .common import json_error, json_exception
 
 router = APIRouter()
@@ -58,6 +60,46 @@ async def api_extension_registry(surface: str = '', target_surface: str = '', fa
         return json_exception(exc, default_message='Could not load extension registry.', default_status=500)
 
 
+
+
+
+
+@router.get('/api/extensions/compatibility')
+async def api_extension_compatibility(surface: str = 'image', family: str = 'sdxl_sd', workflow: str = 'txt2img', backend: str = 'standard', section: str = '', active_systems: str = '', include_invalid: bool = True, refresh: bool = False):
+    try:
+        if refresh:
+            rebuild_extension_registry()
+        registry = build_external_extension_registry(surface=surface, include_invalid=include_invalid)
+        context = {
+            'surface': surface or 'image',
+            'family': family or 'sdxl_sd',
+            'model_family': family or 'sdxl_sd',
+            'workflow': workflow or 'txt2img',
+            'workflow_type': workflow or 'txt2img',
+            'backend': backend or 'standard',
+            'section': section or '',
+            'active_systems': [item.strip() for item in str(active_systems or '').split(',') if item.strip()],
+        }
+        return JSONResponse(build_image_extension_compatibility_report(registry, context=context))
+    except Exception as exc:
+        return json_exception(exc, default_message='Could not resolve extension compatibility.', default_status=500)
+
+
+@router.get('/api/extensions/section-mounts')
+async def api_extension_section_mounts(surface: str = 'image', section: str = '', workspace: str = '', include_invalid: bool = True, refresh: bool = False):
+    try:
+        if refresh:
+            rebuild_extension_registry()
+        registry = build_external_extension_registry(surface=surface, include_invalid=include_invalid)
+        context = {
+            'surface': surface or 'image',
+            'section': section or '',
+            'target_section': section or '',
+            'workspace': workspace or '',
+        }
+        return JSONResponse(build_image_extension_mount_report(registry, context=context))
+    except Exception as exc:
+        return json_exception(exc, default_message='Could not resolve extension section mounts.', default_status=500)
 
 
 @router.get('/api/extensions/external-registry')

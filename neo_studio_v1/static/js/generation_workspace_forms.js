@@ -96,18 +96,184 @@ function updateGenerationPreviewActionState() {
   const hasTarget = !!(target && target.view_url);
   const wrap = $('generation-preview-actions');
   if (wrap) wrap.classList.toggle('is-visible', hasTarget);
+  const disabledReason = 'No preview output is selected yet.';
   ['btn-generation-preview-hires', 'btn-generation-preview-detailer', 'btn-generation-preview-img2img', 'btn-generation-preview-inpaint', 'btn-generation-preview-outpaint', 'btn-generation-preview-controlnet', 'btn-generation-preview-ipadapter', 'btn-generation-preview-identity'].forEach(id => {
     const el = $(id);
     if (!el) return;
-    if (hasTarget) el.removeAttribute('disabled');
-    else el.setAttribute('disabled', 'disabled');
+    setPreviewButtonDisabledReason(el, !hasTarget, disabledReason);
   });
   if (typeof syncGenerationPreviewQwenUnsupportedActions === 'function') syncGenerationPreviewQwenUnsupportedActions();
+  renderGenerationWorkflowContractStatus();
+}
+
+function formatGenerationWorkflowContractLabel(value) {
+  const raw = String(value ?? '').trim();
+  if (!raw) return 'None';
+  const map = {
+    txt2img: 'Txt2img',
+    img2img: 'Img2img',
+    inpaint: 'Inpaint',
+    outpaint: 'Outpaint',
+    uploaded_source: 'Uploaded source',
+    selected_output: 'Selected output',
+    preview_output: 'Preview output',
+    visible_preview: 'Visible preview',
+    none: 'None',
+    new_current_run: 'New run',
+    new_run: 'New run',
+    append: 'Append',
+    append_derived: 'Append derived',
+    replace: 'Replace',
+    preview: 'Preview only',
+    blocked: 'Blocked',
+    valid: 'Ready'
+  };
+  if (map[raw]) return map[raw];
+  return raw.replace(/[_-]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+let generationWorkflowContractLastValidation = null;
+
+function readGenerationOutpaintExpansionForContract() {
+  const read = id => Math.max(0, parseInt(String($(id)?.value || '0').replace(/[^0-9-]/g, ''), 10) || 0);
+  return read('generation-outpaint-left') + read('generation-outpaint-top') + read('generation-outpaint-right') + read('generation-outpaint-bottom');
+}
+
+function getGenerationWorkflowContractSnapshot(validationDetail) {
+  if (validationDetail) generationWorkflowContractLastValidation = validationDetail;
+  const state = window.NeoImageState?.getState?.() || {};
+  const source = state.source || {};
+  const sourceRoute = source.source_route_state || {};
+  const mode = validationDetail?.mode || state.mode || state.workflow_type || $('generation-workflow-type')?.value || 'txt2img';
+  const sourceKind = validationDetail?.source_kind || sourceRoute.source_kind || source.explicit_source_type || (source.active_source_image ? 'uploaded_source' : 'none');
+  const sourceId = validationDetail?.source_id || sourceRoute.source_id || source.selected_output_id || source.active_source_image || '';
+  const outputPolicy = source.output_policy || state.meta?.output_policy || 'new_current_run';
+  const validation = validationDetail || generationWorkflowContractLastValidation || null;
+  let status = validation?.validation_status || (validation?.valid === false ? 'blocked' : 'valid');
+  let reason = validation?.reason || validation?.errors?.[0]?.message || validation?.warnings?.[0]?.message || '';
+  const batchPolicy = validation?.batch_policy || state.workflow_state?.batch_policy || state._neo_workflow_state?.batch_policy || null;
+  if (!reason && batchPolicy?.policy === 'force_1' && Number(batchPolicy.requested || 1) > 1) {
+    reason = `Batch safety: requested ${batchPolicy.requested}, effective ${batchPolicy.effective || 1} for source-image workflow.`;
+  }
+  if (!validation) {
+    if (mode !== 'txt2img' && !sourceId) {
+      status = 'blocked';
+      reason = `${formatGenerationWorkflowContractLabel(mode)} requires a source image.`;
+    } else if (mode === 'outpaint' && readGenerationOutpaintExpansionForContract() <= 0) {
+      status = 'blocked';
+      reason = 'Outpaint requires padding on at least one side.';
+    } else {
+      status = 'valid';
+      reason = '';
+    }
+  }
+  const target = sourceId || (mode === 'txt2img' ? 'new_current_run' : sourceKind);
+  return { mode, sourceKind, sourceId, outputPolicy, status, reason, target, validation, batchPolicy };
+}
+
+function renderGenerationWorkflowContractStatus(validationDetail) {
+  const snapshot = getGenerationWorkflowContractSnapshot(validationDetail);
+  const modeEl = $('generation-workflow-contract-mode');
+  const sourceEl = $('generation-workflow-contract-source');
+  const targetEl = $('generation-workflow-contract-target');
+  const policyEl = $('generation-workflow-contract-policy');
+  const statusEl = $('generation-workflow-contract-status');
+  const reasonEl = $('generation-workflow-contract-reason');
+  const wrap = $('generation-workflow-contract-status-wrap');
+  const strip = $('generation-workflow-contract-strip');
+  if (!modeEl && !sourceEl && !statusEl) return snapshot;
+  const sourceLabel = snapshot.mode === 'txt2img' && snapshot.sourceKind === 'none'
+    ? 'Prompt only'
+    : `${formatGenerationWorkflowContractLabel(snapshot.sourceKind)}${snapshot.sourceId ? ` · ${snapshot.sourceId}` : ''}`;
+  if (modeEl) modeEl.textContent = formatGenerationWorkflowContractLabel(snapshot.mode);
+  if (sourceEl) sourceEl.textContent = sourceLabel;
+  if (targetEl) targetEl.textContent = formatGenerationWorkflowContractLabel(snapshot.target || snapshot.outputPolicy || 'new_current_run');
+  if (policyEl) policyEl.textContent = formatGenerationWorkflowContractLabel(snapshot.outputPolicy);
+  const blocked = snapshot.status === 'blocked' || snapshot.validation?.valid === false;
+  if (statusEl) statusEl.textContent = blocked ? 'Blocked' : 'Ready';
+  if (reasonEl) {
+    const batchText = snapshot.batchPolicy?.policy === 'force_1' && Number(snapshot.batchPolicy.requested || 1) > 1
+      ? ` Batch effective: ${snapshot.batchPolicy.effective || 1}.`
+      : '';
+    reasonEl.textContent = (snapshot.reason || (blocked ? 'Workflow needs required inputs before queueing.' : 'Workflow state is visible and synced from NeoImageState.')) + batchText;
+  }
+  if (wrap) wrap.classList.toggle('is-blocked', blocked);
+  if (strip) strip.classList.toggle('is-blocked', blocked);
+  return snapshot;
+}
+
+function setPreviewButtonDisabledReason(button, disabled, reason) {
+  if (!button) return;
+  if (disabled) {
+    button.setAttribute('disabled', 'disabled');
+    button.setAttribute('aria-disabled', 'true');
+    button.dataset.disabledReason = reason || 'No preview output is selected yet.';
+    const baseTitle = button.dataset.baseTitle || button.getAttribute('title') || '';
+    if (!button.dataset.baseTitle) button.dataset.baseTitle = baseTitle;
+    button.setAttribute('title', `${baseTitle ? `${baseTitle} — ` : ''}${button.dataset.disabledReason}`);
+  } else {
+    button.removeAttribute('disabled');
+    button.removeAttribute('aria-disabled');
+    button.dataset.disabledReason = '';
+    if (button.dataset.baseTitle) button.setAttribute('title', button.dataset.baseTitle);
+  }
+}
+
+function setGenerationWorkflowMode(mode, options = {}) {
+  const requestedMode = String(mode || '').trim() || 'txt2img';
+  const reason = String(options.reason || options.source || 'workflow_switch').trim() || 'workflow_switch';
+  const state = window.NeoImageState?.setWorkflowMode
+    ? window.NeoImageState.setWorkflowMode(requestedMode, { ...options, reason, source: reason, force_event: options.force_event !== false })
+    : null;
+  const effectiveMode = state?.mode || state?.workflow_type || requestedMode;
+  const selector = $('generation-workflow-type');
+  if (selector && selector.value !== effectiveMode) selector.value = effectiveMode;
+  if (options.sourceKind || options.sourceId || options.sourceName || options.outputPolicy) {
+    window.NeoImageState?.updateSource?.({
+      ...(options.sourceKind ? { explicit_source_type: options.sourceKind } : {}),
+      ...(options.sourceId ? { selected_output_id: options.sourceId } : {}),
+      ...(options.sourceName ? { active_source_image: options.sourceName } : {}),
+      ...(options.outputPolicy ? { output_policy: options.outputPolicy } : {}),
+    }, reason);
+  }
+  if (typeof syncGenerationModeUI === 'function') {
+    try { syncGenerationModeUI(); } catch (_) {}
+  }
+  if (options.validate !== false && window.NeoImageState?.validateWorkflowState) {
+    try { window.NeoImageState.validateWorkflowState({ mode: effectiveMode, output_policy: options.outputPolicy }); } catch (_) {}
+  }
+  try { renderGenerationWorkflowContractStatus(); } catch (_) {}
+  return window.NeoImageState?.getState?.() || { mode: effectiveMode, workflow_type: effectiveMode };
+}
+window.setGenerationWorkflowMode = window.setGenerationWorkflowMode || setGenerationWorkflowMode;
+
+function bindGenerationWorkflowContractVisibility() {
+  renderGenerationWorkflowContractStatus();
+  window.addEventListener('neo:image:workflow-mode-changed', event => {
+    renderGenerationWorkflowContractStatus(event?.detail?.validation || null);
+  });
+  window.addEventListener('neo:image:workflow-validation-changed', event => {
+    renderGenerationWorkflowContractStatus(event?.detail || null);
+  });
+  window.addEventListener('neo-image-state-changed', () => {
+    renderGenerationWorkflowContractStatus();
+  });
+  document.addEventListener('change', event => {
+    if (event.target?.matches?.('#generation-workflow-type, #generation-source-image, #generation-mask-image, #generation-model-source')) {
+      setTimeout(() => renderGenerationWorkflowContractStatus(), 0);
+    }
+  }, true);
+  document.addEventListener('input', event => {
+    if (/^generation-outpaint-(left|right|top|bottom)$/.test(event.target?.id || '')) {
+      setTimeout(() => renderGenerationWorkflowContractStatus(), 0);
+    }
+  }, true);
 }
 
 function setGenerationPreviewActionTarget(target) {
   generationPreviewActionTarget = target && target.view_url ? { ...target } : null;
   updateGenerationPreviewActionState();
+  renderGenerationWorkflowContractStatus();
 }
 
 function getGenerationPreviewLifecycleState() {
@@ -785,6 +951,7 @@ function refreshGenerationRES4LYFRecoveryPanel() {
 window.refreshGenerationRES4LYFRecoveryPanel = refreshGenerationRES4LYFRecoveryPanel;
 window.addEventListener('neo:generation-catalog-refreshed', () => renderGenerationRES4LYFStatus());
 document.addEventListener('DOMContentLoaded', () => { bindGenerationRES4LYFPresetButtons(); renderGenerationRES4LYFStatus(); });
+document.addEventListener('DOMContentLoaded', () => { bindGenerationWorkflowContractVisibility(); });
 
 function readGenerationSceneDirectorStateForTargets() {
   const candidates = [];
@@ -5054,26 +5221,41 @@ setTimeout(bindGenerationControlnetPreviewFirstButtons, 250);
     return Boolean($('generation-source-image')?.files?.[0]);
   }
 
+  function currentOutpaintCanvasWorkflowMode() {
+    const selectorMode = $('generation-workflow-type')?.value;
+    const stateMode = window.NeoImageState?.getState?.()?.mode || window.NeoImageState?.getState?.()?.workflow_type;
+    return String(selectorMode || stateMode || 'txt2img').trim().toLowerCase();
+  }
+
   function updateOutpaintCanvasEditorStateLabel() {
     const label = $('generation-outpaint-canvas-editor-state');
+    const mode = currentOutpaintCanvasWorkflowMode();
+    const isOutpaint = mode === 'outpaint';
     const sourceLoaded = hasSourceImage();
     if (label) {
-      label.textContent = sourceLoaded
-        ? 'Ready: drag canvas handles to adjust each side independently.'
-        : 'Load a source image first to use the visual canvas editor.';
+      label.textContent = !isOutpaint
+        ? 'Outpaint Canvas is available only in Outpaint mode.'
+        : sourceLoaded
+          ? 'Ready: drag canvas handles to adjust each side independently.'
+          : 'Load a source image first to use the visual canvas editor.';
     }
     const buttons = [
       $('btn-generation-outpaint-canvas-editor'),
       $('btn-generation-source-outpaint-canvas'),
     ].filter(Boolean);
     buttons.forEach(btn => {
-      btn.disabled = !sourceLoaded;
-      btn.title = sourceLoaded ? 'Open the visual outpaint canvas editor' : 'Load a source image first';
-      btn.classList.toggle('is-disabled', !sourceLoaded);
+      const disabled = !isOutpaint || !sourceLoaded;
+      btn.disabled = disabled;
+      btn.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+      btn.title = !isOutpaint
+        ? 'Available only in Outpaint mode'
+        : sourceLoaded
+          ? 'Open the visual outpaint canvas editor'
+          : 'Load a source image first';
+      btn.classList.toggle('is-disabled', disabled);
+      btn.classList.toggle('hidden', !isOutpaint);
+      btn.setAttribute('aria-hidden', !isOutpaint ? 'true' : 'false');
     });
-    try {
-      console.debug('[Neo] outpaint_canvas_editor_visible=%s reason=%s', String(!!$('btn-generation-outpaint-canvas-editor')), sourceLoaded ? 'source_image_loaded' : 'no_source_image');
-    } catch (_) {}
   }
 
   function getCanvasPoint(event) {
@@ -5261,9 +5443,10 @@ setTimeout(bindGenerationControlnetPreviewFirstButtons, 250);
       updateOutpaintCanvasEditorStateLabel();
       return false;
     }
-    if ($('generation-workflow-type') && ['inpaint', 'outpaint'].includes($('generation-workflow-type').value || '') === false) {
-      $('generation-workflow-type').value = 'outpaint';
-      try { syncGenerationModeUI(); } catch (_) {}
+    if (currentOutpaintCanvasWorkflowMode() !== 'outpaint') {
+      setStatus('generation-status', 'Switch to Outpaint mode before opening the Outpaint Canvas editor.', 'warn');
+      updateOutpaintCanvasEditorStateLabel();
+      return false;
     }
     const modal = $('generation-outpaint-canvas-editor-modal');
     if (!modal) return false;

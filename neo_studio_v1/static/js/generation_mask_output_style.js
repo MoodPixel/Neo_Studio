@@ -127,7 +127,7 @@ function collectGenerationOutputSettings() {
 function updateGenerationOutputDestinationPreview(seedHint='[seed]') {
   const root = trim($('generation-output-root')?.value || '');
   const category = trim($('generation-output-category')?.value || 'Uncategorized') || 'Uncategorized';
-  const mode = $('generation-workflow-type')?.value || 'txt2img';
+  const mode = window.getGenerationWorkflowMode?.() || $('generation-workflow-type')?.value || 'txt2img';
   const modeFolder = generationModeOutputFolder(mode);
   const el = $('generation-output-destination');
   if (!el) return;
@@ -1877,21 +1877,46 @@ async function sendGenerationPreviewToReferenceLane(kind='controlnet') {
 
 async function sendGenerationPreviewToMode(mode='img2img') {
   try {
+    const targetMode = window.NeoImageState?.normalizeWorkflowMode ? window.NeoImageState.normalizeWorkflowMode(mode, 'img2img') : String(mode || 'img2img').trim().toLowerCase();
+    const activeOutput = getGenerationActivePreviewOutput();
+    if (!activeOutput?.view_url) throw new Error('Pick an active output first before sending it into another workflow.');
+    if (window.NeoImageState?.lockPreviewOutput) {
+      window.NeoImageState.lockPreviewOutput(activeOutput, 'generation-preview-action-source');
+    } else if (window.NeoImageState?.lockSelectedOutput) {
+      window.NeoImageState.lockSelectedOutput(activeOutput, 'generation-preview-action-source');
+    }
     const file = await fetchGenerationPreviewFile();
     assignFileToInput('generation-source-image', file);
-    if ($('generation-workflow-type')) $('generation-workflow-type').value = mode;
-    if ((mode === 'inpaint' || mode === 'outpaint') && $('generation-mask-image')) {
+    const sourceId = activeOutput.output_id || activeOutput.id || activeOutput.output_key || activeOutput.filename || file?.name || '';
+    const sourceName = activeOutput.filename || activeOutput.saved_filename || file?.name || '';
+    if (window.setGenerationWorkflowMode) {
+      window.setGenerationWorkflowMode(targetMode, {
+        source: 'generation-preview-action',
+        reason: 'send_preview_to_mode',
+        sourceKind: 'preview_output',
+        sourceId,
+        sourceName,
+        outputPolicy: 'new_current_run',
+        forceReveal: targetMode === 'outpaint' ? 'assets' : 'core',
+        validate: true,
+      });
+    } else if ($('generation-workflow-type')) {
+      $('generation-workflow-type').value = targetMode;
+    }
+    if ((targetMode === 'inpaint' || targetMode === 'outpaint') && $('generation-mask-image')) {
       clearGenerationImageInput('generation-mask-image');
     }
-    if (mode === 'inpaint') {
-      setStatus('generation-status', 'Image sent to Inpaint. Add or draw a mask next.', 'success');
-    } else if (mode === 'outpaint') {
-      setStatus('generation-status', 'Image sent to Outpaint. Set the padding directions and queue it.', 'success');
+    if (targetMode === 'inpaint') {
+      focusGenerationSetupTab('core', 'generation-inpaint-settings');
+      setStatus('generation-status', 'Image sent to Inpaint. Source is locked from the preview; add or draw a mask next.', 'success');
+    } else if (targetMode === 'outpaint') {
+      focusGenerationSetupTab('assets', 'generation-outpaint-settings');
+      setStatus('generation-status', 'Image sent to Outpaint. Source is locked from the preview; set padding directions next.', 'success');
     } else {
-      setStatus('generation-status', `Image sent to ${mode}.`, 'success');
+      focusGenerationSetupTab('core');
+      setStatus('generation-status', `Image sent to ${targetMode}. Source is locked from the preview.`, 'success');
     }
     syncGenerationModeUI();
-    focusGenerationSetupTab('core');
     updateGenerationOutputDestinationPreview(trim($('generation-seed')?.value || '') || '[seed]');
     scheduleGenerationDraftSave();
   } catch (e) {

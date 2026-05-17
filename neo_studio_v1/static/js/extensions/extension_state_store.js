@@ -207,16 +207,44 @@
     return api.getSnapshot();
   }
 
+
+  function getImageWorkflowState() {
+    const api = window.NeoImageState;
+    if (!api || typeof api.getState !== 'function') return {};
+    try {
+      const snapshot = asObject(api.getState());
+      const source = asObject(snapshot.source);
+      const locked = asObject(source.locked_source || source.preview_action_target || source.selected_output_snapshot);
+      const mode = text(snapshot.workflow_type || snapshot.mode || 'txt2img') || 'txt2img';
+      return {
+        owner: 'NeoImageState',
+        mode,
+        workflow_type: mode,
+        source_kind: text(source.explicit_source_type || source.source_route_state?.source_kind || locked.source_type || 'none') || 'none',
+        source_id: text(source.source_route_state?.source_id || locked.output_id || locked.filename || source.active_source_image || ''),
+        output_policy: text(source.output_policy || snapshot.meta?.output_policy || ''),
+      };
+    } catch (_) {
+      return {};
+    }
+  }
+
   function buildPayloadBlock() {
     const out = {};
     Object.keys(state.external_extensions).sort().forEach(id => {
       const item = state.external_extensions[id];
+      const imageWorkflowState = getImageWorkflowState();
+      const effectiveState = clone(item.effective_state || {});
+      if (imageWorkflowState.mode && !effectiveState.active_image_workflow) {
+        effectiveState.active_image_workflow = clone(imageWorkflowState);
+      }
       out[id] = {
         enabled: !!item.enabled,
         raw_state: clone(item.raw_state || {}),
-        effective_state: clone(item.effective_state || {}),
+        effective_state: effectiveState,
         validation: clone(item.validation || { status: 'idle', warnings: [], errors: [] }),
         dirty: !!item.dirty,
+        active_image_workflow: clone(imageWorkflowState),
       };
     });
     return out;
@@ -367,6 +395,8 @@
   window.addEventListener('neo:external-extension-ui-control-changed', () => {
     // UI renderer already writes through the store. This event exists for other panels.
   });
+  window.addEventListener('neo:image:workflow-mode-changed', event => api.setContext({ ...(state.last_context || {}), workflow: event?.detail?.mode || event?.detail?.workflow_type || 'txt2img', workflow_type: event?.detail?.workflow_type || event?.detail?.mode || 'txt2img', workflow_state_owner: 'NeoImageState' }));
+  window.addEventListener('neo:image:workflow-validation-changed', event => api.setContext({ ...(state.last_context || {}), workflow_validation: clone(event?.detail || {}), workflow_state_owner: 'NeoImageState' }));
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => api.hydrateFromCore(), { once: true });

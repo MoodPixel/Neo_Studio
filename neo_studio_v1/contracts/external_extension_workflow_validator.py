@@ -5,8 +5,15 @@ from typing import Any
 
 from .extension_manifest import VALID_EXTERNAL_TARGET_SECTIONS
 from .external_extension_policies import DEFAULT_BATCH_POLICY, DEFAULT_OUTPUT_POLICY, DEFAULT_SOURCE_POLICY
+from .image_extension_compatibility_resolver import (
+    IMAGE_EXTENSION_COMPATIBILITY_RESOLVER_VERSION,
+    build_image_extension_compatibility_context,
+    resolve_image_extension_compatibility,
+    resolve_image_extension_block_compatibility,
+)
 
-EXTERNAL_EXTENSION_WORKFLOW_VALIDATOR_VERSION = 'external-extension-workflow-validator-v2'
+EXTERNAL_EXTENSION_WORKFLOW_VALIDATOR_VERSION = 'external-extension-workflow-validator-v3'
+EXTERNAL_EXTENSION_WORKFLOW_ENFORCEMENT_VERSION = 'external-extension-workflow-enforcement-v1'
 OUTPUT_AFFECTING_WORKFLOW_MODES = {'replace_workflow', 'sidecar_run', 'postprocess_output', 'preprocess_source', 'mixed_workflow'}
 OUTPUT_MUTATING_POLICIES = {'new_run', 'append', 'replace'}
 VISIBLE_CONFIRMATION_WORKFLOW_MODES = {'replace_workflow'}
@@ -340,6 +347,9 @@ def validate_external_extension_entry_for_workflow(
     effective_enabled=false so workflow mutation cannot occur silently.
     """
     context = context if isinstance(context, dict) else {}
+    compat_context = build_image_extension_compatibility_context(context)
+    # Keep validation context source/batch fields while adding canonical family/workflow/backend fields.
+    compat_context.update({key: value for key, value in context.items() if key not in compat_context})
     entry = _dict(entry)
     registry = _dict(registry_record) or _fresh_registry_record_for(extension_id)
     registry_found = bool(registry)
@@ -377,6 +387,19 @@ def validate_external_extension_entry_for_workflow(
     if effective_enabled and not _supports(supported_families, context.get('family') or context.get('model_family')):
         effective_enabled = False
         disabled_reason = f"unsupported_model_family:{context.get('family') or context.get('model_family') or 'unknown'}"
+
+    compatibility = resolve_image_extension_compatibility(
+        extension_id,
+        entry,
+        registry_record=registry,
+        context=compat_context,
+    )
+    if effective_enabled and compatibility.get('blocked'):
+        effective_enabled = False
+        disabled_reason = compatibility.get('disabled_reason') or 'extension_compatibility_blocked'
+        message = compatibility.get('disabled_message')
+        if message:
+            warnings.append(message)
 
     target_sections = _list(entry.get('target_sections') or registry.get('target_sections') or [])
     unknown_sections = [section for section in target_sections if _key(section) not in VALID_EXTERNAL_TARGET_SECTIONS]
@@ -440,7 +463,9 @@ def validate_external_extension_entry_for_workflow(
         'output_affecting': output_affecting,
         'visibility_errors': visibility_errors,
         'missing_comfy_nodes': missing_nodes,
-        'status_chip': 'Needs node' if missing_nodes else ('Conflict' if disabled_reason and 'conflict' in str(disabled_reason) else ('Blocked' if disabled_reason and not effective_enabled else 'Ready')),
+        'compatibility': compatibility,
+        'compatibility_resolver_version': IMAGE_EXTENSION_COMPATIBILITY_RESOLVER_VERSION,
+        'status_chip': 'Needs node' if missing_nodes else ('Conflict' if disabled_reason and 'conflict' in str(disabled_reason) else ('Blocked' if disabled_reason and not effective_enabled else ('Warning' if compatibility.get('warnings') else 'Ready'))),
         'auto_fixes': auto_fixes,
     })
 
@@ -457,6 +482,8 @@ def validate_external_extension_entry_for_workflow(
             'auto_fixes': auto_fixes,
             'visibility_errors': visibility_errors,
             'missing_comfy_nodes': missing_nodes,
+            'compatibility': compatibility,
+            'compatibility_resolver_version': IMAGE_EXTENSION_COMPATIBILITY_RESOLVER_VERSION,
             'workflow_mode': workflow_mode,
             'output_policy': output_policy,
             'output_target': output_target,
@@ -518,6 +545,19 @@ def validate_external_extension_payload_block(
                 'conflicting_extensions': replace_ids,
             })
             entry['workflow_validation'] = validation
+    compatibility_report = resolve_image_extension_block_compatibility(out, external_registry=external_registry, context=context or {})
+    for extension_id, result in (compatibility_report.get('results') or {}).items():
+        entry = out.get(extension_id)
+        if not isinstance(entry, dict):
+            continue
+        effective_state = _dict(entry.get('effective_state'))
+        effective_state['compatibility'] = result
+        effective_state['compatibility_resolver_version'] = IMAGE_EXTENSION_COMPATIBILITY_RESOLVER_VERSION
+        entry['effective_state'] = effective_state
+        validation = _dict(entry.get('workflow_validation'))
+        validation['compatibility'] = result
+        validation['compatibility_resolver_version'] = IMAGE_EXTENSION_COMPATIBILITY_RESOLVER_VERSION
+        entry['workflow_validation'] = validation
     return out
 
 
@@ -543,6 +583,11 @@ def build_external_extension_validation_report(block: dict[str, dict[str, Any]] 
         fixes = _list(_dict(entry.get('workflow_validation')).get('auto_fixes'))
         if fixes:
             auto_fixes[extension_id] = fixes
+    compatibility = {
+        extension_id: _dict(_dict(entry.get('effective_state')).get('compatibility'))
+        for extension_id, entry in block.items()
+        if isinstance(entry, dict) and _dict(_dict(entry.get('effective_state')).get('compatibility'))
+    }
     return {
         'ok': not blocked,
         'active': active,
@@ -550,6 +595,80 @@ def build_external_extension_validation_report(block: dict[str, dict[str, Any]] 
         'disabled': disabled,
         'warnings': warnings,
         'auto_fixes': auto_fixes,
+        'compatibility': compatibility,
+        'compatibility_resolver_version': IMAGE_EXTENSION_COMPATIBILITY_RESOLVER_VERSION,
         'validator_version': EXTERNAL_EXTENSION_WORKFLOW_VALIDATOR_VERSION,
         'policy': 'block_or_auto_disable_with_visible_reason',
     }
+
+
+def _validation_message_for(extension_id: str, entry: dict[str, Any]) -> str:
+    validation = _dict(entry.get('workflow_validation'))
+    compatibility = _dict(validation.get('compatibility') or _dict(entry.get('effective_state')).get('compatibility'))
+    message = str(compatibility.get('disabled_message') or '').strip()
+    reason = str(validation.get('disabled_reason') or entry.get('disabled_reason') or compatibility.get('disabled_reason') or '').strip()
+    if message and reason:
+        return f'{extension_id} — {message} ({reason})'
+    if message:
+        return f'{extension_id} — {message}'
+    if reason:
+        return f'{extension_id} — {reason}'
+    return f'{extension_id} — blocked by extension workflow validation'
+
+
+def build_external_extension_workflow_enforcement_record(payload: dict[str, Any] | None) -> dict[str, Any]:
+    """Return the Dynamic Workflow Validator enforcement shell for external extensions.
+
+    This function is read-only. It consumes the stamped extension validation
+    report and formats the data that queue-time enforcement and UI/debug
+    metadata can share.
+    """
+    payload = payload if isinstance(payload, dict) else {}
+    block = payload.get('external_extensions') if isinstance(payload.get('external_extensions'), dict) else {}
+    report = payload.get('_neo_external_extensions_validation') if isinstance(payload.get('_neo_external_extensions_validation'), dict) else build_external_extension_validation_report(block)
+    blocked_ids = _list(report.get('blocked'))
+    blocked_messages = []
+    for extension_id in blocked_ids:
+        entry = _dict(block.get(extension_id))
+        blocked_messages.append(_validation_message_for(extension_id, entry))
+    warnings = _list(report.get('warnings'))
+    auto_fixes_raw = report.get('auto_fixes') if isinstance(report.get('auto_fixes'), dict) else {}
+    auto_fixes = {str(key): _list(value) for key, value in auto_fixes_raw.items()}
+    return {
+        'version': EXTERNAL_EXTENSION_WORKFLOW_ENFORCEMENT_VERSION,
+        'validator_version': EXTERNAL_EXTENSION_WORKFLOW_VALIDATOR_VERSION,
+        'compatibility_resolver_version': IMAGE_EXTENSION_COMPATIBILITY_RESOLVER_VERSION,
+        'ok': not blocked_ids,
+        'blocked': blocked_ids,
+        'blocked_messages': blocked_messages,
+        'warnings': warnings,
+        'auto_fixes': auto_fixes,
+        'policy': 'block_enabled_incompatible_extensions_before_workflow_compile',
+        'visible': True,
+    }
+
+
+def enforce_external_extension_workflow_validation(payload: dict[str, Any] | None) -> list[str]:
+    """Block queue when enabled external extensions are incompatible.
+
+    Earlier phases could mark invalid extensions non-effective. Phase E wires that
+    result into the Dynamic Workflow Validator: if the user explicitly enabled an
+    extension and the resolver/validator blocks it, generation stops before graph
+    compile instead of silently running without the requested extension.
+    """
+    if not isinstance(payload, dict):
+        return []
+    record = build_external_extension_workflow_enforcement_record(payload)
+    payload['_neo_workflow_validator_external_extensions'] = record
+    payload['_neo_dynamic_workflow_validator_external_extensions'] = record
+    if not record.get('ok'):
+        messages = _list(record.get('blocked_messages'))
+        detail = '; '.join(messages) if messages else ', '.join(_list(record.get('blocked')))
+        raise ValueError('External extension compatibility blocked this run: ' + (detail or 'unknown extension conflict'))
+    notes: list[str] = []
+    for warning in _list(record.get('warnings')):
+        notes.append('External extension validator warning: ' + warning)
+    for extension_id, fixes in (record.get('auto_fixes') or {}).items():
+        for fix in _list(fixes):
+            notes.append(f'External extension validator auto-fix: {extension_id} {fix}')
+    return notes

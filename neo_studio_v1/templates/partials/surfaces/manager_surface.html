@@ -1600,13 +1600,13 @@
 </div>
 </div>
 <div class="mini-note" id="neo-library-output-folder-note" style="margin-top:10px;">Output folder: —</div>
-<div class="neo-library-output-inspector-layout" style="margin-top:14px;">
-<div class="grid grid-2 neo-library-caption-layout neo-library-output-top-layout">
-<div class="card-lite neo-library-preview-card neo-library-output-preview-card">
+<div class="neo-library-output-inspector-layout neo-library-output-reuse-unified" style="margin-top:14px;">
+<div class="card-lite neo-library-output-reuse-card neo-library-output-reuse-card--single-stack">
+<div class="neo-library-output-reuse-stack">
+<div class="neo-library-preview-card neo-library-output-preview-card">
 <img alt="Output preview" id="neo-library-output-preview"/>
 </div>
-<div class="card-lite neo-library-output-primary-card">
-<div class="row neo-library-output-toolbar" style="justify-content:flex-start; margin-bottom:10px; flex-wrap:wrap; gap:10px;">
+<div class="row neo-library-output-toolbar" style="justify-content:flex-start; flex-wrap:wrap; gap:10px;">
 <button class="btn" id="btn-neo-library-output-preview-full" type="button">Preview full image</button>
 <button class="btn" id="btn-neo-library-output-load-preview" onclick="window.neoLibraryDebugLoadOutputPreview &amp;&amp; window.neoLibraryDebugLoadOutputPreview()" type="button">Load as output preview</button>
 <button class="btn" id="btn-neo-library-output-send-positive" type="button">Use in Generation</button>
@@ -1623,9 +1623,9 @@
 <option value="control_scribble">Primary ControlNet · Scribble</option>
 </select>
 </div>
-<div class="mini-note" id="neo-library-output-lineage" style="margin-bottom:10px;">No lineage recorded for this output yet.</div>
-<div class="mini-note" id="neo-library-output-debug" style="margin-bottom:10px; white-space:pre-wrap;">Debug trace: idle</div>
-<div class="card-lite" style="margin-bottom:12px; padding:12px; border:1px solid rgba(59,130,246,0.16); background:rgba(15,23,42,0.16);">
+<div class="mini-note" id="neo-library-output-lineage">No lineage recorded for this output yet.</div>
+<div class="mini-note" id="neo-library-output-debug" style="white-space:pre-wrap;">Debug trace: idle</div>
+<div class="card-lite neo-library-output-replay-card neo-library-output-section-card">
 <div class="stat-title">Metadata replay</div>
 <div class="mini-note" id="neo-library-output-replay-note" style="margin-top:6px;">Pull prompts and core settings back into Generation, or rebuild the draft around this output metadata.</div>
 <div class="row" style="margin-top:10px; gap:8px; flex-wrap:wrap;">
@@ -1634,14 +1634,26 @@
 <button class="btn btn-small" id="btn-neo-library-output-rebuild-draft" type="button">Rebuild draft from output</button>
 </div>
 </div>
+<details class="accordion-block neo-library-output-visible-prompts neo-library-output-section-card" open>
+<summary>Recovered prompts</summary>
+<div class="neo-library-output-prompt-grid">
+<div>
 <label for="neo-library-output-positive">Positive prompt</label>
 <textarea id="neo-library-output-positive" placeholder="Recovered positive prompt..."></textarea>
-<label for="neo-library-output-negative" style="margin-top:14px;">Negative prompt</label>
+</div>
+<div>
+<label for="neo-library-output-negative">Negative prompt</label>
 <textarea id="neo-library-output-negative" placeholder="Recovered negative prompt..."></textarea>
 </div>
 </div>
-<div class="card-lite neo-library-output-secondary-card" style="margin-top:14px;">
-<div class="grid grid-2" style="margin-top:0;">
+</details>
+<div class="card-lite neo-library-output-reuse-summary neo-library-output-section-card" id="neo-library-output-reuse-summary">
+<div class="stat-title">Output reuse metadata</div>
+<div class="mini-note">Select an output to see prompt, workflow, model-family, source, and extension metadata.</div>
+</div>
+<details class="accordion-block neo-library-output-advanced-fields neo-library-output-section-card">
+<summary>Advanced replay fields</summary>
+<div class="neo-library-output-advanced-grid">
 <div>
 <label for="neo-library-output-adetailer-positive">ADetailer positive</label>
 <textarea id="neo-library-output-adetailer-positive" placeholder="ADetailer positive..."></textarea>
@@ -1650,15 +1662,40 @@
 <label for="neo-library-output-adetailer-negative">ADetailer negative</label>
 <textarea id="neo-library-output-adetailer-negative" placeholder="ADetailer negative..."></textarea>
 </div>
-</div>
-<label for="neo-library-output-generation" style="margin-top:14px;">Generation settings</label>
+<div>
+<label for="neo-library-output-generation">Generation settings</label>
 <textarea class="mono" id="neo-library-output-generation" placeholder="Generation settings JSON..."></textarea>
-<label for="neo-library-output-controlnet" style="margin-top:14px;">ControlNet summary</label>
+</div>
+<div>
+<label for="neo-library-output-controlnet">ControlNet summary</label>
 <textarea class="mono" id="neo-library-output-controlnet" placeholder="ControlNet JSON..."></textarea>
-<label for="neo-library-output-extra" style="margin-top:14px;">Extra params</label>
+</div>
+<div>
+<label for="neo-library-output-extra">Extra params</label>
 <textarea class="mono" id="neo-library-output-extra" placeholder="Extra generation params..."></textarea>
-<label for="neo-library-output-raw" style="margin-top:14px;">Raw parameters</label>
+</div>
+<div>
+<label for="neo-library-output-raw">Raw parameters</label>
 <textarea class="mono" id="neo-library-output-raw" placeholder="Raw PNG parameters..."></textarea>
+</div>
+</div>
+</details>
+<details class="accordion-block neo-library-output-advanced-json neo-library-output-section-card">
+<summary>Advanced reuse metadata JSON</summary>
+<label for="neo-library-output-workflow-state" style="margin-top:12px;">Workflow state</label>
+<textarea class="mono" id="neo-library-output-workflow-state" placeholder="Workflow state JSON..." readonly></textarea>
+<label for="neo-library-output-model-family" style="margin-top:12px;">Model family state</label>
+<textarea class="mono" id="neo-library-output-model-family" placeholder="Model family JSON..." readonly></textarea>
+<label for="neo-library-output-reuse-metadata" style="margin-top:12px;">Reuse metadata</label>
+<textarea class="mono" id="neo-library-output-reuse-metadata" placeholder="Reuse metadata JSON..." readonly></textarea>
+<label for="neo-library-output-source-metadata" style="margin-top:12px;">Source metadata</label>
+<textarea class="mono" id="neo-library-output-source-metadata" placeholder="Source metadata JSON..." readonly></textarea>
+<label for="neo-library-output-extension-metadata" style="margin-top:12px;">Extension metadata</label>
+<textarea class="mono" id="neo-library-output-extension-metadata" placeholder="Extension metadata JSON..." readonly></textarea>
+<label for="neo-library-output-compile-notes" style="margin-top:12px;">Compile notes</label>
+<textarea class="mono" id="neo-library-output-compile-notes" placeholder="Compile notes JSON..." readonly></textarea>
+</details>
+</div>
 </div>
 </div>
 <div class="divider"></div>

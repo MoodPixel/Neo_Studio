@@ -23,16 +23,89 @@ def _now_iso() -> str:
     return datetime.utcnow().replace(microsecond=0).isoformat() + 'Z'
 
 
-def infer_generation_family(payload: Dict[str, Any] | None) -> str:
+def _clean_family(value: Any) -> str:
+    clean = str(value or '').strip().lower()
+    aliases = {
+        'qwen': 'qwen_image_edit',
+        'qwen_image': 'qwen_image_edit',
+        'qwen-image': 'qwen_image_edit',
+        'qwen_image_gguf': 'qwen_image_edit',
+        'flux_gguf': 'flux',
+        'flux-gguf': 'flux',
+        'sd': 'sdxl_sd',
+        'sdxl': 'sdxl_sd',
+    }
+    return aliases.get(clean, clean)
+
+
+def build_model_family_state(payload: Dict[str, Any] | None) -> Dict[str, Any]:
+    """Return transparent raw/effective family metadata for jobs and sidecars.
+
+    Phase J rule: GGUF alone is not enough to infer Flux. Qwen GGUF runs must
+    remain Qwen when the payload exposes Qwen text-encoder/mmproj signals, even
+    if an older payload forgot the top-level family field.
+    """
     data = payload if isinstance(payload, dict) else {}
-    explicit = str(data.get('family') or data.get('model_family') or '').strip().lower()
+    raw_family = str(data.get('family') or data.get('model_family') or '').strip()
+    explicit = _clean_family(raw_family)
+    model_source = str(data.get('model_source') or data.get('_neo_model_source') or '').strip().lower()
+    gguf_clip_type = str(data.get('gguf_clip_type') or data.get('_neo_effective_gguf_clip_type') or '').strip().lower()
+    gguf_unet = str(data.get('gguf_unet') or data.get('_neo_effective_gguf_unet') or '').strip()
+    gguf_clip_primary = str(data.get('gguf_clip_primary') or data.get('_neo_effective_gguf_clip_primary') or '').strip()
+    gguf_clip_secondary = str(data.get('gguf_clip_secondary') or data.get('_neo_effective_gguf_clip_secondary') or '').strip()
+    gguf_clip_mode = str(data.get('gguf_clip_mode') or data.get('_neo_effective_gguf_clip_mode') or '').strip()
+    gguf_mmproj = str(data.get('gguf_mmproj') or data.get('_neo_effective_mmproj') or '').strip()
+    mmproj_required = bool(data.get('_neo_effective_mmproj_required') or data.get('mmproj_required'))
+    mmproj_source = str(data.get('_neo_effective_mmproj_source') or data.get('mmproj_source') or '').strip()
+
+    qwen_signal = (
+        explicit == 'qwen_image_edit'
+        or gguf_clip_type in {'qwen_image', 'qwen', 'qwen2_vl', 'qwen2.5_vl'}
+        or bool(gguf_mmproj)
+        or mmproj_required
+        or bool(str(data.get('qwen_image_model') or data.get('qwen_image_edit_model') or '').strip())
+    )
+    flux_signal = (
+        explicit == 'flux'
+        or bool(gguf_unet or gguf_clip_primary or gguf_clip_secondary)
+        or gguf_clip_type in {'flux', 'clip_l', 't5xxl'}
+        or gguf_clip_mode in {'dual', 'flux_dual', 'clip_dual'}
+    )
+
     if explicit:
-        return explicit
-    if str(data.get('model_source') or '').strip().lower() == 'gguf':
-        return 'flux_gguf'
-    if str(data.get('gguf_unet') or '').strip() or str(data.get('gguf_clip_primary') or '').strip() or str(data.get('gguf_clip_secondary') or '').strip():
-        return 'flux_gguf'
-    return 'sdxl_sd'
+        effective_family = explicit
+        inference_source = 'explicit_family'
+    elif qwen_signal:
+        effective_family = 'qwen_image_edit'
+        inference_source = 'qwen_gguf_signal'
+    elif model_source == 'gguf' and flux_signal:
+        effective_family = 'flux'
+        inference_source = 'flux_gguf_signal'
+    elif model_source == 'gguf':
+        effective_family = 'flux'
+        inference_source = 'gguf_default_flux'
+    else:
+        effective_family = 'sdxl_sd'
+        inference_source = 'default_sdxl_sd'
+
+    return {
+        'raw_family': raw_family,
+        'effective_family': effective_family,
+        'model_source': model_source,
+        'family_inference_source': inference_source,
+        'gguf_clip_type': gguf_clip_type,
+        'gguf_clip_mode': gguf_clip_mode,
+        'gguf_unet': gguf_unet,
+        'gguf_clip_primary': gguf_clip_primary,
+        'gguf_clip_secondary': gguf_clip_secondary,
+        'mmproj_required': mmproj_required,
+        'mmproj_source': mmproj_source,
+        'gguf_mmproj': gguf_mmproj,
+    }
+
+
+def infer_generation_family(payload: Dict[str, Any] | None) -> str:
+    return str(build_model_family_state(payload).get('effective_family') or 'sdxl_sd')
 
 
 def normalize_job_status(value: str = '') -> str:
@@ -75,6 +148,7 @@ def build_generation_job_record(*, payload: Dict[str, Any], backend_profile: Dic
         'job_id': job_id,
         'surface': 'generate',
         'family': family,
+        'model_family_state': build_model_family_state(payload),
         'media_type': 'image',
         'created_at': now,
         'updated_at': now,
@@ -145,6 +219,7 @@ def normalize_job_record(record: Dict[str, Any] | None) -> Dict[str, Any]:
         'job_id': job_id,
         'surface': str(row.get('surface') or 'generate'),
         'family': family,
+        'model_family_state': row.get('model_family_state') if isinstance(row.get('model_family_state'), dict) else build_model_family_state(payload),
         'media_type': str(row.get('media_type') or 'image'),
         'created_at': created_at,
         'updated_at': updated_at,

@@ -26,6 +26,15 @@ from .external_extension_policies import (
     normalize_external_extension_policies,
 )
 
+from .image_extension_targets import (
+    IMAGE_EXTENSION_TARGET_CONTRACT_VERSION,
+    VALID_IMAGE_EXTENSION_TARGET_OR_SECTION_IDS,
+    image_extension_target_contract,
+    normalize_image_extension_targets,
+    validate_image_extension_targets,
+)
+
+
 SCHEMA_VERSION = 1
 MANIFEST_FILENAME = 'neo_extension.json'
 LEGACY_MANIFEST_FILENAME = 'manifest.json'
@@ -44,9 +53,7 @@ VALID_PERMISSION_KEYS = {
 
 VALID_EXTENSION_TYPES = {'external_extension', 'built_in_module'}
 
-VALID_EXTERNAL_TARGET_SECTIONS = {
-    'base_generation', 'build', 'prompt_stack', 'reference', 'finish', 'assets', 'output', 'preview', 'extensions'
-}
+VALID_EXTERNAL_TARGET_SECTIONS = set(VALID_IMAGE_EXTENSION_TARGET_OR_SECTION_IDS)
 VALID_EXTERNAL_WORKFLOWS = {'txt2img', 'img2img', 'inpaint', 'outpaint', 'lanpaint', 'any'}
 EXTERNAL_MANIFEST_REQUIRED_FIELDS = (
     'id', 'type', 'surface', 'name', 'version', 'target_sections', 'supported_workflows',
@@ -63,7 +70,6 @@ EXTERNAL_EXTENSION_ID_PATTERN = re.compile(r'^(?P<surface>[a-z][a-z0-9_]*)\.(?P<
 EXTERNAL_EXTENSION_METADATA_ADAPTER_VERSION = 'external-extension-metadata-adapter-v1'
 EXTERNAL_EXTENSION_UI_CONTRACT_VERSION = 'external-extension-ui-contract-v1'
 EXTERNAL_EXTENSION_DEFAULT_UI_SHELL = 'standard_collapsible'
-
 
 
 def _now_iso() -> str:
@@ -326,6 +332,9 @@ def extension_manifest_template() -> dict[str, Any]:
         'target_surface': 'image',
         'surface': 'image',
         'target_sections': [],
+        'extension_targets': [],
+        'extension_target_contract_version': IMAGE_EXTENSION_TARGET_CONTRACT_VERSION,
+        'target_contract': image_extension_target_contract([]),
         'supported_workflows': [],
         'supported_model_families': [],
         'source_policy': [DEFAULT_SOURCE_POLICY],
@@ -429,6 +438,7 @@ def normalize_extension_manifest(raw: dict[str, Any] | None, *, manifest_path: s
     permissions = _list(data.get('permissions'))
     requires_nodes = _list(comfy.get('requires_nodes') or data.get('requires_nodes') or data.get('required_nodes'))
     target_sections = _lower_list(data.get('target_sections') or data.get('sections') or data.get('injects_sections'))
+    extension_targets = normalize_image_extension_targets(data.get('extension_targets') or data.get('targets') or target_sections)
     supported_workflows = _lower_list(data.get('supported_workflows') or data.get('workflows_supported') or data.get('workflow_modes'))
     supported_model_families = _lower_list(data.get('supported_model_families') or data.get('model_families') or data.get('families') or data.get('allowed_families'))
     policy_contract = normalize_external_extension_policies(data)
@@ -472,6 +482,9 @@ def normalize_extension_manifest(raw: dict[str, Any] | None, *, manifest_path: s
         'target_surface': target_surface,
         'surface': _clean_key(data.get('surface') or target_surface),
         'target_sections': target_sections,
+        'extension_targets': extension_targets,
+        'extension_target_contract_version': IMAGE_EXTENSION_TARGET_CONTRACT_VERSION,
+        'target_contract': image_extension_target_contract(extension_targets),
         'supported_workflows': supported_workflows,
         'supported_model_families': supported_model_families,
         'source_policy': source_policy,
@@ -571,6 +584,11 @@ def validate_extension_manifest(raw: dict[str, Any] | None) -> dict[str, Any]:
         for section in manifest['target_sections']:
             if section not in VALID_EXTERNAL_TARGET_SECTIONS:
                 errors.append(f"external extension target section '{section}' is not registered.")
+        if manifest.get('surface') == 'image' or manifest.get('target_surface') == 'image':
+            target_validation = validate_image_extension_targets(manifest.get('extension_targets') or manifest.get('target_sections') or [])
+            warnings.extend(target_validation.get('warnings') or [])
+            if not manifest.get('extension_targets'):
+                warnings.append('image external extension should declare extension_targets or target_sections for section-aware compatibility.')
         for workflow in manifest['supported_workflows']:
             if workflow not in VALID_EXTERNAL_WORKFLOWS:
                 errors.append(f"external extension workflow '{workflow}' is not registered.")
@@ -666,6 +684,9 @@ def manifest_to_extension_pack(manifest: dict[str, Any], *, enabled: bool | None
         'target_subtab': clean['target_subtab'],
         'workspace': clean['workspace'],
         'target_sections': clean['target_sections'],
+        'extension_targets': clean.get('extension_targets', []),
+        'extension_target_contract_version': clean.get('extension_target_contract_version', IMAGE_EXTENSION_TARGET_CONTRACT_VERSION),
+        'target_contract': clean.get('target_contract', image_extension_target_contract(clean.get('extension_targets', []))),
         'supported_workflows': clean['supported_workflows'],
         'supported_model_families': clean['supported_model_families'],
         'source_policy': clean['source_policy'],

@@ -386,6 +386,27 @@ window.NeoGenerationDraftState.collectGenerationDraft = function collectGenerati
     wildcard_queue_count: $('generation-wildcard-queue-count')?.value || '3',
     notes: $('generation-workflow-notes')?.value || '',
   };
+  draft.workflow_state = window.NeoImageState?.buildPersistedWorkflowState
+    ? window.NeoImageState.buildPersistedWorkflowState({
+        reason: 'draft_save',
+        output_policy: draft.output_policy || draft._neo_output_policy || 'new_current_run',
+        batch_size: draft.batch_size,
+        outpaintExpansion: {
+          left: draft.outpaint_left,
+          top: draft.outpaint_top,
+          right: draft.outpaint_right,
+          bottom: draft.outpaint_bottom,
+        },
+      })
+    : {
+        schema_version: 1,
+        owner: 'legacy_dom_fallback',
+        raw_state: { mode: draft.workflow_type || 'txt2img', workflow_type: draft.workflow_type || 'txt2img' },
+        effective_state: { mode: draft.workflow_type || 'txt2img', workflow_type: draft.workflow_type || 'txt2img' },
+        transition: { switch_reason: 'draft_save' },
+        version: 'phase_i_save_restore_metadata_v1',
+      };
+  draft._neo_workflow_state = draft.workflow_state?.workflow_state || draft.workflow_state;
   draft.res4lyf = buildGenerationRES4LYFPersistenceMeta(draft.sampler, draft.scheduler);
   return sanitizeGenerationDraftState(draft);
 }
@@ -476,14 +497,22 @@ window.NeoGenerationDraftState.applyGenerationDraft = function applyGenerationDr
   generationDraftApplyInProgress = true;
   try {
     if ($('generation-family')) $('generation-family').value = draft.family || 'sdxl_sd';
-    if ($('generation-workflow-type')) $('generation-workflow-type').value = draft.workflow_type || 'txt2img';
     if ($('generation-model-source')) $('generation-model-source').value = draft.model_source || 'checkpoint';
     if (window.NeoGenerationFamilyRouter?.setActiveFamily) window.NeoGenerationFamilyRouter.setActiveFamily(draft.family || '', { silent:true });
     const resolvedDef = window.NeoGenerationFamilyRouter?.defs?.[$('generation-family')?.value || draft.family || 'sdxl_sd'];
     const allowedModes = Array.isArray(resolvedDef?.allowedModes) && resolvedDef.allowedModes.length ? resolvedDef.allowedModes : ['txt2img'];
-    const requestedMode = String(draft.workflow_type || 'txt2img').trim();
+    const requestedMode = String(draft.workflow_state?.effective_state?.mode || draft.workflow_state?.raw_state?.mode || draft.workflow_type || 'txt2img').trim();
     const restoredUnsupportedMode = !allowedModes.includes(requestedMode);
-    if ($('generation-workflow-type') && restoredUnsupportedMode) $('generation-workflow-type').value = allowedModes[0];
+    const restoredMode = restoredUnsupportedMode ? allowedModes[0] : requestedMode;
+    if (window.NeoImageState?.restoreWorkflowState && draft.workflow_state) {
+      window.NeoImageState.restoreWorkflowState(draft.workflow_state, { mode: restoredMode, reason: restoredUnsupportedMode ? 'draft_restore_family_guardrail' : 'draft_restore' });
+    } else if (window.setGenerationWorkflowMode) {
+      window.setGenerationWorkflowMode(restoredMode, { reason: restoredUnsupportedMode ? 'draft_restore_family_guardrail' : 'draft_restore', validate: true, forceReveal: true });
+    } else {
+      if ($('generation-workflow-type')) $('generation-workflow-type').value = restoredMode;
+      if (window.NeoImageState?.setWorkflowMode) window.NeoImageState.setWorkflowMode(restoredMode, { reason: restoredUnsupportedMode ? 'draft_restore_family_guardrail' : 'draft_restore', force_event: true });
+    }
+    if ($('generation-workflow-type')) $('generation-workflow-type').value = restoredMode;
     if ($('generation-checkpoint')) $('generation-checkpoint').value = draft.checkpoint || '';
     if ($('generation-gguf-unet')) $('generation-gguf-unet').value = draft.gguf_unet || '';
     if ($('generation-gguf-clip-mode')) $('generation-gguf-clip-mode').value = draft.gguf_clip_mode || 'dual';
@@ -731,6 +760,9 @@ window.NeoGenerationDraftState.applyGenerationDraft = function applyGenerationDr
     }
 
     populateGenerationSizePresetSelect(draft.size_preset || 'custom');
+    if (window.NeoImageState?.restoreWorkflowState && draft.workflow_state) {
+      window.NeoImageState.restoreWorkflowState(draft.workflow_state, { reason: 'draft_restore_final_sync' });
+    }
     syncGenerationSizePresetSelectionFromInputs();
     setGenerationSeedLock(!!draft.seed_locked);
     refreshGenerationDynamicOptions();
@@ -907,6 +939,15 @@ window.NeoGenerationDraftState.buildGenerationResetDraft = function buildGenerat
     wildcard_queue_count: '3',
     notes: '',
   };
+  draft.workflow_state = {
+    schema_version: 1,
+    owner: 'NeoImageState',
+    raw_state: { mode: 'txt2img', workflow_type: 'txt2img', source_kind: 'none', source_id: '', output_policy: 'new_current_run' },
+    effective_state: { mode: 'txt2img', workflow_type: 'txt2img', source_kind: 'none', source_id: '', output_policy: 'new_current_run', validation_status: 'valid' },
+    transition: { switch_reason: 'reset_draft', restored_by: 'setGenerationWorkflowMode' },
+    version: 'phase_i_save_restore_metadata_v1',
+  };
+  draft._neo_workflow_state = draft.workflow_state;
   return sanitizeGenerationDraftState(draft);
 }
 

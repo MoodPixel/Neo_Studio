@@ -1880,6 +1880,56 @@ function generationPassTargetLabel(value) {
   return 'Both passes';
 }
 
+
+function generationOutputValue(value, fallback='—') {
+  if (value === undefined || value === null || value === '') return fallback;
+  if (typeof value === 'boolean') return value ? 'yes' : 'no';
+  if (Array.isArray(value)) return value.length ? `${value.length} item${value.length === 1 ? '' : 's'}` : fallback;
+  if (typeof value === 'object') return Object.keys(value).length ? JSON.stringify(value) : fallback;
+  return String(value);
+}
+
+function generationOutputJsonMaybe(value) {
+  if (!value) return {};
+  if (typeof value === 'object') return value;
+  try {
+    const parsed = JSON.parse(String(value));
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch (_) {
+    return {};
+  }
+}
+
+function generationOutputNestedValue(source, ...keys) {
+  let cursor = source;
+  for (const key of keys) {
+    if (!cursor || typeof cursor !== 'object') return undefined;
+    cursor = cursor[key];
+  }
+  return cursor;
+}
+
+function generationOutputFirstValue(...values) {
+  for (const value of values) {
+    if (value !== undefined && value !== null && value !== '') return value;
+  }
+  return '';
+}
+
+function renderGenerationOutputMetaRows(rows) {
+  return rows
+    .filter(row => row && row[1] !== undefined && row[1] !== null && row[1] !== '')
+    .map(([label, value]) => `<div class="generation-output-meta-row"><span>${escapeHtml(label)}</span><strong>${escapeHtml(generationOutputValue(value))}</strong></div>`)
+    .join('');
+}
+
+function renderGenerationOutputPromptBlock(title, text) {
+  const value = String(text || '').trim();
+  if (!value) return '';
+  const preview = value.length > 700 ? `${value.slice(0, 700)}…` : value;
+  return `<details class="generation-output-meta-block" open><summary>${escapeHtml(title)}</summary><div class="generation-output-prompt-preview">${escapeHtml(preview)}</div></details>`;
+}
+
 function renderGenerationOutputDetails(item) {
   const wrap = $('generation-output-details');
   if (!wrap) return;
@@ -1890,10 +1940,71 @@ function renderGenerationOutputDetails(item) {
   const sourceName = item.saved_filename || item.filename || 'output';
   const savePath = item.saved_path || '';
   const sidecar = item.sidecar_path || '';
+  const reuse = generationOutputJsonMaybe(item.reuse_metadata);
+  const workflow = generationOutputFirstValue(
+    item.workflow_state,
+    generationOutputNestedValue(reuse, 'workflow_state'),
+    generationOutputNestedValue(item, 'reuse_metadata', 'workflow_state')
+  ) || {};
+  const workflowBlock = generationOutputJsonMaybe(workflow.workflow_state || workflow);
+  const family = generationOutputFirstValue(
+    item.model_family_state,
+    generationOutputNestedValue(reuse, 'model_family_state'),
+    generationOutputNestedValue(item, 'reuse_metadata', 'model_family_state')
+  ) || {};
+  const familyBlock = generationOutputJsonMaybe(family);
+  const generation = generationOutputJsonMaybe(generationOutputFirstValue(item.generation, generationOutputNestedValue(reuse, 'generation')));
+  const source = generationOutputJsonMaybe(generationOutputNestedValue(reuse, 'source') || {});
+  const notes = Array.isArray(item.compile_notes) ? item.compile_notes : (Array.isArray(reuse.compile_notes) ? reuse.compile_notes : []);
+  const prompt = generationOutputFirstValue(item.prompt, reuse.prompt, item.main_positive, generationOutputNestedValue(item, 'main', 'positive_box'));
+  const negative = generationOutputFirstValue(item.negative_prompt, reuse.negative_prompt, item.main_negative, generationOutputNestedValue(item, 'main', 'negative_box'));
+  const effectiveFamily = generationOutputFirstValue(familyBlock.effective_family, familyBlock.raw_family, item.family);
+  const workflowMode = generationOutputFirstValue(workflowBlock.effective_mode, workflowBlock.raw_mode, workflowBlock.mode, workflowBlock.workflow_type, generation.Mode);
+  const sourceKind = generationOutputFirstValue(workflowBlock.source_kind, generationOutputNestedValue(source, 'source_image_fields', 'source_kind'));
+  const outputPolicy = generationOutputFirstValue(workflowBlock.output_policy, workflowBlock.effective_output_policy);
+  const modelRows = [
+    ['Family', effectiveFamily],
+    ['Model source', familyBlock.model_source],
+    ['Checkpoint', generationOutputFirstValue(generation.Checkpoint, generation.checkpoint, familyBlock.checkpoint)],
+    ['GGUF UNet', familyBlock.gguf_unet],
+    ['GGUF CLIP type', familyBlock.gguf_clip_type],
+    ['CLIP mode', familyBlock.gguf_clip_mode],
+    ['Primary CLIP', familyBlock.gguf_clip_primary],
+    ['Secondary CLIP', familyBlock.gguf_clip_secondary],
+    ['Qwen MMProj', familyBlock.gguf_mmproj],
+    ['MMProj source', familyBlock.mmproj_source],
+  ];
+  const generationRows = [
+    ['Workflow', workflowMode],
+    ['Source', sourceKind],
+    ['Output policy', outputPolicy],
+    ['Validation', generationOutputFirstValue(workflowBlock.validation_status, workflowBlock.valid ? 'valid' : '')],
+    ['Seed', generationOutputFirstValue(generation.Seed, generation.seed)],
+    ['Sampler', generationOutputFirstValue(generation.Sampler, generation.sampler)],
+    ['Scheduler', generationOutputFirstValue(generation.Scheduler, generation.scheduler)],
+    ['Steps', generationOutputFirstValue(generation.Steps, generation.steps)],
+    ['CFG', generationOutputFirstValue(generation['CFG scale'], generation.cfg)],
+    ['Size', generationOutputFirstValue(generation.Size, generation.size)],
+    ['VAE', generationOutputFirstValue(generation.VAE, generation.vae)],
+  ];
   wrap.innerHTML = `
-    <div class="mini-note">${escapeHtml(sourceName)}</div>
-    ${savePath ? `<div class="mini-note generation-path-chip">${escapeHtml(savePath)}</div>` : ''}
-    ${sidecar ? `<div class="mini-note generation-path-chip">sidecar: ${escapeHtml(sidecar)}</div>` : ''}
+    <div class="generation-output-meta-card">
+      <div class="generation-output-meta-head">
+        <div>
+          <div class="mini-note">${escapeHtml(sourceName)}</div>
+          ${savePath ? `<div class="mini-note generation-path-chip">${escapeHtml(savePath)}</div>` : ''}
+          ${sidecar ? `<div class="mini-note generation-path-chip">sidecar: ${escapeHtml(sidecar)}</div>` : ''}
+        </div>
+        <div class="generation-output-meta-pill">${escapeHtml(effectiveFamily || 'metadata')}</div>
+      </div>
+      <div class="generation-output-meta-grid">
+        <div class="generation-output-meta-block"><div class="generation-output-meta-title">Workflow</div>${renderGenerationOutputMetaRows(generationRows)}</div>
+        <div class="generation-output-meta-block"><div class="generation-output-meta-title">Model family</div>${renderGenerationOutputMetaRows(modelRows)}</div>
+      </div>
+      ${renderGenerationOutputPromptBlock('Prompt', prompt)}
+      ${renderGenerationOutputPromptBlock('Negative prompt', negative)}
+      ${notes.length ? `<details class="generation-output-meta-block"><summary>Compile notes</summary><div class="generation-output-prompt-preview">${escapeHtml(notes.slice(0, 8).join('\n'))}</div></details>` : ''}
+    </div>
   `;
 }
 

@@ -2,7 +2,7 @@
   'use strict';
 
   const MANAGER_SLOT = 'image.extensions.manager';
-  const SHELL_VERSION = 'standard-extension-shell-all-mount-paths-v1';
+  const SHELL_VERSION = 'standard-extension-shell-all-mount-paths-v2-section-mounts';
   const SHELL_SELECTOR = '[data-neo-standard-extension-shell="true"]';
   const RUNTIME_ROOT_SELECTOR = '[data-neo-extension-panel-runtime-root="true"]';
   const WRAPPABLE_PANEL_SELECTOR = [
@@ -70,6 +70,51 @@
     return store && typeof store.getExtension === 'function' ? store.getExtension(extensionId) : null;
   }
 
+
+  function activeImageWorkflowMode() {
+    const api = window.NeoImageState;
+    if (api && typeof api.getState === 'function') {
+      try {
+        const snapshot = asObject(api.getState());
+        return text(snapshot.workflow_type || snapshot.mode || '');
+      } catch (_) {}
+    }
+    return text(document.getElementById('generation-workflow-type')?.value || '');
+  }
+
+
+  function compatibilityMeta(extensionId, validation, effective) {
+    const core = coreSnapshot();
+    const id = text(extensionId).toLowerCase();
+    const fromCore = asObject(asObject(asObject(core.compatibility).results)[id]);
+    return asObject(effective.compatibility || validation.compatibility || fromCore);
+  }
+
+  function compatibilityForRecord(record) {
+    const core = coreSnapshot();
+    const id = text(asObject(record).extension_id || asObject(record).id).toLowerCase();
+    return asObject(asObject(asObject(core.compatibility).results)[id]);
+  }
+
+  function slotFromMountMeta(meta) {
+    const mount = asObject(meta);
+    return text(mount.slot || mount.mount || mount.mount_point || '');
+  }
+
+  function sectionMountForRecord(record) {
+    const src = asObject(record);
+    const compat = compatibilityForRecord(src);
+    const primarySlot = slotFromMountMeta(compat.primary_mount);
+    if (primarySlot) return primarySlot;
+    const schema = asObject(src.ui_schema);
+    const schemaMount = text(schema.mount || src.mount_point || src.mount);
+    return schemaMount || MANAGER_SLOT;
+  }
+
+  function messageList(value) {
+    return asArray(value).map(item => typeof item === 'string' ? item : text(item.message || item.code)).filter(Boolean);
+  }
+
   function resolveExtensionId(panel) {
     if (!panel) return '';
     const explicit = text(panel.dataset.extensionId || panel.dataset.neoExtensionId || panel.dataset.neoExternalExtensionPanel || panel.getAttribute('data-extension-id'));
@@ -86,13 +131,16 @@
     const raw = asObject(core.raw && core.raw[extensionId] || storeEntry.raw_state);
     const effective = asObject(core.effective && core.effective[extensionId] || storeEntry.effective_state);
     const validation = asObject(storeEntry.validation || core.validation_state?.[extensionId] || effective.workflow_validation);
-    const warnings = asArray(validation.warnings).concat(asArray(record.warnings), asArray(effective.warnings));
-    const errors = asArray(validation.errors).concat(validation.disabled_reason ? [validation.disabled_reason] : []).concat(effective.disabled_reason ? [effective.disabled_reason] : []);
+    const compat = compatibilityMeta(extensionId, validation, effective);
+    const warnings = asArray(validation.warnings).concat(asArray(record.warnings), asArray(effective.warnings), messageList(compat.warnings));
+    const compatReason = text(compat.disabled_message || compat.disabled_reason || '');
+    const errors = asArray(validation.errors).concat(validation.disabled_reason ? [validation.disabled_reason] : []).concat(effective.disabled_reason ? [effective.disabled_reason] : []).concat(compat.blocked && compatReason ? [compatReason] : []);
     const enabled = !!raw.enabled || !!storeEntry.enabled || !!effective.enabled || !!effective.effective_enabled || !!record.enabled;
     const active = !!effective.effective_enabled || (!!enabled && !errors.length && text(record.status).toLowerCase() !== 'invalid');
-    const workflowMode = text(effective.workflow_mode || effective.workflow || raw.workflow_mode || record.workflow_mode || record.workflow?.mode || '');
+    const activeWorkflow = text(effective.active_image_workflow?.workflow_type || effective.active_image_workflow?.mode || activeImageWorkflowMode());
+    const workflowMode = text(effective.workflow_mode || effective.workflow || raw.workflow_mode || compat.workflow || record.workflow_mode || record.workflow?.mode || '');
     const outputPolicy = text(effective.output_policy || raw.output_policy || record.output_policy?.[0] || record.output?.policy || '');
-    const target = text(effective.output_target || raw.output_target || record.output_target || record.target_surface || record.surface || '');
+    const target = text(effective.output_target || raw.output_target || asArray(compat.targets).join(', ') || record.output_target || record.target_surface || record.surface || '');
     const primary = text(effective.primary_output_type || record.output?.primary_type || record.output_visibility?.primary_type || '');
     const batch = text(effective.batch_policy || record.batch_policy || '');
     return {
@@ -102,8 +150,8 @@
       enabled,
       active,
       dirty: !!storeEntry.dirty,
-      status: errors.length ? 'Blocked' : active ? 'Ready' : enabled ? 'Pending' : 'Disabled',
-      disabledReason: text(validation.disabled_reason || effective.disabled_reason || record.disabled_reason || ''),
+      status: errors.length ? 'Blocked' : compat.status ? titleCase(compat.status) : active ? 'Ready' : enabled ? 'Pending' : 'Disabled',
+      disabledReason: text(validation.disabled_reason || effective.disabled_reason || compatReason || record.disabled_reason || ''),
       warnings: [...new Set(warnings.map(text).filter(Boolean))],
       errors: [...new Set(errors.map(text).filter(Boolean))],
       chips: [
@@ -111,7 +159,10 @@
         errors.length ? 'Blocked' : active ? 'Ready' : '',
         target ? `Target: ${target}` : '',
         outputPolicy ? `Output: ${outputPolicy}` : '',
-        workflowMode ? `Workflow: ${workflowMode}` : '',
+        activeWorkflow ? `Active: ${activeWorkflow}` : '',
+        workflowMode ? `Ext mode: ${workflowMode}` : '',
+        compat.family ? `Family: ${compat.family}` : '',
+        compat.status ? `Compat: ${compat.status}` : '',
         primary ? `Primary: ${primary}` : '',
         batch ? `Batch: ${batch}` : '',
         storeEntry.dirty ? 'Dirty' : ''
@@ -231,8 +282,8 @@
     document.querySelectorAll(SHELL_SELECTOR).forEach(refreshShell);
   }
 
-  function findMount(schema) {
-    const mount = text(schema.mount || MANAGER_SLOT);
+  function findMount(schema, record = {}) {
+    const mount = sectionMountForRecord(record) || text(asObject(schema).mount || MANAGER_SLOT);
     const safeMount = cssEscape(mount);
     return document.querySelector(`[data-neo-external-extension-slot="${safeMount}"], [data-neo-extension-slot="${safeMount}"]`)
       || document.getElementById('neo-ext-slot-image-extensions-manager');
@@ -268,7 +319,7 @@
     if (renderer && typeof renderer.render === 'function') {
       recordsWithSchemas().forEach(record => {
         const schema = asObject(record.ui_schema);
-        const mountEl = findMount(schema);
+        const mountEl = findMount(schema, record);
         if (!mountEl) return;
         if (!grouped.has(mountEl)) grouped.set(mountEl, []);
         grouped.get(mountEl).push(record);

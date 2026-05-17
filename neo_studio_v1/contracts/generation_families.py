@@ -68,7 +68,7 @@ GENERATION_FAMILY_DEFINITIONS = {
             'txt2img': True,
             'img2img': True,
             'inpaint': False,
-            'outpaint': False,
+            'outpaint': True,
             'controlnet': False,
             'ipadapter': False,
             'lora': True,
@@ -80,7 +80,8 @@ GENERATION_FAMILY_DEFINITIONS = {
                 'lanpaint': {'enabled': False, 'status': 'planned', 'reason': 'Flux inpaint is staged for a later LanPaint pass and is not available yet.'},
             },
             'outpaint': {
-                'lanpaint': {'enabled': False, 'status': 'planned', 'reason': 'Flux outpaint is staged for a later LanPaint pass and is not available yet.'},
+                'standard': {'enabled': True, 'status': 'experimental', 'reason': 'Flux outpaint uses the standard padded-source latent outpaint route with Flux sampling, not a LanPaint route.'},
+                'lanpaint': {'enabled': False, 'status': 'planned', 'reason': 'Flux LanPaint outpaint is staged for a later pass; use the standard Flux padded-source outpaint route instead.'},
             },
         },
         'visible_sections': ['workspace_setup', 'build', 'assets', 'finish', 'helper', 'results', 'preview'],
@@ -99,7 +100,7 @@ GENERATION_FAMILY_DEFINITIONS = {
             'txt2img': True,
             'img2img': True,
             'inpaint': True,
-            'outpaint': False,
+            'outpaint': True,
             'controlnet': False,
             'ipadapter': False,
             'lora': False,
@@ -109,11 +110,11 @@ GENERATION_FAMILY_DEFINITIONS = {
         'mode_backend_support': {
             'inpaint': {
                 'standard': {'enabled': False, 'status': 'unavailable', 'reason': 'Qwen Image Edit routes live inpaint through LanPaint, not the standard latent path.'},
-                'lanpaint': {'enabled': True, 'status': 'experimental', 'reason': 'Qwen LanPaint inpaint is live in this build. Composition guidance and outpaint still land in later phases.'},
+                'lanpaint': {'enabled': True, 'status': 'experimental', 'reason': 'Qwen LanPaint inpaint is live in this build. Outpaint uses the separate Qwen padded-source image-edit route.'},
             },
             'outpaint': {
-                'standard': {'enabled': False, 'status': 'unavailable', 'reason': 'Qwen Image Edit does not use the standard latent outpaint path.'},
-                'lanpaint': {'enabled': False, 'status': 'planned', 'reason': 'Qwen LanPaint outpaint is still staged for a later pass.'},
+                'standard': {'enabled': True, 'status': 'experimental', 'reason': 'Qwen Image Edit outpaint uses the Qwen image-edit padded-source route, not the SDXL latent outpaint sampler path.'},
+                'lanpaint': {'enabled': False, 'status': 'planned', 'reason': 'Qwen LanPaint outpaint is not used for this route; use the Qwen image-edit padded-source route instead.'},
             },
         },
         'visible_sections': ['workspace_setup', 'build', 'assets', 'finish', 'helper', 'results', 'preview'],

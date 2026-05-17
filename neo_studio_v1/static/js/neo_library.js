@@ -802,10 +802,46 @@ async function neoLibraryRouteImageToGeneration(file, target='img2img') {
     control_lineart: 'lineart',
     control_scribble: 'scribble',
   };
-  if (target === 'img2img' || target === 'inpaint' || target === 'outpaint') {
+  const targetMode = window.NeoImageState?.normalizeWorkflowMode ? window.NeoImageState.normalizeWorkflowMode(target, 'img2img') : String(target || '').trim().toLowerCase();
+  if (targetMode === 'img2img' || targetMode === 'inpaint' || targetMode === 'outpaint') {
     assignFileToInput('generation-source-image', file);
-    if ($('generation-workflow-type')) $('generation-workflow-type').value = target;
-    if (typeof syncGenerationModeUI === 'function') syncGenerationModeUI();
+    const sourceName = file?.name || 'library_image.png';
+    if (window.NeoImageState?.lockUploadedSource) {
+      window.NeoImageState.lockUploadedSource(sourceName, 'neo-library-image-route');
+    } else if (window.NeoImageState?.updateSource) {
+      window.NeoImageState.updateSource({
+        active_source_image: sourceName,
+        explicit_source_type: 'library_image',
+        source_route_state: {
+          source_kind: 'library_image',
+          source_name: sourceName,
+          routed_at: new Date().toISOString(),
+          route_source: 'neo-library-image-route',
+        },
+      }, 'neo-library-image-route');
+    }
+    if (window.setGenerationWorkflowMode) {
+      window.setGenerationWorkflowMode(targetMode, {
+        source: 'neo-library-image-route',
+        reason: 'library_send_to_generation_mode',
+        sourceKind: 'library_image',
+        sourceName,
+        outputPolicy: 'new_current_run',
+        forceReveal: targetMode === 'outpaint' ? 'assets' : 'core',
+        validate: true,
+      });
+    } else if ($('generation-workflow-type')) {
+      $('generation-workflow-type').value = targetMode;
+      if (typeof syncGenerationModeUI === 'function') syncGenerationModeUI();
+    }
+    if (targetMode === 'inpaint' || targetMode === 'outpaint') {
+      try { if (typeof clearGenerationImageInput === 'function') clearGenerationImageInput('generation-mask-image'); } catch (_) {}
+    }
+    if (targetMode === 'outpaint') {
+      try { if (typeof focusGenerationSetupTab === 'function') focusGenerationSetupTab('assets', 'generation-outpaint-settings'); } catch (_) {}
+    } else {
+      try { if (typeof focusGenerationSetupTab === 'function') focusGenerationSetupTab('core'); } catch (_) {}
+    }
     return;
   }
   if (target === 'control_current' || controlUnitMap[target]) {
@@ -984,6 +1020,151 @@ async function deleteNeoLibraryCaption() {
   }
 }
 
+
+function neoLibraryParseJsonObject(value, fallback={}) {
+  if (!value) return fallback;
+  if (typeof value === 'object') return value;
+  try {
+    const parsed = JSON.parse(String(value));
+    return parsed && typeof parsed === 'object' ? parsed : fallback;
+  } catch (_) {
+    return fallback;
+  }
+}
+
+function neoLibraryFirstPresent(...values) {
+  for (const value of values) {
+    if (value !== undefined && value !== null && value !== '') return value;
+  }
+  return '';
+}
+
+function neoLibraryDisplayValue(value, fallback='—') {
+  if (value === undefined || value === null || value === '') return fallback;
+  if (typeof value === 'boolean') return value ? 'yes' : 'no';
+  if (Array.isArray(value)) return value.length ? `${value.length} item${value.length === 1 ? '' : 's'}` : fallback;
+  if (typeof value === 'object') return Object.keys(value).length ? JSON.stringify(value) : fallback;
+  return String(value);
+}
+
+function neoLibraryMetadataRows(rows) {
+  return rows
+    .filter(row => row && row[1] !== undefined && row[1] !== null && row[1] !== '')
+    .map(([label, value]) => `<div class="neo-library-output-meta-row"><span>${escapeHtml(label)}</span><strong>${escapeHtml(neoLibraryDisplayValue(value))}</strong></div>`)
+    .join('') || '<div class="mini-note">No visible metadata for this block.</div>';
+}
+
+function renderNeoLibraryOutputReuseMetadata(rec={}) {
+  let target = $('neo-library-output-reuse-summary');
+  if (!target) {
+    const previewPane = document.querySelector('.neo-library-output-reuse-preview-pane') || document.querySelector('.neo-library-output-reuse-card');
+    if (!previewPane) return;
+    target = document.createElement('div');
+    target.id = 'neo-library-output-reuse-summary';
+    target.className = 'card-lite neo-library-output-reuse-summary';
+    const lineageNode = $('neo-library-output-lineage');
+    if (lineageNode && lineageNode.parentElement === previewPane) {
+      previewPane.insertBefore(target, lineageNode);
+    } else {
+      previewPane.appendChild(target);
+    }
+  }
+  const reuse = neoLibraryParseJsonObject(rec.reuse_metadata_json || rec.reuse_metadata || '{}');
+  const workflow = neoLibraryParseJsonObject(rec.workflow_state_json || rec.workflow_state || reuse.workflow_state || '{}');
+  const model = neoLibraryParseJsonObject(rec.model_family_json || rec.model_family_state || reuse.model_family_state || '{}');
+  const generation = neoLibraryParseJsonObject(rec.generation_json || reuse.generation || '{}');
+  const source = neoLibraryParseJsonObject(rec.source_metadata_json || rec.source_metadata || reuse.source || '{}');
+  const extensions = neoLibraryParseJsonObject(rec.extension_metadata_json || rec.extension_metadata || reuse.external_extensions || '{}');
+  const notesRaw = neoLibraryParseJsonObject(rec.compile_notes_json || rec.compile_notes || reuse.compile_notes || '[]', []);
+  const notes = Array.isArray(notesRaw) ? notesRaw : [];
+  const workflowBlock = neoLibraryParseJsonObject(workflow.workflow_state || workflow || '{}');
+  const payload = neoLibraryParseJsonObject(rec.payload_json || rec.payload || reuse.payload || '{}');
+  const main = neoLibraryParseJsonObject(rec.main_json || rec.main || reuse.main || '{}');
+  const prompt = neoLibraryFirstPresent(
+    rec.main_positive,
+    reuse.prompt,
+    reuse.positive_prompt,
+    main.positive_box,
+    main.prompt,
+    payload.prompt,
+    payload.positive_prompt,
+    payload.main_positive
+  );
+  const negative = neoLibraryFirstPresent(
+    rec.main_negative,
+    reuse.negative_prompt,
+    main.negative_box,
+    main.negative_prompt,
+    payload.negative_prompt,
+    payload.main_negative
+  );
+  const familyLabel = neoLibraryFirstPresent(model.effective_family, model.raw_family, reuse.family, payload.family);
+  const workflowMode = neoLibraryFirstPresent(workflowBlock.effective_mode, workflowBlock.raw_mode, workflowBlock.mode, generation.Mode);
+  const modelRows = [
+    ['Family', familyLabel],
+    ['Model source', model.model_source],
+    ['Family source', model.family_inference_source],
+    ['Checkpoint', neoLibraryFirstPresent(generation.Checkpoint, generation.checkpoint, model.checkpoint)],
+    ['GGUF UNet', model.gguf_unet],
+    ['GGUF CLIP type', model.gguf_clip_type],
+    ['CLIP mode', model.gguf_clip_mode],
+    ['Primary CLIP', model.gguf_clip_primary],
+    ['Secondary CLIP', model.gguf_clip_secondary],
+    ['Qwen MMProj', model.gguf_mmproj],
+    ['MMProj required', model.mmproj_required],
+    ['MMProj source', model.mmproj_source],
+    ['Qwen base size', model.qwen_outpaint_base_size],
+    ['Qwen padding', model.qwen_outpaint_padding],
+    ['Qwen effective size', model.qwen_outpaint_effective_size],
+  ];
+  const workflowRows = [
+    ['Workflow', workflowMode],
+    ['Raw mode', workflowBlock.raw_mode],
+    ['Switch reason', workflowBlock.switch_reason],
+    ['Source kind', workflowBlock.source_kind],
+    ['Source ID', workflowBlock.source_id],
+    ['Output policy', workflowBlock.output_policy],
+    ['Validation', workflowBlock.validation_status],
+  ];
+  const generationRows = [
+    ['Seed', neoLibraryFirstPresent(generation.Seed, generation.seed)],
+    ['Sampler', neoLibraryFirstPresent(generation.Sampler, generation.sampler)],
+    ['Scheduler', neoLibraryFirstPresent(generation.Scheduler, generation.scheduler)],
+    ['Steps', neoLibraryFirstPresent(generation.Steps, generation.steps)],
+    ['CFG', neoLibraryFirstPresent(generation['CFG scale'], generation.cfg)],
+    ['Size', neoLibraryFirstPresent(generation.Size, generation.size)],
+    ['Effective size', generation.effective_size],
+    ['Denoise', neoLibraryFirstPresent(generation['Denoising strength'], generation.denoise)],
+    ['VAE', neoLibraryFirstPresent(generation.VAE, generation.vae)],
+  ];
+  const sourceRows = [
+    ['Source output ID', source.source_output_id],
+    ['Source output', source.source_output ? 'recorded' : ''],
+    ['Source image fields', source.source_image_fields ? Object.keys(source.source_image_fields || {}).length : ''],
+    ['Extensions', Object.keys(extensions || {}).length ? `${Object.keys(extensions).length} block${Object.keys(extensions).length === 1 ? '' : 's'}` : ''],
+  ];
+  target.innerHTML = `
+    <div class="neo-library-output-meta-head">
+      <div>
+        <div class="stat-title">Output reuse metadata</div>
+        <div class="mini-note">Prompt, workflow, model-family, source, and extension metadata recovered from the output sidecar.</div>
+      </div>
+      <span class="timer-pill">${escapeHtml(familyLabel || 'metadata')}</span>
+    </div>
+    <div class="neo-library-output-meta-prompts">
+      <div class="neo-library-output-meta-block neo-library-output-meta-block--prompt"><div class="neo-library-output-meta-title">Prompt</div><div class="neo-library-output-prompt-preview">${prompt ? escapeHtml(String(prompt).slice(0, 900)) + (String(prompt).length > 900 ? '…' : '') : '<span class="mini-note">No prompt recovered for this output.</span>'}</div></div>
+      <div class="neo-library-output-meta-block neo-library-output-meta-block--prompt"><div class="neo-library-output-meta-title">Negative prompt</div><div class="neo-library-output-prompt-preview">${negative ? escapeHtml(String(negative).slice(0, 600)) + (String(negative).length > 600 ? '…' : '') : '<span class="mini-note">No negative prompt recovered.</span>'}</div></div>
+    </div>
+    <div class="neo-library-output-meta-grid">
+      <div class="neo-library-output-meta-block"><div class="neo-library-output-meta-title">Workflow</div>${neoLibraryMetadataRows(workflowRows)}</div>
+      <div class="neo-library-output-meta-block"><div class="neo-library-output-meta-title">Model family</div>${neoLibraryMetadataRows(modelRows)}</div>
+      <div class="neo-library-output-meta-block"><div class="neo-library-output-meta-title">Generation</div>${neoLibraryMetadataRows(generationRows)}</div>
+      <div class="neo-library-output-meta-block"><div class="neo-library-output-meta-title">Reuse source</div>${neoLibraryMetadataRows(sourceRows)}</div>
+    </div>
+    ${notes.length ? `<details class="neo-library-output-meta-block"><summary>Compile notes</summary><div class="neo-library-output-prompt-preview">${escapeHtml(notes.slice(0, 12).join('\n'))}</div></details>` : ''}
+  `;
+}
+
 function renderNeoLibraryOutputPagination(total, shown, totalPages) {
   neoLibraryOutputTotalPages = Math.max(1, Number(totalPages) || 1);
   if ($('neo-library-output-page')) $('neo-library-output-page').textContent = `Page ${neoLibraryOutputPage} of ${neoLibraryOutputTotalPages}`;
@@ -1012,6 +1193,13 @@ function loadNeoLibraryOutputRecord(record, mode='', name='') {
   $('neo-library-output-controlnet').value = rec.controlnet_json || '{}';
   $('neo-library-output-extra').value = rec.extra_json || '{}';
   $('neo-library-output-raw').value = rec.raw_parameters || '';
+  if ($('neo-library-output-workflow-state')) $('neo-library-output-workflow-state').value = rec.workflow_state_json || '{}';
+  if ($('neo-library-output-model-family')) $('neo-library-output-model-family').value = rec.model_family_json || '{}';
+  if ($('neo-library-output-reuse-metadata')) $('neo-library-output-reuse-metadata').value = rec.reuse_metadata_json || '{}';
+  if ($('neo-library-output-source-metadata')) $('neo-library-output-source-metadata').value = rec.source_metadata_json || '{}';
+  if ($('neo-library-output-extension-metadata')) $('neo-library-output-extension-metadata').value = rec.extension_metadata_json || '{}';
+  if ($('neo-library-output-compile-notes')) $('neo-library-output-compile-notes').value = rec.compile_notes_json || '[]';
+  renderNeoLibraryOutputReuseMetadata(rec);
   $('neo-library-output-preview').dataset.imageUrl = rec.image_url || '';
   const replayNote = $('neo-library-output-replay-note');
   if (replayNote) {

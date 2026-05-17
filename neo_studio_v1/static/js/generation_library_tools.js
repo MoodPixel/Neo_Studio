@@ -1574,6 +1574,53 @@ function buildGenerationPayload() {
     outpaint_feather: Number($('generation-outpaint-feather')?.value || 24),
     notes: $('generation-workflow-notes')?.value || '',
   };
+  const workflowState = window.NeoImageState && typeof window.NeoImageState.buildWorkflowPayloadState === 'function'
+    ? window.NeoImageState.buildWorkflowPayloadState({
+        mode: workflowMode,
+        reason: 'generation_payload_collect',
+        output_policy: payload.output_policy || payload._neo_output_policy || 'new_current_run',
+        batch_size: payload.batch_size,
+        outpaintExpansion: {
+          left: payload.outpaint_left,
+          top: payload.outpaint_top,
+          right: payload.outpaint_right,
+          bottom: payload.outpaint_bottom,
+        },
+      })
+    : {
+        raw_mode: workflowMode,
+        effective_mode: workflowMode,
+        switch_reason: 'generation_payload_collect',
+        source_kind: 'unknown',
+        source_id: '',
+        output_policy: payload.output_policy || payload._neo_output_policy || 'new_current_run',
+        validation_status: 'unknown',
+        owner: 'legacy_dom_fallback',
+        version: 'phase_e_workflow_payload_transparency_v1',
+      };
+  payload.workflow_state = workflowState;
+  payload._neo_workflow_state = workflowState;
+  payload._neo_raw_mode = workflowState.raw_mode;
+  payload._neo_effective_mode = workflowState.effective_mode;
+  payload._neo_source_kind = workflowState.source_kind;
+  payload._neo_source_id = workflowState.source_id;
+  payload._neo_output_policy = workflowState.output_policy;
+  payload._neo_output_policy_requested = workflowState.output_policy_requested || workflowState.output_policy;
+  payload._neo_workflow_switch_reason = workflowState.switch_reason;
+  payload._neo_workflow_validation_status = workflowState.validation_status;
+  payload._neo_batch_policy = workflowState.batch_policy || { requested: payload.batch_size || 1, effective: payload.batch_size || 1, policy: 'allow', visible: true };
+  payload._neo_requested_batch_size = payload._neo_batch_policy.requested || payload.batch_size || 1;
+  payload._neo_effective_batch_size = payload._neo_batch_policy.effective || payload.batch_size || 1;
+  if (payload._neo_batch_policy.policy === 'force_1' && Number(payload.batch_size || 1) > 1) {
+    payload._neo_batch_guard_applied = true;
+    payload._neo_batch_guard_reason = payload._neo_batch_policy.reason || 'source_image_workflow';
+    payload.batch_size = 1;
+    payload.workflow_state.batch_policy = payload._neo_batch_policy;
+  } else {
+    payload._neo_batch_guard_applied = false;
+    payload._neo_batch_guard_reason = '';
+  }
+
   if (payload.model_source === 'gguf') {
     Object.assign(payload, collectGenerationGgufEffectivePayload(payload));
   }

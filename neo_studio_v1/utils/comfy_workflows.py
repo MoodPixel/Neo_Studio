@@ -826,7 +826,7 @@ def _prepare_qwen_conditioning_images(
 
         if index == 0 and normalized_mode == 'outpaint':
             if outpaint_left + outpaint_top + outpaint_right + outpaint_bottom <= 0:
-                raise ValueError('Outpaint needs padding on at least one side.')
+                raise ValueError('Qwen outpaint needs padding on at least one side.')
             pad_id = next_id
             graph[str(pad_id)] = {
                 'class_type': 'ImagePadForOutpaint',
@@ -1053,14 +1053,32 @@ def _build_qwen_sampler_input(
         next_id += 1
         return next_id, [str(noise_mask_id), 0], list(image_ref)
 
-    if normalized_mode not in {'txt2img', 'img2img'}:
+    if normalized_mode == 'outpaint' and outpaint_left + outpaint_top + outpaint_right + outpaint_bottom <= 0:
+        raise ValueError('Qwen outpaint needs padding on at least one side.')
+    if normalized_mode not in {'txt2img', 'img2img', 'outpaint'}:
         raise ValueError('Qwen Image Edit in Neo does not expose this mode in the live workspace yet.')
+
+    effective_width = int(width)
+    effective_height = int(height)
+    if normalized_mode == 'outpaint':
+        effective_width = max(64, int(width) + max(0, int(outpaint_left)) + max(0, int(outpaint_right)))
+        effective_height = max(64, int(height) + max(0, int(outpaint_top)) + max(0, int(outpaint_bottom)))
+        payload['_neo_qwen_outpaint_base_size'] = {'width': int(width), 'height': int(height)}
+        payload['_neo_qwen_outpaint_padding'] = {
+            'left': max(0, int(outpaint_left)),
+            'top': max(0, int(outpaint_top)),
+            'right': max(0, int(outpaint_right)),
+            'bottom': max(0, int(outpaint_bottom)),
+            'feather': max(0, int(outpaint_feather)),
+        }
+        payload['_neo_qwen_outpaint_effective_size'] = {'width': effective_width, 'height': effective_height}
+
     latent_id = next_id
     graph[str(latent_id)] = {
         'class_type': 'EmptyLatentImage',
         'inputs': {
-            'width': width,
-            'height': height,
+            'width': effective_width,
+            'height': effective_height,
             'batch_size': batch_size,
         },
     }
@@ -4104,7 +4122,7 @@ def _build_standard_sdxl_inpaint_sampler_input(
     return next_id + 2, [str(noise_mask_id), 0], notes
 
 
-def _build_standard_sdxl_outpaint_sampler_input(
+def _build_standard_latent_outpaint_sampler_input(
     graph: Dict[str, Any],
     next_id: int,
     *,
@@ -4122,8 +4140,8 @@ def _build_standard_sdxl_outpaint_sampler_input(
         raise ValueError('Outpaint needs padding on at least one side.')
 
     notes = [
-        'SDXL standard outpaint branch engaged: ImagePadForOutpaint + latent noise mask.',
-        f'SDXL outpaint padding — left {outpaint_left}, top {outpaint_top}, right {outpaint_right}, bottom {outpaint_bottom}, feather {outpaint_feather}.',
+        'Standard latent outpaint branch engaged: ImagePadForOutpaint + latent noise mask.',
+        f'Latent outpaint padding — left {outpaint_left}, top {outpaint_top}, right {outpaint_right}, bottom {outpaint_bottom}, feather {outpaint_feather}.',
     ]
     load_id = next_id
     graph[str(load_id)] = {
@@ -4261,7 +4279,7 @@ def _apply_phase9_effective_payload_hygiene(payload: Dict[str, Any], *, mode: st
         payload['_neo_effective_gguf_clip_type'] = gguf_clip_type
         payload['_neo_effective_gguf_mmproj'] = gguf_mmproj
         payload['_neo_effective_mmproj_source'] = str(payload.get('_neo_effective_mmproj_source') or ('selected' if gguf_mmproj else 'missing' if gguf_clip_type == 'qwen_image' else 'none')).strip()
-        payload['_neo_effective_mmproj_required'] = bool(payload.get('_neo_effective_mmproj_required') or (gguf_clip_type == 'qwen_image' and mode in {'img2img', 'inpaint'}))
+        payload['_neo_effective_mmproj_required'] = bool(payload.get('_neo_effective_mmproj_required') or (gguf_clip_type == 'qwen_image' and mode in {'img2img', 'inpaint', 'outpaint'}))
         payload['_neo_payload_transparency_version'] = str(payload.get('_neo_payload_transparency_version') or 'phase7_gguf_effective_state')
         payload['_neo_gguf_catalog_source'] = str(payload.get('_neo_gguf_catalog_source') or 'frontend_effective_state')
     payload['_neo_scene_director_applied'] = effective_scene_director_applied
@@ -4689,6 +4707,15 @@ def build_generation_workflow(payload: Dict[str, Any]) -> Tuple[Dict[str, Any], 
         payload['_neo_active_vae_ref'] = list(vae_ref) if vae_ref is not None else None
         compile_notes.append('No external VAE selected; workflow will decode with the checkpoint VAE.')
 
+    if qwen_mode and mode == 'outpaint':
+        qwen_outpaint_effective_width = width + max(0, outpaint_left) + max(0, outpaint_right)
+        qwen_outpaint_effective_height = height + max(0, outpaint_top) + max(0, outpaint_bottom)
+        compile_notes.append(
+            'Qwen outpaint branch engaged: source is padded with ImagePadForOutpaint and the sampler latent uses the effective padded canvas ' +
+            f'({qwen_outpaint_effective_width}x{qwen_outpaint_effective_height}).'
+        )
+    elif model_source == 'gguf' and gguf_clip_type == 'flux' and mode == 'outpaint':
+        compile_notes.append('Flux outpaint branch engaged: standard padded-source latent outpaint route with Flux sampling.')
     if qwen_mode:
         next_id, qwen_image_refs = _prepare_qwen_conditioning_images(
             graph,
@@ -4843,7 +4870,7 @@ def build_generation_workflow(payload: Dict[str, Any]) -> Tuple[Dict[str, Any], 
         else:
             source_images_row = (inpaint_payload.get('source_images') or {}) if isinstance(inpaint_payload, dict) else {}
             source_image = str(source_images_row.get('base_image_name') or payload.get('source_image_name') or '').strip()
-            next_id, sampler_input, sdxl_outpaint_notes = _build_standard_sdxl_outpaint_sampler_input(
+            next_id, sampler_input, latent_outpaint_notes = _build_standard_latent_outpaint_sampler_input(
                 graph,
                 next_id,
                 source_image=source_image,
@@ -4854,7 +4881,7 @@ def build_generation_workflow(payload: Dict[str, Any]) -> Tuple[Dict[str, Any], 
                 outpaint_bottom=outpaint_bottom,
                 outpaint_feather=outpaint_feather,
             )
-            compile_notes.extend(sdxl_outpaint_notes)
+            compile_notes.extend(latent_outpaint_notes)
 
         if qwen_reedit_source_only:
             if not qwen_image_refs:

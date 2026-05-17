@@ -171,3 +171,513 @@
     justify-content: flex-start;
   }
 }
+
+/* Phase F — Image workflow UI contract visibility. */
+.generation-workflow-contract-strip {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(120px, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.54);
+}
+
+.generation-workflow-contract-item {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 8px 9px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 12px;
+  background: rgba(2, 6, 23, 0.28);
+}
+
+.generation-workflow-contract-label {
+  color: rgba(226, 232, 240, 0.58);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.generation-workflow-contract-item strong {
+  min-width: 0;
+  overflow: hidden;
+  color: rgba(248, 250, 252, 0.94);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.generation-workflow-contract-reason {
+  grid-column: 1 / -1;
+  color: rgba(226, 232, 240, 0.70);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.generation-workflow-contract-strip.is-blocked {
+  border-color: rgba(251, 191, 36, 0.35);
+  background: rgba(120, 53, 15, 0.14);
+}
+
+.generation-workflow-contract-status.is-blocked {
+  border-color: rgba(251, 191, 36, 0.35);
+  background: rgba(120, 53, 15, 0.22);
+}
+
+@media (max-width: 980px) {
+  .generation-workflow-contract-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Phase L — Results / Output Reuse metadata visibility */
+.generation-output-meta-card,
+.neo-library-output-reuse-summary {
+  border: 1px solid rgba(59, 130, 246, 0.18);
+  background: rgba(15, 23, 42, 0.20);
+  border-radius: 14px;
+  padding: 12px;
+}
+
+.generation-output-meta-head,
+.neo-library-output-meta-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.generation-output-meta-pill {
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: var(--muted, #94a3b8);
+  background: rgba(15, 23, 42, 0.35);
+}
+
+.generation-output-meta-grid,
+.neo-library-output-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.generation-output-meta-block,
+.neo-library-output-meta-block {
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background: rgba(15, 23, 42, 0.22);
+  border-radius: 12px;
+  padding: 10px;
+  margin-top: 10px;
+}
+
+.generation-output-meta-title,
+.neo-library-output-meta-title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--muted, #94a3b8);
+  margin-bottom: 8px;
+}
+
+.generation-output-meta-row,
+.neo-library-output-meta-row {
+  display: grid;
+  grid-template-columns: minmax(92px, 0.8fr) minmax(0, 1.2fr);
+  gap: 8px;
+  padding: 5px 0;
+  border-top: 1px solid rgba(148, 163, 184, 0.10);
+}
+
+.generation-output-meta-row:first-of-type,
+.neo-library-output-meta-row:first-of-type {
+  border-top: 0;
+}
+
+.generation-output-meta-row span,
+.neo-library-output-meta-row span {
+  color: var(--muted, #94a3b8);
+  font-size: 12px;
+}
+
+.generation-output-meta-row strong,
+.neo-library-output-meta-row strong {
+  color: var(--text, #e5e7eb);
+  font-size: 12px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.generation-output-prompt-preview,
+.neo-library-output-prompt-preview {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text, #e5e7eb);
+  margin-top: 8px;
+}
+
+/* Phase M — Output Reuse unified layout */
+.neo-library-output-reuse-unified {
+  width: 100%;
+}
+
+.neo-library-output-reuse-card {
+  border: 1px solid rgba(59, 130, 246, 0.18);
+  background: rgba(15, 23, 42, 0.20);
+  border-radius: 16px;
+  padding: 14px;
+}
+
+.neo-library-output-reuse-main {
+  display: grid;
+  grid-template-columns: minmax(220px, 320px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.neo-library-output-reuse-preview-pane {
+  min-width: 0;
+}
+
+.neo-library-output-reuse-content-pane {
+  min-width: 0;
+}
+
+.neo-library-output-reuse-card .neo-library-output-preview-card {
+  width: 100%;
+  max-width: 320px;
+  margin: 0;
+  padding: 10px;
+}
+
+.neo-library-output-reuse-card .neo-library-output-preview-card img {
+  width: 100%;
+  max-height: 420px;
+  object-fit: contain;
+  border-radius: 12px;
+  display: block;
+}
+
+.neo-library-output-reuse-two-col {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.85fr) minmax(280px, 1.35fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.neo-library-output-replay-card,
+.neo-library-output-reuse-summary {
+  margin: 0;
+}
+
+.neo-library-output-prompt-grid,
+.neo-library-output-advanced-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.neo-library-output-prompt-grid textarea,
+.neo-library-output-advanced-grid textarea {
+  min-height: 120px;
+}
+
+.neo-library-output-advanced-json textarea {
+  min-height: 88px;
+}
+
+@media (max-width: 1180px) {
+  .neo-library-output-reuse-main,
+  .neo-library-output-reuse-two-col,
+  .neo-library-output-prompt-grid,
+  .neo-library-output-advanced-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .neo-library-output-reuse-card .neo-library-output-preview-card {
+    max-width: 100%;
+  }
+}
+
+
+/* Phase M hotfix — Output Reuse unified card must not collapse into a thin two-column strip. */
+#neo-library-output-inspector,
+#neo-library-output-inspector .accordion-body,
+#neo-library-output-inspector .neo-library-output-inspector-layout,
+#neo-library-output-inspector .neo-library-output-reuse-card {
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
+}
+
+.neo-library-output-reuse-unified {
+  width: 100%;
+  max-width: none;
+}
+
+.neo-library-output-reuse-card {
+  display: block;
+  width: 100%;
+  border: 1px solid rgba(59,130,246,.18);
+  background: rgba(15,23,42,.20);
+  border-radius: 16px;
+  padding: 14px;
+  box-sizing: border-box;
+}
+
+.neo-library-output-reuse-main {
+  display: grid;
+  grid-template-columns: minmax(180px, 260px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+  width: 100%;
+}
+
+.neo-library-output-reuse-preview-pane,
+.neo-library-output-reuse-content-pane {
+  min-width: 0;
+}
+
+.neo-library-output-reuse-card .neo-library-output-preview-card {
+  width: 100%;
+  max-width: 260px;
+  height: auto;
+  min-height: 0;
+  max-height: none;
+  margin: 0;
+  padding: 10px;
+}
+
+.neo-library-output-reuse-card .neo-library-output-preview-card img,
+.neo-library-output-reuse-card #neo-library-output-preview {
+  width: 100%;
+  height: auto;
+  max-height: 360px;
+  object-fit: contain;
+}
+
+.neo-library-output-reuse-content-pane {
+  display: grid;
+  gap: 12px;
+}
+
+.neo-library-output-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.neo-library-output-replay-card,
+.neo-library-output-reuse-summary,
+.neo-library-output-visible-prompts,
+.neo-library-output-advanced-fields,
+.neo-library-output-advanced-json {
+  margin: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.neo-library-output-meta-prompts,
+.neo-library-output-meta-grid,
+.neo-library-output-prompt-grid,
+.neo-library-output-advanced-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  width: 100%;
+}
+
+.neo-library-output-meta-grid {
+  margin-top: 10px;
+}
+
+.neo-library-output-meta-block--prompt {
+  margin-top: 0;
+}
+
+.neo-library-output-prompt-grid textarea,
+.neo-library-output-advanced-grid textarea {
+  min-height: 92px;
+}
+
+@media (max-width: 900px) {
+  .neo-library-output-reuse-main {
+    grid-template-columns: 1fr;
+  }
+  .neo-library-output-reuse-card .neo-library-output-preview-card {
+    max-width: min(320px, 100%);
+  }
+}
+
+/* Phase M follow-up — Output Reuse metadata sits directly below preview for balanced card usage. */
+.neo-library-output-reuse-main {
+  grid-template-columns: minmax(300px, .95fr) minmax(360px, 1.15fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.neo-library-output-reuse-preview-pane {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+
+.neo-library-output-reuse-preview-pane .neo-library-output-reuse-summary {
+  margin: 0;
+}
+
+.neo-library-output-reuse-preview-pane .neo-library-output-meta-prompts,
+.neo-library-output-reuse-preview-pane .neo-library-output-meta-grid {
+  grid-template-columns: 1fr;
+}
+
+.neo-library-output-reuse-preview-pane .neo-library-output-meta-head {
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.neo-library-output-reuse-content-pane {
+  align-content: start;
+}
+
+.neo-library-output-replay-card,
+.neo-library-output-visible-prompts,
+.neo-library-output-advanced-fields {
+  align-self: start;
+}
+
+@media (max-width: 1180px) {
+  .neo-library-output-reuse-main {
+    grid-template-columns: minmax(260px, .9fr) minmax(320px, 1.1fr);
+  }
+}
+
+@media (max-width: 860px) {
+  .neo-library-output-reuse-main {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Phase M follow-up — Output Reuse final vertical stack. Mirrors neo_local.css
+   because some Image Tab shells load this stylesheet later. */
+#neo-library-output-inspector .neo-library-output-reuse-card {
+  overflow: visible;
+}
+
+#neo-library-output-inspector .neo-library-output-reuse-main {
+  display: flex !important;
+  flex-direction: column !important;
+  grid-template-columns: none !important;
+  gap: 14px;
+  align-items: stretch;
+  width: 100%;
+}
+
+#neo-library-output-inspector .neo-library-output-reuse-preview-pane,
+#neo-library-output-inspector .neo-library-output-reuse-content-pane {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+}
+
+#neo-library-output-inspector .neo-library-output-reuse-preview-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+#neo-library-output-inspector .neo-library-output-reuse-card .neo-library-output-preview-card {
+  width: min(320px, 100%);
+  max-width: 320px;
+  align-self: flex-start;
+}
+
+#neo-library-output-inspector .neo-library-output-reuse-summary,
+#neo-library-output-inspector .neo-library-output-replay-card,
+#neo-library-output-inspector .neo-library-output-visible-prompts,
+#neo-library-output-inspector .neo-library-output-advanced-fields {
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
+}
+
+#neo-library-output-inspector .neo-library-output-reuse-content-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow: visible;
+}
+
+#neo-library-output-inspector .neo-library-output-toolbar {
+  width: 100%;
+  overflow: visible;
+}
+
+#neo-library-output-inspector .neo-library-output-toolbar select,
+#neo-library-output-inspector .neo-library-output-toolbar .btn {
+  max-width: 100%;
+}
+
+#neo-library-output-inspector .neo-library-output-prompt-grid,
+#neo-library-output-inspector .neo-library-output-advanced-grid,
+#neo-library-output-inspector .neo-library-output-meta-prompts,
+#neo-library-output-inspector .neo-library-output-meta-grid {
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+#neo-library-output-inspector textarea,
+#neo-library-output-inspector .neo-library-output-prompt-preview,
+#neo-library-output-inspector .mini-note,
+#neo-library-output-inspector .stat-title {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* Phase M follow-up: Output Reuse true single-stack override. */
+.neo-library-output-reuse-unified .neo-library-output-reuse-card,
+.neo-library-output-reuse-unified .neo-library-output-reuse-main,
+.neo-library-output-reuse-unified .neo-library-output-reuse-stack,
+.neo-library-output-reuse-unified .neo-library-output-reuse-preview-pane,
+.neo-library-output-reuse-unified .neo-library-output-reuse-content-pane {
+  display: flex !important;
+  flex-direction: column !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  overflow: visible !important;
+}
+.neo-library-output-reuse-unified .neo-library-output-prompt-grid,
+.neo-library-output-reuse-unified .neo-library-output-advanced-grid,
+.neo-library-output-reuse-unified .neo-library-output-meta-grid,
+.neo-library-output-reuse-unified .neo-library-output-meta-prompts {
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+.neo-library-output-reuse-unified .neo-library-output-section-card,
+.neo-library-output-reuse-unified .neo-library-output-replay-card,
+.neo-library-output-reuse-unified .neo-library-output-visible-prompts,
+.neo-library-output-reuse-unified .neo-library-output-reuse-summary {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+}
+.neo-library-output-reuse-unified textarea,
+.neo-library-output-reuse-unified .neo-library-output-prompt-preview,
+.neo-library-output-reuse-unified .neo-library-output-meta-block,
+.neo-library-output-reuse-unified .mini-note {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
