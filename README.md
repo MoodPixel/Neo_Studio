@@ -80,6 +80,18 @@ Ongoing improvements focus on:
 
 ## 🛠️ Update
 
+**May/18/2026 - Image Tab**
+
+| System | Update | Details |
+|---|---|---|
+| Workspace State     | ✅ Workflow State Stability Fix            | Fixed Image Tab workflow state synchronization issues causing txt2img, img2img, inpaint, and outpaint modes to occasionally require multiple clicks or partially fail to switch. Workflow state handling is now centralized and synchronized across UI state, preview actions, and payload generation. |
+| Preview Routing     | ✅ Source Routing Improvements             | Fixed preview image routing so sending outputs into img2img, inpaint, and outpaint now correctly updates the active workspace, source image state, and workflow validation flow without hidden state desync issues.                                                                                    |
+| Workflow Validation | ✅ Workflow Guardrail Validation           | Added centralized workflow validation and output policy enforcement for Image workflows, including source image checks, outpaint validation rules, and safer batch/output behavior handling across workflow modes.                                                                                     |
+| Output Reuse        | ✅ Output Reuse UI + Metadata Improvements | Improved Output Reuse metadata handling and UI rendering for SDXL, Flux, and Qwen workflows. Added better prompt recovery, workflow metadata visibility, reusable generation state recovery, and improved responsive layout handling.                                                                  |
+| Qwen Outpaint       | ✅ Qwen Outpaint Canvas Fix                | Fixed Qwen outpaint workflows incorrectly using only the base Width/Height instead of the effective padded output canvas size during workflow compilation and output generation.                                                                                                                       |
+| Image UI            | ✅ UI Cleanup + Visibility Fixes           | Improved Image Tab UI consistency, visibility logic, and panel behavior. Fixed outpaint-only controls appearing in unsupported workflows and resolved several layout clipping and stacking issues inside Output Reuse panels.                                                                          |
+| Extensions Runtime  | ✅ Extension Compatibility Stability       | Improved compatibility handling between the centralized workflow state system and external Image extensions to reduce workflow conflicts and hidden state mutation issues during generation and replay actions.                                                                                        |
+
 **May/16/2026 - Assistant Tab**
 
 | System | Update | Details |
